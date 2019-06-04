@@ -28,6 +28,8 @@ import io.netty.channel.ChannelPipeline;
 
 import io.netty.handler.codec.http.HttpServerCodec;
 
+import io.netty.handler.logging.LoggingHandler;
+
 import io.netty.handler.ssl.SslContext;
 
 import io.netty.handler.stream.ChunkedWriteHandler;
@@ -71,6 +73,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     if (this.sslContext != null) {
       channelPipeline.addLast(this.sslContext.newHandler(channel.alloc()));
     }
+    channelPipeline.addLast(new LoggingHandler());
     channelPipeline.addLast(new HttpServerCodec());
     channelPipeline.addLast(new ChunkedWriteHandler());
     channelPipeline.addLast(new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
