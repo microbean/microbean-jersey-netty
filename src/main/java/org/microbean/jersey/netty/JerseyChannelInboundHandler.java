@@ -24,6 +24,7 @@ import java.net.URI;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -65,10 +66,9 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
 
   @Override
   protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final HttpObject message) throws Exception {
-    this.messageReceived(channelHandlerContext, message);
-  }
-
-  protected final void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpObject message) throws Exception {
+    Objects.requireNonNull(channelHandlerContext);
+    assert channelHandlerContext.executor().inEventLoop();
+    
     if (message instanceof HttpRequest) {
       this.messageReceived(channelHandlerContext, (HttpRequest)message);
     } else if (message instanceof HttpContent) {
@@ -78,92 +78,111 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     }
   }
 
-  protected final void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpRequest httpRequest) throws Exception {
+  protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpRequest httpRequest) throws Exception {
+    Objects.requireNonNull(channelHandlerContext);
+    assert channelHandlerContext.executor().inEventLoop();
+    
     if (HttpUtil.is100ContinueExpected(httpRequest)) {
       channelHandlerContext.write(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
     }
+    
     assert this.byteBufQueue == null;
-    final ContainerRequest containerRequest = createContainerRequest(channelHandlerContext, httpRequest);
+
+    final ContainerRequest containerRequest = this.createContainerRequest(channelHandlerContext, httpRequest);
     
     final InjectionManager injectionManager = this.applicationHandler.getInjectionManager();
+    assert injectionManager != null;
+    
     containerRequest.setWriter(new NettyContainerResponseWriter(httpRequest, channelHandlerContext, injectionManager));
 
-    // must be like this, since there is a blocking read from Jersey
-    injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService().execute(new Runnable() {
-        @Override
-        public final void run() {
-          applicationHandler.handle(containerRequest);
-        }
-      });
+    injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService().execute(() -> this.applicationHandler.handle(containerRequest));
   }
 
-  protected final void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpContent httpContent) throws Exception {
+  protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpContent httpContent) throws Exception {
+    Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(httpContent);
-
+    assert channelHandlerContext.executor().inEventLoop();
+    
     final ByteBuf content = httpContent.content();
     assert content != null;
-
-    // TODO: handle what amounts to an input stream coming from the caller.
     
     if (httpContent instanceof LastHttpContent) {
       assert !content.isReadable();
-      this.byteBufQueue = null;
+      final ByteBufQueue byteBufQueue = this.byteBufQueue;
+      if (byteBufQueue != null) {
+        try {
+          byteBufQueue.close();
+        } finally {
+          this.byteBufQueue = null;
+        }
+      }
+    } else {
+      assert this.byteBufQueue != null;
+      this.byteBufQueue.addByteBuf(content.asReadOnly());
     }
-    
-
-
-    /*
-            ByteBuf content = httpContent.content();
-
-            if (content.isReadable()) {
-                isList.add(new ByteBufInputStream(content));
-            }
-
-            if (msg instanceof LastHttpContent) {
-                isList.add(NettyInputStream.END_OF_INPUT);
-            }
-    */
   }
 
-  private ContainerRequest createContainerRequest(ChannelHandlerContext channelHandlerContext, HttpRequest httpRequest) {
-
+  protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final HttpRequest httpRequest) {
+    Objects.requireNonNull(channelHandlerContext);
+    Objects.requireNonNull(httpRequest);
+    assert channelHandlerContext.executor().inEventLoop();
+    
     final String uriString = httpRequest.uri();
-    final URI requestUri = baseUri.resolve(ContainerUtils.encodeUnsafeCharacters(uriString.startsWith("/") && uriString.length() > 1 ? uriString.substring(1) : uriString));
 
-    final ContainerRequest containerRequest =
+    final ContainerRequest returnValue =
       new ContainerRequest(this.baseUri,
-                           requestUri,
+                           baseUri.resolve(ContainerUtils.encodeUnsafeCharacters(uriString.startsWith("/") && uriString.length() > 1 ? uriString.substring(1) : uriString)),
                            httpRequest.method().name(),
                            new NettySecurityContext(channelHandlerContext),
                            new MapBackedPropertiesDelegate());
 
     final HttpHeaders headers = httpRequest.headers();
     assert headers != null;
+    final Iterable<? extends String> headerNames = headers.names();
+    if (headerNames != null) {
+      for (final String headerName : headerNames) {
+        if (headerName != null) {
+          returnValue.headers(headerName, headers.getAll(headerName));
+        }
+      }
+    }
     
-    
-    // request entity handling.
-    if ((headers.contains(HttpHeaderNames.CONTENT_LENGTH) && HttpUtil.getContentLength(httpRequest) > 0) || HttpUtil.isTransferEncodingChunked(httpRequest)) {
-      // TODO: if the channel is closed, ensure the input stream is also closed or at least throws IOException
-      final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(channelHandlerContext.alloc().compositeBuffer(), channelHandlerContext.executor());
+    if (HttpUtil.getContentLength(httpRequest, -1L) > 0 || HttpUtil.isTransferEncodingChunked(httpRequest)) {
+      // This CompositeByteBuf will be released by EventLoopPinnedByteBufInputStream#close().
+      final CompositeByteBuf compositeByteBuf = channelHandlerContext.alloc().compositeBuffer();
+      final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(compositeByteBuf, channelHandlerContext.executor());
+
+      channelHandlerContext.channel().closeFuture().addListener(ignored -> entityStream.close());
+      
       assert this.byteBufQueue == null;
       this.byteBufQueue = entityStream;
-      containerRequest.setEntityStream(entityStream);
+      returnValue.setEntityStream(entityStream);
     } else {
-      containerRequest.setEntityStream(new InputStream() {
-          @Override
-          public final int read() throws IOException {
-            return -1;
-          }
-        });
+      returnValue.setEntityStream(UnreadableInputStream.instance);
     }
 
-    // copying headers from netty request to jersey container request context.
-    for (final String name : headers.names()) {
-      containerRequest.headers(name, headers.getAll(name));
-    }
-
-    return containerRequest;
+    return returnValue;
   }
 
+
+  /*
+   * Inner and nested classes.
+   */
+  
+
+  private static final class UnreadableInputStream extends InputStream {
+
+    private static final InputStream instance = new UnreadableInputStream();
+    
+    private UnreadableInputStream() {
+      super();
+    }
+
+    @Override
+    public final int read() throws IOException {
+      return -1;
+    }
+    
+  }
 
 }

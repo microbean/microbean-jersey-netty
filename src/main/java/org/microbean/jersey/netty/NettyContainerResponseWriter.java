@@ -29,6 +29,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import java.util.function.Supplier;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 
@@ -40,6 +42,7 @@ import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -65,7 +68,9 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
 
   private final ChannelHandlerContext channelHandlerContext;
 
-  private final HttpRequest httpRequest;
+  private final HttpMessage httpRequest;
+
+  private final Supplier<? extends HttpMethod> methodSupplier;
 
   private final InjectionManager injectionManager;
 
@@ -82,8 +87,16 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
   public NettyContainerResponseWriter(final HttpRequest httpRequest,
                                       final ChannelHandlerContext channelHandlerContext,
                                       final InjectionManager injectionManager) {
+    this(httpRequest, httpRequest::method, channelHandlerContext, injectionManager);
+  }
+
+  private NettyContainerResponseWriter(final HttpMessage httpRequest,
+                                       final Supplier<? extends HttpMethod> methodSupplier,
+                                       final ChannelHandlerContext channelHandlerContext,
+                                       final InjectionManager injectionManager) {
     super();
     this.httpRequest = Objects.requireNonNull(httpRequest);
+    this.methodSupplier = Objects.requireNonNull(methodSupplier);
     this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);
     this.injectionManager = Objects.requireNonNull(injectionManager);
   }
@@ -124,19 +137,17 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       } else {
         httpResponse = new DefaultHttpResponse(this.httpRequest.protocolVersion(), status);
       }
-
-      final HttpHeaders headers = httpResponse.headers();
-
       if (contentLength < 0) {
         HttpUtil.setTransferEncodingChunked(httpResponse, true);
-      } else if (contentLength != 0) {
-        headers.set(HttpHeaderNames.CONTENT_LENGTH, contentLength);
+      } else {
+        HttpUtil.setContentLength(httpResponse, contentLength);
       }
 
       final Map<? extends String, ? extends List<String>> containerResponseHeaders = containerResponse.getStringHeaders();
-      if (containerResponseHeaders != null && !containerResponseHeaders.isEmpty()) {
+      if (containerResponseHeaders != null && !containerResponseHeaders.isEmpty()) {        
         final Collection<? extends Entry<? extends String, ? extends List<String>>> entrySet = containerResponseHeaders.entrySet();
         if (entrySet != null && !entrySet.isEmpty()) {
+          final HttpHeaders headers = httpResponse.headers();
           for (final Entry<? extends String, ? extends List<String>> entry : entrySet) {
             if (entry != null) {
               headers.add(entry.getKey(), entry.getValue());
@@ -146,7 +157,7 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       }
 
       if (HttpUtil.isKeepAlive(this.httpRequest)) {
-        headers.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+        HttpUtil.setKeepAlive(httpResponse, true);
       }
 
       // Write the status and headers.  We don't write the entity
@@ -160,15 +171,15 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       // writing will occur on the event loop.
       channelHandlerContext.writeAndFlush(httpResponse);
 
-      if (contentLength == 0 || HttpMethod.HEAD.equals(this.httpRequest.method())) {
-        channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        returnValue = null;
-      } else {
+      if (needsOutputStream(contentLength)) {
         assert this.byteBuf == null;
         final ByteBuf byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         assert byteBuf != null;
         this.byteBuf = byteBuf;
         returnValue = this;
+      } else {
+        channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        returnValue = null;
       }
     }
     return returnValue;
@@ -185,6 +196,7 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
     } else {
       this.suspendTimeoutHandler = () -> {
         timeoutHandler.onTimeout(this);
+        // TODO: not sure about this
         this.suspendTimeoutHandler = null;
       };
       if (timeout > 0) {
@@ -342,13 +354,11 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
     // (I hope.)
     this.closed = true;
     final ByteBuf byteBuf = this.byteBuf;
+    this.byteBuf = null;
     if (byteBuf != null) {
-      // TODO: Do we need to run this on the event loop?
       byteBuf.release();
-      this.byteBuf = null;
     }
-    // (Actually doesn't do anything; OutputStream#close() is a no-op.
-    // super.close();
+    // super.close() is a no-op so we don't call it.
   }
 
   @Override
@@ -357,20 +367,8 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       throw new IOException("Closed");
     }
     assert !this.inEventLoop();
-    this.write(new Callable<Void>() {
-        @Override
-        public final Void call() throws IOException {
-          assert inEventLoop();
-          if (closed) {
-            throw new IOException("closed");
-          }
-          assert byteBuf != null;
-          byteBuf.writeBytes(bytes);
-          return null;
-        }
-      });
+    this.write(bb -> bb.writeBytes(bytes));
   }
-
 
   @Override
   public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
@@ -378,18 +376,7 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       throw new IOException("Closed");
     }
     assert !this.inEventLoop();
-    this.write(new Callable<Void>() {
-        @Override
-        public final Void call() throws IOException {
-          assert inEventLoop();
-          if (closed) {
-            throw new IOException("closed");
-          }
-          assert byteBuf != null;
-          byteBuf.writeBytes(bytes, offset, length);
-          return null;
-        }
-      });
+    this.write(bb -> bb.writeBytes(bytes, offset, length));
   }
 
   @Override
@@ -398,18 +385,7 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
       throw new IOException("Closed");
     }
     assert !this.inEventLoop();
-    this.write(new Callable<Void>() {
-        @Override
-        public final Void call() throws IOException {
-          assert inEventLoop();
-          if (closed) {
-            throw new IOException("closed");
-          }
-          assert byteBuf != null;
-          byteBuf.writeByte(b);
-          return null;
-        }
-      });
+    this.write(bb -> bb.writeByte(b));
   }
 
 
@@ -417,15 +393,47 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
    * Utility methods.
    */
 
+  
+  private final boolean needsOutputStream(final long contentLength) {
+    return contentLength != 0 && !this.isHEADRequest();
+  }
+  
+  private final boolean isHEADRequest() {
+    return HttpMethod.HEAD.equals(this.methodSupplier.get());
+  }
 
   private final boolean inEventLoop() {
     return this.channelHandlerContext.executor().inEventLoop();
   }
 
+  private final void write(final ByteBufOperation byteBufOperation) throws IOException {
+    final EventExecutor eventExecutor = this.channelHandlerContext.executor();
+    assert eventExecutor != null;
+    if (eventExecutor.inEventLoop()) {
+      if (this.closed) {
+        throw new IOException("closed");
+      }
+      byteBufOperation.applyTo(this.byteBuf);
+    } else {
+      eventExecutor.submit(new Callable<Void>() {
+          @Override
+          public final Void call() throws IOException {
+            assert eventExecutor.inEventLoop();
+            if (closed) {
+              throw new IOException("closed");
+            }
+            byteBufOperation.applyTo(byteBuf);
+            return null;
+          }
+        });
+    }
+  }
+
+  @Deprecated
   private final void write(final Callable<? extends Void> callable) throws IOException {
     final EventExecutor eventExecutor = this.channelHandlerContext.executor();
     assert eventExecutor != null;
-    if (this.inEventLoop()) {
+    if (eventExecutor.inEventLoop()) {
       try {
         callable.call();
       } catch (final RuntimeException | IOException throwMe) {

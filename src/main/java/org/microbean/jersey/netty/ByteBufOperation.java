@@ -16,12 +16,13 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.Closeable;
+import java.io.IOException;
 
 import io.netty.buffer.ByteBuf;
 
-public interface ByteBufQueue extends Closeable {
+@FunctionalInterface
+public interface ByteBufOperation {
 
-  public void addByteBuf(final ByteBuf byteBuf);
+  public void applyTo(final ByteBuf target) throws IOException;
   
 }
