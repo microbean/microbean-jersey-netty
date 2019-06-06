@@ -32,15 +32,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
@@ -49,8 +46,6 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
-
-import io.netty.handler.stream.ChunkedInput;
 
 import io.netty.util.concurrent.EventExecutor;
 
@@ -64,8 +59,10 @@ import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
 
 import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
 
-public class NettyContainerResponseWriter extends OutputStream implements ChunkedInput<ByteBuf>, ContainerResponseWriter {
+public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
+  private static final ChannelFutureListener FLUSH_FUTURE = cf -> cf.channel().flush();
+  
   private final ChannelHandlerContext channelHandlerContext;
 
   private final HttpMessage httpRequest;
@@ -176,7 +173,17 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
         final ByteBuf byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         assert byteBuf != null;
         this.byteBuf = byteBuf;
-        returnValue = this;
+        // TODO: normally you'd think you'd only write a ChunkedInput
+        // implementation if you were sure that the Transfer-Encoding
+        // was Chunked.  But because writes are happening on an
+        // OutputStream in Jersey-land on a separate thread, and are
+        // then being run on the event loop, unless we were to block
+        // the event loop and wait for the OutputStream to close, we
+        // wouldn't know when to do the write.  So we use ChunkedInput
+        // even in cases where the Content-Length is set to a positive
+        // integer.  We may need to revisit this.
+        channelHandlerContext.write(new ByteBufChunkedInput(channelHandlerContext.executor(), byteBuf)).addListener(FLUSH_FUTURE);
+        returnValue = new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(), byteBuf);
       } else {
         channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         returnValue = null;
@@ -233,8 +240,6 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
     // place on the event loop.
     this.channelHandlerContext.flush();
 
-    // Not sure about this.  I think this is right.
-    this.close();
   }
 
   @Override
@@ -263,11 +268,6 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
     } catch (final RuntimeException suppressMe) {
       throwable.addSuppressed(suppressMe);
     }
-    try {
-      this.close();
-    } catch (final RuntimeException suppressMe) {
-      throwable.addSuppressed(suppressMe);
-    }
     if (throwable instanceof RuntimeException) {
       throw (RuntimeException)throwable;
     } else {
@@ -280,112 +280,6 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
     assert !this.inEventLoop();
     
     return true;
-  }
-
-
-  /*
-   * ChunkedInput<ByteBuf> overrides.  Used in typical scenarios only
-   * by HttpChunkedInput, which accepts a ChunkedInput<ByteBuf>.  All
-   * overrides must run in the event loop.
-   */
-
-
-  @Override
-  public boolean isEndOfInput() throws Exception {
-    // It is never the end of the input until the writer is closed.
-    // This is because the underlying ByteBuf can grow at will, and
-    // can be written to at will.
-    assert this.inEventLoop();
-    return this.closed;
-  }
-
-  @Deprecated
-  @Override
-  public final ByteBuf readChunk(final ChannelHandlerContext channelHandlerContext) throws Exception {
-    return this.readChunk(channelHandlerContext.alloc());
-  }
-
-  @Override
-  public ByteBuf readChunk(final ByteBufAllocator ignoredByteBufAllocator) throws Exception {
-    assert this.inEventLoop();
-    assert this.byteBuf != null;
-    return this.closed ? null : this.byteBuf.readSlice(this.byteBuf.readableBytes()).asReadOnly();
-  }
-
-  @Override
-  public final long length() {
-    assert this.inEventLoop();
-    // It is undocumented but ChunkedNioStream returns -1 to indicate,
-    // apparently, no idea of the length.  We don't have any idea
-    // either, or at any rate, it could be changing.
-    return -1;
-  }
-
-  @Override
-  public final long progress() {
-    assert this.inEventLoop();
-    assert this.byteBuf != null;
-    // e.g. we've read <progress> of <length> bytes.  Other
-    // ChunkedInput implementations return a valid number here even
-    // when length() returns -1, so we do too.
-    return this.byteBuf.readerIndex();
-  }
-
-
-  /*
-   * OutputStream overrides.  Used only by Jersey, specifically by
-   * end-user code wishing to write an entity body "back" to the
-   * caller.  Returned as an OutputStream by
-   * writeResponseStatusAndHeaders() above.  In each of the overrides
-   * that follows, this.byteBuf will be non-null.  Every operation
-   * below needs to ensure that if calls this.byteBuf.writeXXX(), it
-   * does so on the Netty EventLoop.
-   */
-
-
-  @Override
-  public final void close() {
-    // Remember: this could be ChunkedInput#close() or
-    // OutputStream#close().  But ChunkedInput#close() will only be
-    // called after endOfInput() returns true.  In this
-    // implementation, endOfInput() returns false until closing
-    // happens, which means this is unequivocally
-    // OutputStream#close().  So it is invoked by Jersey, not Netty.
-    // (I hope.)
-    this.closed = true;
-    final ByteBuf byteBuf = this.byteBuf;
-    this.byteBuf = null;
-    if (byteBuf != null) {
-      byteBuf.release();
-    }
-    // super.close() is a no-op so we don't call it.
-  }
-
-  @Override
-  public final void write(final byte[] bytes) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.write(bb -> bb.writeBytes(bytes));
-  }
-
-  @Override
-  public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.write(bb -> bb.writeBytes(bytes, offset, length));
-  }
-
-  @Override
-  public final void write(final int b) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.write(bb -> bb.writeByte(b));
   }
 
 
@@ -426,23 +320,6 @@ public class NettyContainerResponseWriter extends OutputStream implements Chunke
             return null;
           }
         });
-    }
-  }
-
-  @Deprecated
-  private final void write(final Callable<? extends Void> callable) throws IOException {
-    final EventExecutor eventExecutor = this.channelHandlerContext.executor();
-    assert eventExecutor != null;
-    if (eventExecutor.inEventLoop()) {
-      try {
-        callable.call();
-      } catch (final RuntimeException | IOException throwMe) {
-        throw throwMe;
-      } catch (final Exception everythingElse) {
-        throw new IOException(everythingElse.getMessage(), everythingElse);
-      }
-    } else {
-      eventExecutor.submit(callable);
     }
   }
 
