@@ -62,7 +62,7 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
 public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
   private static final ChannelFutureListener FLUSH_FUTURE = cf -> cf.channel().flush();
-  
+
   private final ChannelHandlerContext channelHandlerContext;
 
   private final HttpMessage httpRequest;
@@ -109,7 +109,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   public OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
     Objects.requireNonNull(containerResponse);
     assert !this.inEventLoop();
-    
+
     final boolean closed = this.closed;
     if (closed) {
       throw new IllegalStateException("closed");
@@ -141,7 +141,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       }
 
       final Map<? extends String, ? extends List<String>> containerResponseHeaders = containerResponse.getStringHeaders();
-      if (containerResponseHeaders != null && !containerResponseHeaders.isEmpty()) {        
+      if (containerResponseHeaders != null && !containerResponseHeaders.isEmpty()) {
         final Collection<? extends Entry<? extends String, ? extends List<String>>> entrySet = containerResponseHeaders.entrySet();
         if (entrySet != null && !entrySet.isEmpty()) {
           final HttpHeaders headers = httpResponse.headers();
@@ -170,8 +170,17 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
       if (needsOutputStream(contentLength)) {
         assert this.byteBuf == null;
+
         final ByteBuf byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         assert byteBuf != null;
+
+        // TODO XXX FIXME: not sure why this is necessary.  I *think*
+        // it is because we are "leaking" it "off" of the Jersey
+        // thread...but I don't really have a great explanation here.
+        // It is release()d in all of the objects immediately below
+        // that take it in.
+        byteBuf.retain();
+
         this.byteBuf = byteBuf;
         // TODO: normally you'd think you'd only write a ChunkedInput
         // implementation if you were sure that the Transfer-Encoding
@@ -195,7 +204,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   @Override
   public final boolean suspend(final long timeout, final TimeUnit timeUnit, final TimeoutHandler timeoutHandler) {
     assert !this.inEventLoop();
-    
+
     // Lifted from Jersey's supplied Netty integration, with repairs.
     final boolean returnValue;
     if (this.suspendTimeoutHandler != null) {
@@ -218,7 +227,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   @Override
   public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {
     assert !this.inEventLoop();
-    
+
     // Lifted from Jersey's supplied Netty integration, with repairs.
     if (this.suspendTimeoutHandler == null) {
       throw new IllegalStateException();
@@ -235,7 +244,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   @Override
   public final void commit() {
     assert !this.inEventLoop();
-    
+
     // The flush() method arranges for the actual flushing to take
     // place on the event loop.
     this.channelHandlerContext.flush();
@@ -278,7 +287,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   @Override
   public boolean enableResponseBuffering() {
     assert !this.inEventLoop();
-    
+
     return true;
   }
 
@@ -287,11 +296,11 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    * Utility methods.
    */
 
-  
+
   private final boolean needsOutputStream(final long contentLength) {
     return contentLength != 0 && !this.isHEADRequest();
   }
-  
+
   private final boolean isHEADRequest() {
     return HttpMethod.HEAD.equals(this.methodSupplier.get());
   }

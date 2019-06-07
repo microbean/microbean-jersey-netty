@@ -33,20 +33,22 @@ public class EventLoopPinnedByteBufOutputStream extends OutputStream {
   
   private final ByteBuf byteBuf;
 
-  private volatile boolean closed;
+  private boolean closed;
   
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
                                             final ByteBuf byteBuf) {
     super();
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
-    assert this.inEventLoop();
+    assert !this.inEventLoop();
     this.byteBuf = Objects.requireNonNull(byteBuf);
   }
 
   @Override
   public final void close() throws IOException {
-    this.closed = true;
-    this.perform(bb -> bb.release());
+    this.perform(bb -> {
+        this.closed = true;
+        bb.release();
+      });
     // super.close() is a no-op so we don't call it.
   }
 

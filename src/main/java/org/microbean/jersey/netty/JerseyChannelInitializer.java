@@ -73,10 +73,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     if (this.sslContext != null) {
       channelPipeline.addLast(this.sslContext.newHandler(channel.alloc()));
     }
-    channelPipeline.addLast(new LoggingHandler());
-    channelPipeline.addLast(new HttpServerCodec());
-    channelPipeline.addLast(new ChunkedWriteHandler());
-    channelPipeline.addLast(new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
+    channelPipeline.addLast("loggingHandler", new LoggingHandler());
+    channelPipeline.addLast("httpServerCodec", new HttpServerCodec());
+    channelPipeline.addLast("chunkedWriteHandler", new ChunkedWriteHandler());
+    channelPipeline.addLast("jerseyChannelInboundHandler", new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
   }
 
 }

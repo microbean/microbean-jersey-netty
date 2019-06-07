@@ -117,6 +117,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
       }
     } else {
       assert this.byteBufQueue != null;
+      // TODO: we might have to retain() content
       this.byteBufQueue.addByteBuf(content.asReadOnly());
     }
   }

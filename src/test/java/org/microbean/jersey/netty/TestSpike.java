@@ -20,11 +20,14 @@ import java.net.InetSocketAddress;
 
 import io.netty.bootstrap.ServerBootstrap;
 
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 
 import io.netty.channel.nio.NioEventLoopGroup;
 
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+
+import io.netty.util.concurrent.Future;
 
 import org.junit.Test;
 
@@ -42,10 +45,14 @@ public class TestSpike {
         .group(group)
         .channel(NioServerSocketChannel.class)
         .localAddress(new InetSocketAddress("localhost", 8080))
-        .childHandler(new JerseyChannelInitializer());
-      serverBootstrap.bind().sync().channel().closeFuture().sync();
+        .childHandler(new JerseyChannelInitializer(new Application()));
+      final ChannelFuture bindFuture = serverBootstrap.bind();
+      bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** server closed"));
+      bindFuture.sync();
+      System.out.println("*** server started");
+      Thread.sleep(20L * 60L * 1000L); // milliseconds
     } finally {
-      group.shutdownGracefully().sync();
+      group.shutdownGracefully().addListener(f -> System.out.println("*** eventLoopGroup shutdown")).sync();
     }
   }
   

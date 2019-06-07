@@ -86,6 +86,8 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   @Override
   public final void close() {
     this.closed = true;
+    // TODO: this actually seems to get auto-released?
+    // So this may not be necessary?
     final ByteBuf byteBuf = this.byteBuf;
     if (byteBuf != null) {
       byteBuf.release();
