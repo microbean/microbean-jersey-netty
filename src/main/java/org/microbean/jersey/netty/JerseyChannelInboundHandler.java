@@ -102,8 +102,9 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     Objects.requireNonNull(httpContent);
     assert channelHandlerContext.executor().inEventLoop();
     
-    final ByteBuf content = httpContent.content();
+    final ByteBuf content = httpContent.content().asReadOnly();
     assert content != null;
+    assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
     
     if (httpContent instanceof LastHttpContent) {
       assert !content.isReadable();
@@ -118,7 +119,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     } else {
       assert this.byteBufQueue != null;
       // TODO: we might have to retain() content
-      this.byteBufQueue.addByteBuf(content.asReadOnly());
+      this.byteBufQueue.addByteBuf(content);
     }
   }
 
@@ -150,9 +151,14 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     if (HttpUtil.getContentLength(httpRequest, -1L) > 0 || HttpUtil.isTransferEncodingChunked(httpRequest)) {
       // This CompositeByteBuf will be released by EventLoopPinnedByteBufInputStream#close().
       final CompositeByteBuf compositeByteBuf = channelHandlerContext.alloc().compositeBuffer();
+      assert compositeByteBuf != null;
+      assert compositeByteBuf.refCnt() == 1;
       final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(compositeByteBuf, channelHandlerContext.executor());
 
-      channelHandlerContext.channel().closeFuture().addListener(ignored -> entityStream.close());
+      channelHandlerContext.channel().closeFuture().addListener(ignored -> {
+          compositeByteBuf.release();
+          entityStream.close();
+        });
       
       assert this.byteBufQueue == null;
       this.byteBufQueue = entityStream;

@@ -25,30 +25,21 @@ import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.stream.ChunkedInput;
 
-import io.netty.util.concurrent.EventExecutor;
-
 public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
 
-  private final EventExecutor eventExecutor;
-  
   private final ByteBuf byteBuf;
 
   private volatile boolean closed;
   
-  public ByteBufChunkedInput(final EventExecutor eventExecutor,
-                             final ByteBuf byteBuf) {
+  public ByteBufChunkedInput(final ByteBuf byteBuf) {
     super();
-    this.eventExecutor = Objects.requireNonNull(eventExecutor);
-    this.byteBuf = Objects.requireNonNull(byteBuf);
+    Objects.requireNonNull(byteBuf);
+    this.byteBuf = byteBuf;
   }
 
   @Override
   public boolean isEndOfInput() throws Exception {
-    // It is never the end of the input until the writer is closed.
-    // This is because the underlying ByteBuf can grow at will, and
-    // can be written to at will.
-    assert this.eventExecutor.inEventLoop();
-    return this.closed;
+    return this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable());
   }
 
   @Deprecated
@@ -59,24 +50,17 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
 
   @Override
   public ByteBuf readChunk(final ByteBufAllocator ignoredByteBufAllocator) throws Exception {
-    assert this.eventExecutor.inEventLoop();
-    assert this.byteBuf != null;
-    return this.closed ? null : this.byteBuf.readSlice(this.byteBuf.readableBytes()).asReadOnly();
+    final ByteBuf returnValue = this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable()) ? null : this.byteBuf.readRetainedSlice(this.byteBuf.readableBytes()).asReadOnly();
+    return returnValue;
   }
 
   @Override
   public final long length() {
-    assert this.eventExecutor.inEventLoop();
-    // It is undocumented but ChunkedNioStream returns -1 to indicate,
-    // apparently, no idea of the length.  We don't have any idea
-    // either, or at any rate, it could be changing.
     return -1;
   }
 
   @Override
   public final long progress() {
-    assert this.eventExecutor.inEventLoop();
-    assert this.byteBuf != null;
     // e.g. we've read <progress> of <length> bytes.  Other
     // ChunkedInput implementations return a valid number here even
     // when length() returns -1, so we do too.
@@ -86,12 +70,6 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   @Override
   public final void close() {
     this.closed = true;
-    // TODO: this actually seems to get auto-released?
-    // So this may not be necessary?
-    final ByteBuf byteBuf = this.byteBuf;
-    if (byteBuf != null) {
-      byteBuf.release();
-    }
   }
 
 }

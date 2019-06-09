@@ -70,20 +70,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
   public final void close() throws IOException {
     // Can be called from the event loop or not.
     this.closed = true;
-    this.release();
     super.close();
-  }
-
-  private final void release() {
-    // Can be called from the event loop or not.
-    if (!this.closed) {
-      throw new IllegalStateException("!this.closed");
-    }
-    if (eventExecutor.inEventLoop()) {
-      this.byteBuf.release();
-    } else {
-      this.eventExecutor.execute(() -> this.byteBuf.release());
-    }
   }
 
   @Override
@@ -196,6 +183,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     @Override
     public final Integer call() {
       assert this.eventExecutor.inEventLoop();
+      assert this.byteBuf.refCnt() == 1;
       return this.byteBuf.isReadable() ? function.apply(this.byteBuf) : Integer.valueOf(-1);
     }
 

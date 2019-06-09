@@ -33,77 +33,48 @@ public class EventLoopPinnedByteBufOutputStream extends OutputStream {
   
   private final ByteBuf byteBuf;
 
-  private boolean closed;
+  private volatile boolean closed;
   
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
                                             final ByteBuf byteBuf) {
     super();
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
-    assert !this.inEventLoop();
     this.byteBuf = Objects.requireNonNull(byteBuf);
   }
 
   @Override
   public final void close() throws IOException {
-    this.perform(bb -> {
-        this.closed = true;
-        bb.release();
-      });
-    // super.close() is a no-op so we don't call it.
+    this.closed = true;
   }
 
   @Override
   public final void write(final byte[] bytes) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.perform(bb -> bb.writeBytes(bytes));
+    this.perform(bb -> {
+        bb.writeBytes(bytes);
+      });
   }
 
   @Override
   public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.perform(bb -> bb.writeBytes(bytes, offset, length));
+    this.perform(bb -> {
+        bb.writeBytes(bytes, offset, length);
+      });
   }
 
   @Override
   public final void write(final int b) throws IOException {
-    if (this.closed) {
-      throw new IOException("Closed");
-    }
-    assert !this.inEventLoop();
-    this.perform(bb -> bb.writeByte(b));
+    this.perform(bb -> {
+        bb.writeByte(b);
+      });
   }
 
   private final void perform(final ByteBufOperation byteBufOperation) throws IOException {
-    if (this.closed) {
-      throw new IOException("closed");
-    }
     final ByteBuf byteBuf = this.byteBuf;
-    if (byteBuf == null) {
-      throw new IOException("this.byteBuf == null", new IllegalStateException("this.byteBuf == null"));
-    }
     if (this.eventExecutor.inEventLoop()) {
-      try {
-        byteBufOperation.applyTo(byteBuf);
-      } catch (final IllegalReferenceCountException illegalReferenceCountException) {
-        throw new IOException(illegalReferenceCountException.getMessage(), illegalReferenceCountException);
-      }
+      byteBufOperation.applyTo(byteBuf);
     } else {
       this.eventExecutor.submit(() -> {
-          assert this.eventExecutor.inEventLoop();
-          if (this.closed) {
-            throw new IOException("closed");
-          }
-          try {
-            byteBufOperation.applyTo(byteBuf);
-          } catch (final IllegalReferenceCountException illegalReferenceCountException) {
-            throw new IOException(illegalReferenceCountException.getMessage(), illegalReferenceCountException);
-          }
+          byteBufOperation.applyTo(byteBuf);
           return null;
         });
     }
