@@ -149,7 +149,6 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     }
     
     if (HttpUtil.getContentLength(httpRequest, -1L) > 0 || HttpUtil.isTransferEncodingChunked(httpRequest)) {
-      // This CompositeByteBuf will be released by EventLoopPinnedByteBufInputStream#close().
       final CompositeByteBuf compositeByteBuf = channelHandlerContext.alloc().compositeBuffer();
       assert compositeByteBuf != null;
       assert compositeByteBuf.refCnt() == 1;

@@ -60,8 +60,6 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
 
 public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
-  private static final ChannelFutureListener FLUSH_LISTENER = cf -> cf.channel().flush();
-
   private final ChannelHandlerContext channelHandlerContext;
 
   private final HttpMessage httpRequest;
@@ -192,7 +190,6 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
         returnValue = new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(), byteBuf);
       } else {
-        // channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         returnValue = null;
       }
     }

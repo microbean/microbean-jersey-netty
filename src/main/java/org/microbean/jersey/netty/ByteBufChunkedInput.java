@@ -25,7 +25,7 @@ import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.stream.ChunkedInput;
 
-public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
+public final class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
 
   private final ByteBuf byteBuf;
 
@@ -33,12 +33,11 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   
   public ByteBufChunkedInput(final ByteBuf byteBuf) {
     super();
-    Objects.requireNonNull(byteBuf);
-    this.byteBuf = byteBuf;
+    this.byteBuf = Objects.requireNonNull(byteBuf);
   }
 
   @Override
-  public boolean isEndOfInput() throws Exception {
+  public final boolean isEndOfInput() throws Exception {
     return this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable());
   }
 
@@ -49,9 +48,8 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   }
 
   @Override
-  public ByteBuf readChunk(final ByteBufAllocator ignoredByteBufAllocator) throws Exception {
-    final ByteBuf returnValue = this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable()) ? null : this.byteBuf.readRetainedSlice(this.byteBuf.readableBytes()).asReadOnly();
-    return returnValue;
+  public final ByteBuf readChunk(final ByteBufAllocator ignoredByteBufAllocator) throws Exception {
+    return this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable()) ? null : this.byteBuf.readRetainedSlice(this.byteBuf.readableBytes()).asReadOnly();
   }
 
   @Override

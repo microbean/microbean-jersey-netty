@@ -23,8 +23,6 @@ import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
 
-import io.netty.util.IllegalReferenceCountException;
-
 import io.netty.util.concurrent.EventExecutor;
 
 public class EventLoopPinnedByteBufOutputStream extends OutputStream {
@@ -33,18 +31,11 @@ public class EventLoopPinnedByteBufOutputStream extends OutputStream {
   
   private final ByteBuf byteBuf;
 
-  private volatile boolean closed;
-  
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
                                             final ByteBuf byteBuf) {
     super();
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
     this.byteBuf = Objects.requireNonNull(byteBuf);
-  }
-
-  @Override
-  public final void close() throws IOException {
-    this.closed = true;
   }
 
   @Override
