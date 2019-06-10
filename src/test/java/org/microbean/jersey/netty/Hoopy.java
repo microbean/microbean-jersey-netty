@@ -16,23 +16,22 @@
  */
 package org.microbean.jersey.netty;
 
-import java.util.HashSet;
-import java.util.Set;
+import javax.ws.rs.Consumes;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
 
-public final class Application extends javax.ws.rs.core.Application {
+@Consumes("text/plain")
+@Path("/hoopy")
+public class Hoopy {
 
-  private final Set<Class<?>> classes;
-  
-  public Application() {
+  public Hoopy() {
     super();
-    this.classes = new HashSet<>();
-    classes.add(Hork.class);
-    classes.add(Hoopy.class);
   }
 
-  @Override
-  public final Set<Class<?>> getClasses() {
-    return this.classes;
+  @POST
+  @Path("/")
+  public void hoopy(final String echoMe) {
+    System.out.println("*** accepted: " + echoMe);
   }
-
+  
 }

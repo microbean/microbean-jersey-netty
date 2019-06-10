@@ -50,8 +50,6 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
   private final Phaser phaser;
 
-  private volatile boolean closed;
-
   public EventLoopPinnedByteBufInputStream(final CompositeByteBuf compositeByteBuf,
                                            final EventExecutor eventExecutor) {
     super();
@@ -67,18 +65,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
 
   @Override
-  public final void close() throws IOException {
-    // Can be called from the event loop or not.
-    this.closed = true;
-    super.close();
-  }
-
-  @Override
   public final int read() throws IOException {
-    // Shouldn't be in the event loop.
-    if (this.closed) {
-      throw new IOException();
-    }
     return this.read(sourceByteBuf -> Integer.valueOf(sourceByteBuf.readByte()));
   }
 
@@ -89,10 +76,6 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
   @Override
   public final int read(final byte[] targetBytes, final int offset, final int length) throws IOException {
-    // Shouldn't be in the event loop.
-    if (this.closed) {
-      throw new IOException();
-    }
     return this.read(sourceByteBuf -> {
         final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
         sourceByteBuf.readBytes(targetBytes, offset, readThisManyBytes);
@@ -112,7 +95,9 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     if (!this.eventExecutor.inEventLoop()) {
       throw new IllegalStateException("!(this.eventExecutor.inEventLoop(): " + Thread.currentThread());
     }
-    this.byteBuf.addComponent(byteBuf);
+    if (byteBuf != this.byteBuf) {
+      this.byteBuf.addComponent(true, byteBuf);
+    }
     this.phaser.arrive(); // (Nonblocking)
   }
 
@@ -137,7 +122,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     while (myByteBuf.numComponents() <= 0) {
       this.phaser.awaitAdvance(phaseNumber); // BLOCKING
     }
-    final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(this.eventExecutor, myByteBuf, function));
+    final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(myByteBuf, function));
     if (this.eventExecutor.inEventLoop()) {
       readTask.run();
     } else {
@@ -145,7 +130,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     }
     Integer returnValue = null;
     try {
-      returnValue = readTask.get();
+      returnValue = readTask.get(); // BLOCKING
     } catch (final ExecutionException executionException) {
       final Throwable cause = executionException.getCause();
       if (cause instanceof IOException) {
@@ -163,28 +148,28 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     return returnValue.intValue();
   }
 
-  private static final class EventLoopByteBufOperation implements Callable<Integer> {
 
-    private final EventExecutor eventExecutor;
+  /*
+   * Inner and nested classes.
+   */
+
+  
+  private static final class EventLoopByteBufOperation implements Callable<Integer> {
 
     private final ByteBuf byteBuf;
 
     private final Function<? super ByteBuf, ? extends Integer> function;
 
-    private EventLoopByteBufOperation(final EventExecutor eventExecutor,
-                                      final ByteBuf byteBuf,
+    private EventLoopByteBufOperation(final ByteBuf byteBuf,
                                       final Function<? super ByteBuf, ? extends Integer> function) {
       super();
-      this.eventExecutor = Objects.requireNonNull(eventExecutor);
       this.byteBuf = Objects.requireNonNull(byteBuf);
       this.function = Objects.requireNonNull(function);
     }
 
     @Override
     public final Integer call() {
-      assert this.eventExecutor.inEventLoop();
-      assert this.byteBuf.refCnt() == 1;
-      return this.byteBuf.isReadable() ? function.apply(this.byteBuf) : Integer.valueOf(-1);
+      return this.byteBuf.refCnt() > 0 && this.byteBuf.isReadable() ? function.apply(this.byteBuf) : Integer.valueOf(-1);
     }
 
   }

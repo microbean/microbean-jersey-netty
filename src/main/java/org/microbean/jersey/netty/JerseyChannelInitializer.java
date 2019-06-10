@@ -27,6 +27,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 
 import io.netty.handler.logging.LoggingHandler;
 
@@ -75,6 +76,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     }
     channelPipeline.addLast("loggingHandler", new LoggingHandler());
     channelPipeline.addLast("httpServerCodec", new HttpServerCodec());
+    channelPipeline.addLast("continueHandler", new HttpServerExpectContinueHandler());
     channelPipeline.addLast("chunkedWriteHandler", new ChunkedWriteHandler());
     channelPipeline.addLast("jerseyChannelInboundHandler", new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
   }

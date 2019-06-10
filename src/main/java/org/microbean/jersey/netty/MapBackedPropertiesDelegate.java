@@ -22,7 +22,7 @@ import java.util.Map;
 
 import org.glassfish.jersey.internal.PropertiesDelegate;
 
-public class MapBackedPropertiesDelegate implements PropertiesDelegate {
+public final class MapBackedPropertiesDelegate implements PropertiesDelegate {
 
   private final Map<String, Object> map;
 

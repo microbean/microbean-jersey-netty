@@ -23,6 +23,8 @@ import java.net.URI;
 
 import java.util.Objects;
 
+import javax.ws.rs.core.SecurityContext;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
@@ -66,8 +68,6 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
   @Override
   protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final HttpObject message) throws Exception {
     Objects.requireNonNull(channelHandlerContext);
-    assert channelHandlerContext.executor().inEventLoop();
-    
     if (message instanceof HttpRequest) {
       this.messageReceived(channelHandlerContext, (HttpRequest)message);
     } else if (message instanceof HttpContent) {
@@ -81,45 +81,45 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     Objects.requireNonNull(channelHandlerContext);
     assert channelHandlerContext.executor().inEventLoop();
     
-    if (HttpUtil.is100ContinueExpected(httpRequest)) {
-      channelHandlerContext.write(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE));
-    }
-    
     assert this.byteBufQueue == null;
 
     final ContainerRequest containerRequest = this.createContainerRequest(channelHandlerContext, httpRequest);
     
     final InjectionManager injectionManager = this.applicationHandler.getInjectionManager();
-    assert injectionManager != null;
     
     containerRequest.setWriter(new NettyContainerResponseWriter(httpRequest, channelHandlerContext, injectionManager));
 
-    injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService().execute(() -> this.applicationHandler.handle(containerRequest));
+    injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService().execute(() -> {
+        this.applicationHandler.handle(containerRequest);
+      });
   }
 
   protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpContent httpContent) throws Exception {
     Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(httpContent);
     assert channelHandlerContext.executor().inEventLoop();
+
+    // We only get HttpContent messages when there's actually an
+    // incoming payload.  The messageReceived() override that takes an
+    // HttpRequest will have set up our byteBufQueue implementation in
+    // this case.
+    assert this.byteBufQueue != null;
     
-    final ByteBuf content = httpContent.content().asReadOnly();
+    final ByteBuf content = httpContent.content();
     assert content != null;
-    assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
+    assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();    
+
+    if (content.isReadable()) {
+      content.retain();
+      this.byteBufQueue.addByteBuf(content);
+    }
     
     if (httpContent instanceof LastHttpContent) {
-      assert !content.isReadable();
-      final ByteBufQueue byteBufQueue = this.byteBufQueue;
-      if (byteBufQueue != null) {
-        try {
-          byteBufQueue.close();
-        } finally {
-          this.byteBufQueue = null;
-        }
+      try {
+        this.byteBufQueue.close();
+      } finally {
+        this.byteBufQueue = null;
       }
-    } else {
-      assert this.byteBufQueue != null;
-      // TODO: we might have to retain() content
-      this.byteBufQueue.addByteBuf(content);
     }
   }
 
@@ -129,44 +129,47 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     assert channelHandlerContext.executor().inEventLoop();
     
     final String uriString = httpRequest.uri();
+    assert uriString != null;
 
     final ContainerRequest returnValue =
       new ContainerRequest(this.baseUri,
                            baseUri.resolve(ContainerUtils.encodeUnsafeCharacters(uriString.startsWith("/") && uriString.length() > 1 ? uriString.substring(1) : uriString)),
                            httpRequest.method().name(),
-                           new NettySecurityContext(channelHandlerContext),
+                           this.createSecurityContext(channelHandlerContext),
                            new MapBackedPropertiesDelegate());
 
     final HttpHeaders headers = httpRequest.headers();
-    assert headers != null;
-    final Iterable<? extends String> headerNames = headers.names();
-    if (headerNames != null) {
-      for (final String headerName : headerNames) {
-        if (headerName != null) {
-          returnValue.headers(headerName, headers.getAll(headerName));
+    if (headers != null) {
+      final Iterable<? extends String> headerNames = headers.names();
+      if (headerNames != null) {
+        for (final String headerName : headerNames) {
+          if (headerName != null) {
+            returnValue.headers(headerName, headers.getAll(headerName));
+          }
         }
       }
     }
     
-    if (HttpUtil.getContentLength(httpRequest, -1L) > 0 || HttpUtil.isTransferEncodingChunked(httpRequest)) {
+    if (HttpUtil.getContentLength(httpRequest, -1L) > 0L || HttpUtil.isTransferEncodingChunked(httpRequest)) {
+
       final CompositeByteBuf compositeByteBuf = channelHandlerContext.alloc().compositeBuffer();
       assert compositeByteBuf != null;
-      assert compositeByteBuf.refCnt() == 1;
-      final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(compositeByteBuf, channelHandlerContext.executor());
+      channelHandlerContext.channel().closeFuture().addListener(ignored -> compositeByteBuf.release());
 
-      channelHandlerContext.channel().closeFuture().addListener(ignored -> {
-          compositeByteBuf.release();
-          entityStream.close();
-        });
-      
+      final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(compositeByteBuf, channelHandlerContext.executor());
       assert this.byteBufQueue == null;
       this.byteBufQueue = entityStream;
       returnValue.setEntityStream(entityStream);
+      
     } else {
       returnValue.setEntityStream(UnreadableInputStream.instance);
     }
 
     return returnValue;
+  }
+
+  protected SecurityContext createSecurityContext(final ChannelHandlerContext channelHandlerContext) {
+    return new NettySecurityContext();
   }
 
 

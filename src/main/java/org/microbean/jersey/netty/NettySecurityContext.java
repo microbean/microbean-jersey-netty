@@ -26,15 +26,8 @@ import io.netty.channel.ChannelHandlerContext;
 
 public class NettySecurityContext implements SecurityContext {
 
-  private final ChannelHandlerContext channelHandlerContext;
-  
-  public NettySecurityContext(final ChannelHandlerContext channelHandlerContext) {
+  public NettySecurityContext() {
     super();
-    this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);
-  }
-  
-  public ChannelHandlerContext getChannelHandlerContext() {
-    return this.channelHandlerContext;
   }
   
   @Override
@@ -51,7 +44,26 @@ public class NettySecurityContext implements SecurityContext {
   public Principal getUserPrincipal() {
     return null;
   }
-  
+
+  /**
+   * Returns a {@link String} value representing the authentication
+   * scheme used to protect a given resource, or {@code null} if the
+   * given resource does not require authentication in order to be
+   * accessed.</p>
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * <p>Overrides of this method may return {@code null}.</p>
+   *
+   * <p>Values are the same as the <a
+   * href="https://tools.ietf.org/html/rfc3875#section-4.1.1">CGI
+   * variable {@code AUTH_TYPE}</a>.</p>
+   *
+   * @return a {@link String} value representing the authentication
+   * scheme used to protect a given resource, or {@code null} if the
+   * given resource does not require authentication in order to be
+   * accessed
+   */
   @Override
   public String getAuthenticationScheme() {
     return null;

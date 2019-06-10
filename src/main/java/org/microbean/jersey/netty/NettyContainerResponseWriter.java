@@ -152,7 +152,8 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         HttpUtil.setKeepAlive(httpResponse, true);
       }
 
-      // Enqueue a task to write the headers on the event loop.
+      // Enqueue a task to write and flush the headers on the event
+      // loop.
       channelHandlerContext.writeAndFlush(httpResponse);
 
       if (needsOutputStream(contentLength)) {
@@ -163,7 +164,13 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         //
         // Allocate a ByteBuf suitable for doing IO.  This could be
         // heap-based or native.  We don't care; we trust Netty.
-        final ByteBuf byteBuf = this.channelHandlerContext.alloc().ioBuffer();
+        final ByteBuf byteBuf;
+        if (contentLength > 0L && contentLength <= Integer.MAX_VALUE) {
+          byteBuf = this.channelHandlerContext.alloc().ioBuffer((int)contentLength);
+        } else {
+          assert contentLength < 0L;
+          byteBuf = this.channelHandlerContext.alloc().ioBuffer();
+        }
         assert byteBuf != null;
 
         // Ensure that this buffer is released when/if the channel is
@@ -301,11 +308,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
 
   private final boolean needsOutputStream(final long contentLength) {
-    return contentLength != 0 && !this.isHEADRequest();
-  }
-
-  private final boolean isHEADRequest() {
-    return HttpMethod.HEAD.equals(this.methodSupplier.get());
+    return contentLength != 0 && !HttpMethod.HEAD.equals(this.methodSupplier.get());
   }
 
   private final boolean inEventLoop() {
