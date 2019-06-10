@@ -92,11 +92,12 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
   public final void addByteBuf(final ByteBuf byteBuf) {
     Objects.requireNonNull(byteBuf);
-    if (!this.eventExecutor.inEventLoop()) {
-      throw new IllegalStateException("!(this.eventExecutor.inEventLoop(): " + Thread.currentThread());
-    }
     if (byteBuf != this.byteBuf) {
-      this.byteBuf.addComponent(true, byteBuf);
+      if (this.eventExecutor.inEventLoop()) {
+        this.byteBuf.addComponent(true /* advance the writerIndex */, byteBuf);
+      } else {
+        this.eventExecutor.execute(() -> this.byteBuf.addComponent(true /* advance the writerIndex */, byteBuf));
+      }
     }
     this.phaser.arrive(); // (Nonblocking)
   }
@@ -116,13 +117,11 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    */
   protected final int read(final Function<? super ByteBuf, ? extends Integer> function) throws IOException {
     Objects.requireNonNull(function);
-    final CompositeByteBuf myByteBuf = this.byteBuf;
-    assert myByteBuf != null;
     final int phaseNumber = this.phaser.arrive();
-    while (myByteBuf.numComponents() <= 0) {
+    while (this.byteBuf.numComponents() <= 0) {
       this.phaser.awaitAdvance(phaseNumber); // BLOCKING
     }
-    final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(myByteBuf, function));
+    final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(this.byteBuf, function));
     if (this.eventExecutor.inEventLoop()) {
       readTask.run();
     } else {

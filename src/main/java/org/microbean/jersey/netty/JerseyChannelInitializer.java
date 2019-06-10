@@ -22,6 +22,8 @@ import java.util.Objects;
 
 import javax.ws.rs.core.Application;
 
+import io.netty.buffer.ByteBufAllocator;
+
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -32,6 +34,7 @@ import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.logging.LoggingHandler;
 
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
 
 import io.netty.handler.stream.ChunkedWriteHandler;
 
@@ -70,15 +73,33 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   @Override
   public final void initChannel(final Channel channel) {
     Objects.requireNonNull(channel);
+    this.preInitChannel(channel);
     final ChannelPipeline channelPipeline = channel.pipeline();
     if (this.sslContext != null) {
-      channelPipeline.addLast(this.sslContext.newHandler(channel.alloc()));
+      final SslHandler sslHandler = createSslHandler(this.sslContext, channel.alloc());
+      if (sslHandler != null) {
+        channelPipeline.addLast(sslHandler.getClass().getSimpleName(), sslHandler);
+      }
     }
-    channelPipeline.addLast("loggingHandler", new LoggingHandler());
-    channelPipeline.addLast("httpServerCodec", new HttpServerCodec());
-    channelPipeline.addLast("continueHandler", new HttpServerExpectContinueHandler());
-    channelPipeline.addLast("chunkedWriteHandler", new ChunkedWriteHandler());
-    channelPipeline.addLast("jerseyChannelInboundHandler", new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
+    channelPipeline.addLast(HttpServerCodec.class.getSimpleName(), new HttpServerCodec());
+    channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
+    channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(), new ChunkedWriteHandler());
+    channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(), new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler));
+    this.postInitChannel(channel);
+  }
+
+  protected void preInitChannel(final Channel channel) {
+    Objects.requireNonNull(channel);
+    final ChannelPipeline channelPipeline = channel.pipeline();
+    channelPipeline.addLast("LoggingHandler", new LoggingHandler());
+  }
+
+  protected void postInitChannel(final Channel channel) {
+
+  }
+  
+  protected SslHandler createSslHandler(final SslContext sslContext, final ByteBufAllocator byteBufAllocator) {
+    return sslContext.newHandler(byteBufAllocator);
   }
 
 }

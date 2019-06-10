@@ -54,7 +54,7 @@ public final class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
 
   @Override
   public final long length() {
-    return -1;
+    return -1L;
   }
 
   @Override

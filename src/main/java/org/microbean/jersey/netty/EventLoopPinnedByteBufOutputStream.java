@@ -28,7 +28,7 @@ import io.netty.util.concurrent.EventExecutor;
 public class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
   private final EventExecutor eventExecutor;
-  
+
   private final ByteBuf byteBuf;
 
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
@@ -40,39 +40,28 @@ public class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
   @Override
   public final void write(final byte[] bytes) throws IOException {
-    this.perform(bb -> {
-        bb.writeBytes(bytes);
-      });
+    this.perform(bb -> bb.writeBytes(bytes));
   }
 
   @Override
   public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
-    this.perform(bb -> {
-        bb.writeBytes(bytes, offset, length);
-      });
+    this.perform(bb -> bb.writeBytes(bytes, offset, length));
   }
 
   @Override
   public final void write(final int b) throws IOException {
-    this.perform(bb -> {
-        bb.writeByte(b);
-      });
+    this.perform(bb -> bb.writeByte(b));
   }
 
   private final void perform(final ByteBufOperation byteBufOperation) throws IOException {
-    final ByteBuf byteBuf = this.byteBuf;
     if (this.eventExecutor.inEventLoop()) {
-      byteBufOperation.applyTo(byteBuf);
+      byteBufOperation.applyTo(this.byteBuf);
     } else {
       this.eventExecutor.submit(() -> {
-          byteBufOperation.applyTo(byteBuf);
+          byteBufOperation.applyTo(this.byteBuf);
           return null;
         });
     }
-  }
-
-  private final boolean inEventLoop() {
-    return this.eventExecutor.inEventLoop();
   }
 
 }
