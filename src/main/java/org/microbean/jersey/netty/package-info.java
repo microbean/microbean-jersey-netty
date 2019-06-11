@@ -14,32 +14,15 @@
  * implied.  See the License for the specific language governing
  * permissions and limitations under the License.
  */
-package org.microbean.jersey.netty;
-
-import java.io.Closeable;
-
-import io.netty.buffer.ByteBuf;
 
 /**
- * A {@link Closeable} whose implementations can add a {@link ByteBuf}
- * to themselves.
+ * Provides classes and interfaces for integrating <a
+ * href="https://jersey.github.io/" target="_parent">Jersey</a> into
+ * <a href="https://netty.io/" target="_parent">Netty</a>.
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
- * @see #addByteBuf(ByteBuf)
- *
- * @see Closeable
+ * @see org.microbean.jersey.netty.JerseyChannelInitializer
  */
-public interface ByteBufQueue extends Closeable {
-
-  /**
-   * Adds the supplied {@link ByteBuf} to this {@link ByteBufQueue}
-   * implementation.
-   *
-   * @param byteBuf the {@link ByteBuf} to add; must not be {@code
-   * null}
-   */
-  public void addByteBuf(final ByteBuf byteBuf);
-  
-}
+package org.microbean.jersey.netty;

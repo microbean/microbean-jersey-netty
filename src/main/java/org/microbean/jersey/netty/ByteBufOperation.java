@@ -20,9 +20,26 @@ import java.io.IOException;
 
 import io.netty.buffer.ByteBuf;
 
+/**
+ * A functional interface whose implementations typically read from or
+ * write to a given {@link ByteBuf}.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #applyTo(ByteBuf)
+ */
 @FunctionalInterface
 public interface ByteBufOperation {
 
+  /**
+   * Operates on the supplied {@link ByteBuf} in some way.
+   *
+   * @param target the {@link ByteBuf} to operate on; must not be
+   * {@code null}
+   *
+   * @exception IOException if an error occurs
+   */
   public void applyTo(final ByteBuf target) throws IOException;
   
 }

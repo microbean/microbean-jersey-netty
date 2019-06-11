@@ -25,12 +25,30 @@ import io.netty.buffer.ByteBuf;
 
 import io.netty.util.concurrent.EventExecutor;
 
-public class EventLoopPinnedByteBufOutputStream extends OutputStream {
+/**
+ * An {@link OutputStream} whose operations occur on Netty's event
+ * loop.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ */
+public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
   private final EventExecutor eventExecutor;
 
   private final ByteBuf byteBuf;
 
+  /**
+   * Creates a new {@link EventLoopPinnedByteBufOutputStream}.
+   *
+   * @param eventExecutor an {@link EventExecutor} that will be used
+   * to {@linkplain EventExecutor#inEventLoop() ensure all operations
+   * are executed on the Netty event loop}; must not be {@code null}
+   *
+   * @param byteBuf the {@link ByteBuf} that will be {@linkplain
+   * ByteBuf#writeBytes(byte[], int, int) written to}; must not be
+   * {@code null}
+   */
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
                                             final ByteBuf byteBuf) {
     super();

@@ -34,8 +34,10 @@ import io.netty.buffer.CompositeByteBuf;
 import io.netty.util.concurrent.EventExecutor;
 
 /**
- * An {@link InputStream} that {@linkplain #read() reads} from a
- * {@link CompositeByteBuf}, ensuring that the read occurs only
+ * A {@link ByteBufQueue} and an {@link InputStream} that {@linkplain
+ * #read() reads} from a (possibly mutating and {@linkplain
+ * CompositeByteBuf#addComponent(boolean, ByteBuf) expanding}) {@link
+ * CompositeByteBuf}, ensuring that all operations occur only
  * {@linkplain EventExecutor#inEventLoop() on the Netty event loop
  * thread}.
  *
@@ -50,6 +52,20 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
   private final Phaser phaser;
 
+  /**
+   * Creates a new {@link EventLoopPinnedByteBufInputStream}.
+   *
+   * @param compositeByteBuf the {@link CompositeByteBuf} that will be
+   * {@linkplain CompositeByteBuf#readBytes(byte[], int, int) read}
+   * from; must not be {@code null}
+   *
+   * @param eventExecutor an {@link EventExecutor} that will
+   * {@linkplain EventExecutor#inEventLoop() ensure operations occur
+   * on the Netty event loop}; must not be {@code null}
+   *
+   * @exception NullPointerException if either {@code
+   * compositeByteBuf} or {@code eventExecutor} is {@code null}
+   */
   public EventLoopPinnedByteBufInputStream(final CompositeByteBuf compositeByteBuf,
                                            final EventExecutor eventExecutor) {
     super();
@@ -85,11 +101,21 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
 
   /*
-   * ByteBufQueue methods.  These must be invoked while on the Netty
-   * event loop.
+   * ByteBufQueue methods.
    */
 
 
+  /**
+   * {@linkplain CompositeByteBuf#addComponent(boolean, ByteBuf) Adds}
+   * the supplied {@link ByteBuf} to the {@link CompositeByteBuf}
+   * maintained by this {@link EventLoopPinnedByteBufInputStream}.
+   *
+   * @param byteBuf the {@link ByteBuf} to add; must not be {@code
+   * null}
+   *
+   * @exception NullPointerException if {@code byteBuf} is {@code
+   * null}
+   */
   public final void addByteBuf(final ByteBuf byteBuf) {
     Objects.requireNonNull(byteBuf);
     if (byteBuf != this.byteBuf) {
@@ -109,11 +135,21 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
 
   /**
-   * {@linkplain Function#apply(Object) Applies} supplied {@link
+   * {@linkplain Function#apply(Object) Applies} the supplied {@link
    * Function} to a {@link ByteBuf}, ensuring that the {@link
    * Function} application takes place on the {@linkplain
    * EventExecutor#inEventLoop() Netty event loop thread}, and returns
    * the {@link Function}'s return value.
+   *
+   * @param function the {@link Function} to apply; must not be {@code
+   * null}
+   *
+   * @return an {@code int} resulting from the {@link Function}
+   * application
+   *
+   * @exception IOException if an error occurs
+   *
+   * @exception NullPointerException if {@code function} is {@code null}
    */
   protected final int read(final Function<? super ByteBuf, ? extends Integer> function) throws IOException {
     Objects.requireNonNull(function);

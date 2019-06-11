@@ -25,6 +25,7 @@ import java.util.Map.Entry;
 import java.util.Objects;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -48,7 +49,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 
 import io.netty.handler.stream.ChunkedInput;
 
-import org.glassfish.jersey.internal.inject.InjectionManager;
+import io.netty.util.concurrent.EventExecutor;
 
 import org.glassfish.jersey.server.ContainerException;
 import org.glassfish.jersey.server.ContainerResponse;
@@ -58,15 +59,34 @@ import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
 
 import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
 
+/**
+ * A {@link ContainerResponseWriter} that takes care not to block the
+ * Netty event loop.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see ContainerResponseWriter
+ *
+ * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
+ *
+ * @see #createChunkedInput(EventExecutor, ByteBuf)
+ */
 public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
+
+  /*
+   * Instance fields.
+   */
+
+  
   private final ChannelHandlerContext channelHandlerContext;
 
   private final HttpMessage httpRequest;
 
   private final Supplier<? extends HttpMethod> methodSupplier;
 
-  private final InjectionManager injectionManager;
+  private final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier;
 
   private volatile long contentLength;
 
@@ -77,22 +97,45 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   private volatile boolean responseWritten;
 
   private volatile ChunkedInput<?> chunkedInput;
-  
+
+
+  /*
+   * Constructors.
+   */
+
+
+  /**
+   * Creates a new {@link NettyContainerResponseWriter}.
+   *
+   * @param httpRequest the {@link HttpRequest} being responded to;
+   * must not be {@code null}
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param scheduledExecutorServiceSupplier a {@link Supplier} that
+   * can {@linkplain Supplier#get() supply} a {@link
+   * ScheduledExecutorService}; must not be {@code null}
+   *
+   * @exception NullPointerException if any of the parameters is
+   * {@code null}
+   */
   public NettyContainerResponseWriter(final HttpRequest httpRequest,
                                       final ChannelHandlerContext channelHandlerContext,
-                                      final InjectionManager injectionManager) {
-    this(httpRequest, httpRequest::method, channelHandlerContext, injectionManager);
+                                      final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
+    this(httpRequest, httpRequest::method, channelHandlerContext, scheduledExecutorServiceSupplier);
   }
 
   private NettyContainerResponseWriter(final HttpMessage httpRequest,
                                        final Supplier<? extends HttpMethod> methodSupplier,
                                        final ChannelHandlerContext channelHandlerContext,
-                                       final InjectionManager injectionManager) {
+                                       final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
     super();
     this.httpRequest = Objects.requireNonNull(httpRequest);
     this.methodSupplier = Objects.requireNonNull(methodSupplier);
     this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);
-    this.injectionManager = Objects.requireNonNull(injectionManager);
+    this.scheduledExecutorServiceSupplier = Objects.requireNonNull(scheduledExecutorServiceSupplier);
   }
 
 
@@ -179,7 +222,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
             byteBuf.release();
           });
 
-        // TODO: normally you'd think you'd only write a ChunkedInput
+        // Normally you'd think you'd only write a ChunkedInput
         // implementation if you were sure that the Transfer-Encoding
         // was Chunked.  But because writes are happening on an
         // OutputStream in Jersey-land on a separate thread, and are
@@ -187,9 +230,14 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         // the event loop and wait for the OutputStream to close, we
         // wouldn't know when to do the write.  So we use ChunkedInput
         // even in cases where the Content-Length is set to a positive
-        // integer.  We may need to revisit this.
-
-        this.chunkedInput = new ByteBufChunkedInput(byteBuf);
+        // integer.  Note in particular that ChunkedInput
+        // implementations are not at all tied to chunked
+        // Transfer-Encoding.
+        final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf);
+        if (chunkedInput == null) {
+          throw new IllegalStateException("createChunkedInput(" + byteBuf + ") == null");
+        }
+        this.chunkedInput = chunkedInput;
 
         // Enqueue a task that will query the ByteBufChunkedInput for
         // its chunks via its readChunk() method on the event loop.
@@ -201,6 +249,50 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       }
     }
     return returnValue;
+  }
+
+  /**
+   * Creates a new {@link ChunkedInput} instance whose {@link
+   * ChunkedInput#readChunk(ByteBufAllocator)} method will stream
+   * {@link ByteBuf} chunks to the Netty transport.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * <p>In normal usage this method will be invoked on a thread that
+   * is <strong>not</strong> {@linkplain EventExecutor#inEventLoop()
+   * in the Netty event loop}.  Care <strong>must</strong> be taken if
+   * an override of this method decides to invoke any methods on the
+   * supplied {@link ByteBuf} to ensure those methods are invoked in
+   * the Netty event loop.  This implementation does not invoke any
+   * {@link ByteBuf} methods and overrides are strongly urged to
+   * follow suit.</p>
+   *
+   * <p>Overrides of this method must not return {@code null}.</p>
+   *
+   * <p>This method is called from the {@link
+   * #writeResponseStatusAndHeaders(long, ContainerResponse)} method.
+   * Overrides must not call that method or an infinite loop may
+   * result.</p>
+   *
+   * @param eventExecutor an {@link EventExecutor}, supplied for
+   * convenience, that can be used to ensure certain tasks are
+   * executed in the Netty event loop; must not be {@code null}
+   *
+   * @param source the {@link ByteBuf}, <strong>which might be
+   * mutating</strong> in the Netty event loop, that the returned
+   * {@link ChunkedInput} should read from in some way when its {@link
+   * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
+   * the Netty event loop; must not be {@code null}
+   *
+   * @return a new {@link ChunkedInput} that reads in some way from
+   * the supplied {@code source} when its {@link
+   * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
+   * the Netty event loop; never {@code null}
+   *
+   * @see ByteBufChunkedInput
+   */
+  protected ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source) {
+    return new ByteBufChunkedInput(source);
   }
 
   @Override
@@ -219,7 +311,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       };
       if (timeout > 0) {
         this.suspendTimeoutFuture =
-          this.injectionManager.getInstance(ScheduledExecutorServiceProvider.class).getExecutorService().schedule(this.suspendTimeoutHandler, timeout, timeUnit);
+          this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);
       }
       returnValue = true;
     }
@@ -239,7 +331,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
     }
     if (timeout > 0) {
       this.suspendTimeoutFuture =
-        this.injectionManager.getInstance(ScheduledExecutorServiceProvider.class).getExecutorService().schedule(this.suspendTimeoutHandler, timeout, timeUnit);
+        this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);
     }
   }
 
@@ -262,7 +354,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   }
 
   @Override
-  public final void failure(final Throwable throwable) {
+  public void failure(final Throwable throwable) {
     assert !this.inEventLoop();
 
     // Lifted from Jersey's relatively lousy Netty integration; it

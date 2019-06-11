@@ -25,19 +25,72 @@ import org.glassfish.jersey.server.ResourceConfig;
 
 import org.glassfish.jersey.server.spi.Container;
 
+/**
+ * A straightforward {@link Container} implementation that is not
+ * actually needed for Jersey integration.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see Container
+ *
+ * @see JerseyChannelInitializer
+ */
 public class SimpleContainer implements Container {
 
+
+  /*
+   * Instance fields.
+   */
+
+  
   private volatile ApplicationHandler applicationHandler;
 
+
+  /*
+   * Constructors.
+   */
+
+
+  /**
+   * Creates a new {@link SimpleContainer}.
+   *
+   * @param application the {@link Application} to host; may be {@code
+   * null} in which case a {@linkplain Application#Application() new}
+   * {@link Application} will be used instead
+   *
+   * @see #SimpleContainer(ApplicationHandler)
+   */
   public SimpleContainer(final Application application) {
-    this(new ApplicationHandler(Objects.requireNonNull(application)));
+    this(application == null ? (ApplicationHandler)null : new ApplicationHandler(application));
   }
 
+  /**
+   * Creates a new {@link SimpleContainer}.
+   *
+   * @param applicationHandler the {@link ApplicationHandler} that
+   * actually does the work of hosting an application; may be {@code
+   * null} in which case a {@linkplain
+   * ApplicationHandler#ApplicationHandler() new} {@link
+   * ApplicationHandler} will be used instead
+   */
   public SimpleContainer(final ApplicationHandler applicationHandler) {
     super();
-    this.applicationHandler = Objects.requireNonNull(applicationHandler);
+    this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
   }
 
+  /**
+   * Returns a {@link ResourceConfig} representing the configuration
+   * of the application hosted by this {@link SimpleContainer}.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @return a {@link ResourceConfig} representing the configuration
+   * of the application hosted by this {@link SimpleContainer}, or
+   * {@code null}
+   *
+   * @see ApplicationHandler#getConfiguration()
+   */
   @Override
   public final ResourceConfig getConfiguration() {
     final ResourceConfig returnValue;
@@ -50,16 +103,43 @@ public class SimpleContainer implements Container {
     return returnValue;
   }
 
+  /**
+   * Returns the {@link ApplicationHandler} this {@link
+   * SimpleContainer} uses.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @return the {@link ApplicationHandler} this {@link
+   * SimpleContainer} uses, or {@code null}
+   */
   @Override
   public final ApplicationHandler getApplicationHandler() {
     return this.applicationHandler;
   }
 
+  /**
+   * Reloads the application hosted by this {@link SimpleContainer}.
+   *
+   * @see #reload(ResourceConfig)
+   */
   @Override
   public final void reload() {
     this.reload(this.getConfiguration());
   }
 
+  /**
+   * Loads what amounts to a new application using the supplied {@link
+   * ResourceConfig}.
+   *
+   * @param resourceConfig the {@link ResourceConfig} representing the
+   * new application; may be {@code null}
+   *
+   * @see ApplicationHandler#onShutdown(Container)
+   *
+   * @see ApplicationHandler#onReload(Container)
+   *
+   * @see ApplicationHandler#onStartup(Container)
+   */
   @Override
   public void reload(final ResourceConfig resourceConfig) {
     ApplicationHandler handler = this.getApplicationHandler();
