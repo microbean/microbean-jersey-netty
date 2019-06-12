@@ -31,6 +31,8 @@ import io.netty.util.concurrent.Future;
 
 import org.junit.Test;
 
+import static org.junit.Assume.assumeTrue;
+
 public class TestSpike {
 
   public TestSpike() {
@@ -39,6 +41,7 @@ public class TestSpike {
 
   @Test
   public void testSpike() throws Exception {
+    assumeTrue(Boolean.getBoolean("runBlockingTests"));
     final EventLoopGroup group = new NioEventLoopGroup();
     try {
       final ServerBootstrap serverBootstrap = new ServerBootstrap()

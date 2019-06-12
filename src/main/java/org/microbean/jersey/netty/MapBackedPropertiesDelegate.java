@@ -35,7 +35,7 @@ import org.glassfish.jersey.internal.PropertiesDelegate;
  *
  * @see PropertiesDelegate
  */
-public final class MapBackedPropertiesDelegate implements PropertiesDelegate {
+final class MapBackedPropertiesDelegate implements PropertiesDelegate {
 
 
   /*
@@ -56,7 +56,7 @@ public final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    *
    * @see #MapBackedPropertiesDelegate(Map)
    */
-  public MapBackedPropertiesDelegate() {
+  MapBackedPropertiesDelegate() {
     this(new HashMap<>());
   }
 
@@ -75,7 +75,7 @@ public final class MapBackedPropertiesDelegate implements PropertiesDelegate {
 
   /**
    * Returns the property value indexed under the supplied {@code
-   * name}, or {@code null} if the proeprty value is itself {@code
+   * name}, or {@code null} if the property value is itself {@code
    * null} or if no such property exists.
    *
    * <p>This method may return {@code null}.</p>

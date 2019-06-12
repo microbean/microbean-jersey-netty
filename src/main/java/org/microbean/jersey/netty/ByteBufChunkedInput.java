@@ -58,6 +58,16 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   private final ByteBuf byteBuf;
 
   /**
+   * The value to return from the default implementation of the {@link
+   * #length()} method.
+   *
+   * <p>This field is never less than {@code -1L}.
+   *
+   * @see #length()
+   */
+  private final long lengthToReport;
+
+  /**
    * Indicates that no more input is forthcoming, so assuming other
    * conditions are true the {@link #isEndOfInput()} method may return
    * {@code true}.
@@ -75,18 +85,38 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
 
 
   /**
+   * Creates a new {@link ByteBufChunkedInput} whose {@link #length()}
+   * method will return {@code -1L}.
+   *
+   * @param byteBuf the {@link ByteBuf} from which chunks will be
+   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be
+   * {@code null}
+   *
+   * @see #ByteBufChunkedInput(ByteBuf, long)
+   */
+  public ByteBufChunkedInput(final ByteBuf byteBuf) {
+    this(byteBuf, -1L);
+  }
+
+  /**
    * Creates a new {@link ByteBufChunkedInput}.
    *
    * @param byteBuf the {@link ByteBuf} from which chunks will be
    * {@linkplain #readChunk(ByteBufAllocator) read}; must not be
    * {@code null}
    *
+   * @param lengthToReport the length of this {@link ChunkedInput}
+   * implementation in bytes to be reported by the {@link #length()}
+   * method; may be {@code -1L} (and very often is) if a
+   * representation of its length is not available.
+   *
    * @exception NullPointerException if {@code byteBuf} is {@code
    * null}
    */
-  public ByteBufChunkedInput(final ByteBuf byteBuf) {
+  public ByteBufChunkedInput(final ByteBuf byteBuf, final long lengthToReport) {
     super();
     this.byteBuf = Objects.requireNonNull(byteBuf);
+    this.lengthToReport = Math.max(-1L, lengthToReport);
   }
 
 
@@ -179,19 +209,16 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
   }
 
   /**
-   * Returns the length of this {@link ChunkedInput} implementation.
+   * Returns the length of this {@link ChunkedInput} implementation in bytes,
+   * or {@code -1L} if a representation of its length is not
+   * available.
    *
-   * <p><strong>This implementation returns {@code -1L}</strong>
-   * because the {@link ByteBuf} {@linkplain
-   * #ByteBufChunkedInput(ByteBuf) supplied at construction time} may
-   * be written to by other clients, so its length may be varying and
-   * is hence unknown.</p>
-   *
-   * @return {@code -1L} when invoked
+   * @return the length of this {@link ChunkedInput} implementation in
+   * bytes, or {@code -1L}
    */
   @Override
   public final long length() {
-    return -1L;
+    return this.lengthToReport;
   }
 
   /**

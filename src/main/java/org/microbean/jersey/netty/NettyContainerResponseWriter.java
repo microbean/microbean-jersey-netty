@@ -70,7 +70,7 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
  *
  * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
  *
- * @see #createChunkedInput(EventExecutor, ByteBuf)
+ * @see #createChunkedInput(EventExecutor, ByteBuf, long)
  */
 public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
@@ -154,7 +154,9 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
     final OutputStream returnValue;
 
-    // Jersey's native Netty support does this.  I don't know why.  We follow suit.
+    // Jersey's native Netty support does this.  I don't know why.  We
+    // follow suit; there's probably an edge case that gave rise to
+    // this.
     final boolean responseWritten = this.responseWritten;
     if (responseWritten) {
       returnValue = null;
@@ -166,13 +168,13 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       final HttpResponseStatus status = reasonPhrase == null ? HttpResponseStatus.valueOf(statusCode) : new HttpResponseStatus(statusCode, reasonPhrase);
 
       final HttpResponse httpResponse;
-      if (contentLength == 0) {
+      if (contentLength == 0L) {
         httpResponse = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(), status);
       } else {
         httpResponse = new DefaultHttpResponse(this.httpRequest.protocolVersion(), status);
       }
       
-      if (contentLength < 0) {
+      if (contentLength < 0L) {
         HttpUtil.setTransferEncodingChunked(httpResponse, true);
       } else {
         HttpUtil.setContentLength(httpResponse, contentLength);
@@ -199,7 +201,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       // loop.
       channelHandlerContext.writeAndFlush(httpResponse);
 
-      if (needsOutputStream(contentLength)) {
+      if (this.needsOutputStream(contentLength)) {
 
         // We've determined that there is a payload/entity.  Our
         // ultimate responsibility is to return an OutputStream the
@@ -218,24 +220,19 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
         // Ensure that this buffer is released when/if the channel is
         // closed.
-        channelHandlerContext.channel().closeFuture().addListener(ignored -> {
-            byteBuf.release();
-          });
+        channelHandlerContext.channel().closeFuture().addListener(ignored -> byteBuf.release());
 
-        // Normally you'd think you'd only write a ChunkedInput
-        // implementation if you were sure that the Transfer-Encoding
-        // was Chunked.  But because writes are happening on an
-        // OutputStream in Jersey-land on a separate thread, and are
-        // then being run on the event loop, unless we were to block
-        // the event loop and wait for the OutputStream to close, we
-        // wouldn't know when to do the write.  So we use ChunkedInput
-        // even in cases where the Content-Length is set to a positive
-        // integer.  Note in particular that ChunkedInput
-        // implementations are not at all tied to chunked
-        // Transfer-Encoding.
-        final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf);
+        // A ChunkedInput despite its name has nothing to do with
+        // chunked Transfer-Encoding.  It is usable anywhere you like.
+        // So here, because writes are happening on an OutputStream in
+        // Jersey-land on a separate thread, and are then being run on
+        // the event loop, unless we were to block the event loop and
+        // wait for the OutputStream to close, we wouldn't know when
+        // to do the write.  So we use ChunkedInput even in cases
+        // where the Content-Length is set to a positive integer.
+        final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf, contentLength);
         if (chunkedInput == null) {
-          throw new IllegalStateException("createChunkedInput(" + byteBuf + ") == null");
+          throw new IllegalStateException("createChunkedInput() == null");
         }
         this.chunkedInput = chunkedInput;
 
@@ -243,7 +240,19 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         // its chunks via its readChunk() method on the event loop.
         channelHandlerContext.write(this.chunkedInput);
 
-        returnValue = new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(), byteBuf);
+        // Then return an OutputStream implementation that writes to
+        // the very same ByteBuf, ensuring that writes take place on
+        // the event loop.  The net effect is that as this stream
+        // writes to the ByteBuf, the ChunkedWriteHandler consuming
+        // the ChunkedInput by way of its readChunk() method, also on
+        // the event loop, will stream the results as they are made
+        // available.
+        //
+        // TODO: replace the null third parameter with a
+        // GenericFutureListener that will Do The Right Thing™ with
+        // any exceptions.  **Remember that this listener will be
+        // invoked on the event loop.**
+        returnValue = new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(), byteBuf, null);
       } else {
         returnValue = null;
       }
@@ -284,15 +293,25 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
    * the Netty event loop; must not be {@code null}
    *
+   * @param contentLength a {@code long} representing the value of any
+   * {@code Content-Length} header that might have been present; it is
+   * guaranteed that when this method is invoked by the default
+   * implementation of the {@link #writeResponseStatusAndHeaders(long,
+   * ContainerResponse)} method this parameter will never be {@code
+   * 0L} but might very well be less than {@code 0L} to indicate an
+   * unknown content length
+   *
    * @return a new {@link ChunkedInput} that reads in some way from
    * the supplied {@code source} when its {@link
    * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
    * the Netty event loop; never {@code null}
    *
-   * @see ByteBufChunkedInput
+   * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)
+   *
+   * @see ChunkedInput#readChunk(ByteBufAllocator)
    */
-  protected ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source) {
-    return new ByteBufChunkedInput(source);
+  protected ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
+    return new ByteBufChunkedInput(source, contentLength);
   }
 
   @Override
@@ -335,6 +354,32 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
     }
   }
 
+  /**
+   * Invoked on a non-event-loop thread by Jersey when, as far as
+   * Jersey is concerned, all processing has completed successfully.
+   *
+   * <p>This implementation ensures that {@link ChunkedInput#close()}
+   * is called on the Netty event loop on the {@link ChunkedInput}
+   * returned by the {@link #createChunkedInput(EventExecutor,
+   * ByteBuf, long)} method, and that a {@link
+   * LastHttpContent#EMPTY_LAST_CONTENT} message is written
+   * immediately afterwards, and that the {@link
+   * ChannelHandlerContext} is {@linkplain
+   * ChannelHandlerContext#flush() flushed}.  All of these invocations
+   * occur on the event loop.</p>
+   *
+   * @see ChunkedInput#close()
+   *
+   * @see #createChunkedInput(EventExecutor, ByteBuf, long)
+   *
+   * @see LastHttpContent#EMPTY_LAST_CONTENT
+   *
+   * @see ChannelHandlerContext#write(Object)
+   *
+   * @see ChannelHandlerContext#flush()
+   *
+   * @see ContainerResponseWriter#commit()
+   */
   @Override
   public final void commit() {
     assert !this.inEventLoop();
@@ -353,39 +398,66 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       });
   }
 
+  /**
+   * Invoked on a non-event-loop thread by Jersey when, as far as
+   * Jersey is concerned, all processing has completed unsuccessfully.
+   *
+   * @param throwable the {@link Throwable} that caused failure;
+   * strictly speaking may be {@code null}
+   *
+   * @see ContainerResponseWriter#failure(Throwable)
+   */
   @Override
   public void failure(final Throwable throwable) {
     assert !this.inEventLoop();
 
-    // Lifted from Jersey's relatively lousy Netty integration; it
-    // appears that throwable is simply ignored.  That's not right,
-    // surely.
-
-    // The Jersey Grizzly integration rethrows the error as a
-    // ContainerException; see
-    // https://github.com/eclipse-ee4j/jersey/blob/e2ee2e2d6da4dbb3a4c0f5417c621f402d792280/containers/grizzly2-http/src/main/java/org/glassfish/jersey/grizzly2/httpserver/GrizzlyHttpContainer.java#L279-L300
-    // which references JAX-RS specification section 3.3.4, which
-    // says, in items number 3 and 4: "Unchecked exceptions and errors
-    // that have not been mapped MUST be re-thrown and allowed to
-    // propagate to the underlying container." and "Checked exceptions
-    // and throwables that have not been mapped and cannot be thrown
-    // directly MUST be wrapped in a container-specific exception that
-    // is then thrown and allowed to propagate to the underlying
-    // container."  We'll follow suit.
-
+    // Note that despite the Exception-less signature of this method
+    // JAX-RS specification section 3.3.4 says, in items number 3 and
+    // 4: "Unchecked exceptions and errors that have not been mapped
+    // MUST be re-thrown and allowed to propagate to the underlying
+    // container", and "Checked exceptions and throwables that have
+    // not been mapped and cannot be thrown directly MUST be wrapped
+    // in a container-specific exception that is then thrown and
+    // allowed to propagate to the underlying container."  It's a tiny
+    // bit unclear as to where the container boundary is in this
+    // method, but we'll throw a ContainerException if there is a
+    // problem that arises with processing the supplied Throwable.
     try {
       this.channelHandlerContext.writeAndFlush(new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),
                                                                            HttpResponseStatus.INTERNAL_SERVER_ERROR)).addListener(ChannelFutureListener.CLOSE);
-    } catch (final RuntimeException suppressMe) {
-      throwable.addSuppressed(suppressMe);
+    } catch (final RuntimeException runtimeException) {
+      if (throwable == null) {
+        throw runtimeException;
+      } else {
+        throwable.addSuppressed(runtimeException);
+      }
     }
     if (throwable instanceof RuntimeException) {
       throw (RuntimeException)throwable;
-    } else {
+    } else if (throwable != null) {
       throw new ContainerException(throwable.getMessage(), throwable);
     }
   }
 
+  /**
+   * Returns {@code true} when invoked.
+   *
+   * <p>Note that this is a default value.  Response buffering <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778">can
+   * be configured</a>.</p>
+   *
+   * @return {@code true} when invoked
+   *
+   * @see ContainerResponseWriter#enableResponseBuffering()
+   *
+   * @see <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"
+   * target="_parent"><code> ContainerResponse.java</code></a>
+   *
+   * @see <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"
+   * target="_parent"><code> OutboundMessageContext.java</code></a>
+   */
   @Override
   public boolean enableResponseBuffering() {
     assert !this.inEventLoop();

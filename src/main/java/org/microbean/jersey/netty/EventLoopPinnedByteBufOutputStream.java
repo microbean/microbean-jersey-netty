@@ -24,6 +24,8 @@ import java.util.Objects;
 import io.netty.buffer.ByteBuf;
 
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 /**
  * An {@link OutputStream} whose operations occur on Netty's event
@@ -34,10 +36,23 @@ import io.netty.util.concurrent.EventExecutor;
  */
 public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
+
+  /*
+   * Instance fields.
+   */
+
+  
   private final EventExecutor eventExecutor;
 
   private final ByteBuf byteBuf;
 
+  private final GenericFutureListener<? extends Future<? super Void>> listener;
+  
+  /*
+   * Constructors.
+   */
+
+  
   /**
    * Creates a new {@link EventLoopPinnedByteBufOutputStream}.
    *
@@ -48,14 +63,28 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * @param byteBuf the {@link ByteBuf} that will be {@linkplain
    * ByteBuf#writeBytes(byte[], int, int) written to}; must not be
    * {@code null}
+   *
+   * @param listener a {@link GenericFutureListener} that {@linkplain
+   * GenericFutureListener#operationComplete(Future) will be notified
+   * when a <code>Future</code> representing a <code>ByteBuf</code>
+   * write operation completes on the Netty event loop}; may be {@code
+   * null}
    */
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
-                                            final ByteBuf byteBuf) {
+                                            final ByteBuf byteBuf,
+                                            final GenericFutureListener<? extends Future<? super Void>> listener) {
     super();
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
     this.byteBuf = Objects.requireNonNull(byteBuf);
+    this.listener = listener;
   }
 
+
+  /*
+   * Instance methods.
+   */
+
+  
   @Override
   public final void write(final byte[] bytes) throws IOException {
     this.perform(bb -> bb.writeBytes(bytes));
@@ -75,11 +104,46 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
     if (this.eventExecutor.inEventLoop()) {
       byteBufOperation.applyTo(this.byteBuf);
     } else {
-      this.eventExecutor.submit(() -> {
+      final Future<Void> byteBufOperationFuture = this.eventExecutor.submit(() -> {
           byteBufOperation.applyTo(this.byteBuf);
           return null;
         });
+      assert byteBufOperationFuture != null;
+      if (this.listener != null) {
+        byteBufOperationFuture.addListener(this.listener);
+      }
     }
+  }
+
+
+  /*
+   * Inner and nested classes.
+   */
+  
+  
+  /**
+   * A {@linkplain FunctionalInterface functional interface} whose
+   * implementations typically read from or write to a given {@link
+   * ByteBuf}.
+   *
+   * @author <a href="https://about.me/lairdnelson"
+   * target="_parent">Laird Nelson</a>
+   *
+   * @see #applyTo(ByteBuf)
+   */
+  @FunctionalInterface
+  private static interface ByteBufOperation {
+
+    /**
+     * Operates on the supplied {@link ByteBuf} in some way.
+     *
+     * @param target the {@link ByteBuf} to operate on; must not be
+     * {@code null}
+     *
+     * @exception IOException if an error occurs
+     */
+    public void applyTo(final ByteBuf target) throws IOException;
+    
   }
 
 }
