@@ -49,6 +49,8 @@ import io.netty.handler.codec.http.LastHttpContent;
 
 import io.netty.handler.stream.ChunkedInput;
 
+import io.netty.util.ReferenceCounted;
+
 import io.netty.util.concurrent.EventExecutor;
 
 import org.glassfish.jersey.server.ContainerException;
@@ -88,8 +90,6 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
   private final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier;
 
-  private volatile long contentLength;
-
   private volatile ScheduledFuture<?> suspendTimeoutFuture;
 
   private volatile Runnable suspendTimeoutHandler;
@@ -98,6 +98,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
   private volatile ChunkedInput<?> chunkedInput;
 
+  private volatile ReferenceCounted byteBuf;
 
   /*
    * Constructors.
@@ -149,8 +150,6 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   public OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
     Objects.requireNonNull(containerResponse);
     assert !this.inEventLoop();
-
-    this.contentLength = contentLength;
 
     final OutputStream returnValue;
 
@@ -220,19 +219,15 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
           byteBuf = this.channelHandlerContext.alloc().ioBuffer((int)contentLength);
         } else {
           // Negative content length or ridiculously huge content
-          // length so ignore it.
+          // length so ignore it for capacity purposes.
           assert contentLength != 0L;
           byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         }
         assert byteBuf != null;
 
-        // Ensure that this buffer is released when/if the channel is
-        // closed.
-        //
-        // TODO: it would be better to release the buffer when the
-        // chunked input is closed, assuming we can guarantee it won't
-        // be reused (see below).
-        channelHandlerContext.channel().closeFuture().addListener(ignored -> byteBuf.release());
+        // We store a reference to it ONLY so that we can release it
+        // at a later date.
+        this.byteBuf = byteBuf;
 
         // A ChunkedInput despite its name has nothing to do with
         // chunked Transfer-Encoding.  It is usable anywhere you like.
@@ -244,6 +239,8 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         // where the Content-Length is set to a positive integer.
         final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf, contentLength);
         if (chunkedInput == null) {
+          this.byteBuf = null;
+          byteBuf.release();
           throw new IllegalStateException("createChunkedInput() == null");
         }
         this.chunkedInput = chunkedInput;
@@ -276,9 +273,9 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   }
 
   /**
-   * Creates a new {@link ChunkedInput} instance whose {@link
-   * ChunkedInput#readChunk(ByteBufAllocator)} method will stream
-   * {@link ByteBuf} chunks to the Netty transport.
+   * Creates and returns a new {@link ChunkedInput} instance whose
+   * {@link ChunkedInput#readChunk(ByteBufAllocator)} method will
+   * stream {@link ByteBuf} chunks to the Netty transport.
    *
    * <p>This method never returns {@code null}.</p>
    *
@@ -325,7 +322,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    *
    * @see ChunkedInput#readChunk(ByteBufAllocator)
    */
-  protected ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
+  protected ChunkedInput<ByteBuf> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
     return new ByteBufChunkedInput(source, contentLength);
   }
 
@@ -400,14 +397,38 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
     assert !this.inEventLoop();
     final ChunkedInput<?> chunkedInput = this.chunkedInput;
     this.chunkedInput = null;
+    final ReferenceCounted byteBuf = this.byteBuf;
+    this.byteBuf = null;
     this.channelHandlerContext.executor().submit((Callable<Void>)() -> {
-        try {
-          if (chunkedInput != null) {
-            chunkedInput.close();
-            channelHandlerContext.write(LastHttpContent.EMPTY_LAST_CONTENT);
-          }
-        } finally {
-          this.channelHandlerContext.flush();
+        assert inEventLoop();
+        if (chunkedInput == null) {
+          assert byteBuf == null;
+        } else {
+          assert byteBuf != null;
+          assert byteBuf.refCnt() == 1;
+          
+          // Mark our ChunkedInput as *closed to new input*.  It may
+          // still contain contents that need to be read.  (This
+          // effectively flips an internal switch in the ChunkedInput
+          // that allows for isEndOfInput() to one day return true.)
+          chunkedInput.close();
+          
+          // This will tell the ChunkedWriteHandler outbound from us
+          // to "drain" our ByteBufChunkedInput via successive calls
+          // to #readChunk(ByteBufAllocator).  The isEndOfInput()
+          // method will be called as part of this process and will
+          // eventually return true.
+          channelHandlerContext.flush();
+          
+          // Assert that the ChunkedInput is drained and release its
+          // wrapped ByteBuf.
+          assert chunkedInput.isEndOfInput();
+          final boolean released = byteBuf.release();
+          assert released;
+          
+          // Send the magic message that tells the HTTP machinery to
+          // finish up.
+          channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         }
         return null;
       });
@@ -438,9 +459,35 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
     try {
       final HttpMessage httpMessage = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),
-                                                              HttpResponseStatus.INTERNAL_SERVER_ERROR);
+                                                                  HttpResponseStatus.INTERNAL_SERVER_ERROR);
       HttpUtil.setContentLength(httpMessage, 0L);
-      this.channelHandlerContext.writeAndFlush(httpMessage).addListener(ChannelFutureListener.CLOSE);
+      final ChunkedInput<?> chunkedInput = this.chunkedInput;
+      this.chunkedInput = null;
+      final ReferenceCounted byteBuf = this.byteBuf;
+      this.byteBuf = null;
+      this.channelHandlerContext.executor().submit(() -> {
+          try {
+            assert inEventLoop();
+            channelHandlerContext.write(httpMessage);
+            if (chunkedInput == null) {
+              assert byteBuf == null;
+            } else {
+              assert byteBuf != null;
+              assert byteBuf.refCnt() == 1;
+              final boolean released = byteBuf.release();
+              assert released;
+            }
+          } catch (final RuntimeException | Error throwMe) {
+            if (throwable != null) {
+              throwMe.addSuppressed(throwable);
+            }
+            throw throwMe;
+          } finally {
+            channelHandlerContext.flush();
+            channelHandlerContext.close();
+          }
+          return null;
+        });
     } catch (final RuntimeException | Error throwMe) {
       if (throwable != null) {
         throwMe.addSuppressed(throwable);

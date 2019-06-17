@@ -29,6 +29,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import io.netty.util.concurrent.Future;
 
+import org.glassfish.jersey.server.ApplicationHandler;
+
 import org.junit.Test;
 
 import static org.junit.Assume.assumeTrue;
@@ -48,7 +50,7 @@ public class TestSpike {
         .group(group)
         .channel(NioServerSocketChannel.class)
         .localAddress(new InetSocketAddress("localhost", 8080))
-        .childHandler(new JerseyChannelInitializer(null, null, null, null));
+        .childHandler(new JerseyChannelInitializer(null, null, new ApplicationHandler(new Application()), null));
       final ChannelFuture bindFuture = serverBootstrap.bind();
       bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** server closed"));
       bindFuture.sync();

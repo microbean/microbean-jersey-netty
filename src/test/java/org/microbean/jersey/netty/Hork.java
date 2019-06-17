@@ -31,5 +31,5 @@ public class Hork {
   public String hork() {
     return "blatz";
   }
-  
+
 }
