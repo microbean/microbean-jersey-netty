@@ -43,15 +43,31 @@ import io.netty.util.concurrent.EventExecutor;
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
+ *
+ * @see #read(byte[], int, int)
+ *
+ * @see #read(Function)
  */
 public class EventLoopPinnedByteBufInputStream extends InputStream implements ByteBufQueue {
 
+
+  /*
+   * Instance fields.
+   */
+
+  
   private final CompositeByteBuf byteBuf;
 
   private final EventExecutor eventExecutor;
 
   private final Phaser phaser;
 
+
+  /*
+   * Constructors.
+   */
+
+  
   /**
    * Creates a new {@link EventLoopPinnedByteBufInputStream}.
    *
@@ -92,11 +108,20 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
 
   @Override
   public final int read(final byte[] targetBytes, final int offset, final int length) throws IOException {
-    return this.read(sourceByteBuf -> {
-        final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
-        sourceByteBuf.readBytes(targetBytes, offset, readThisManyBytes);
-        return Integer.valueOf(readThisManyBytes);
-      });
+    Objects.requireNonNull(targetBytes);
+    final int returnValue;
+    if (offset < 0 || length < 0 || length > targetBytes.length - offset) {
+      throw new IndexOutOfBoundsException();
+    } else if (length == 0) {
+      returnValue = 0;
+    } else {
+      returnValue = this.read(sourceByteBuf -> {
+          final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
+          sourceByteBuf.readBytes(targetBytes, offset, readThisManyBytes);
+          return Integer.valueOf(readThisManyBytes);
+        });
+    }
+    return returnValue;
   }
 
 
@@ -139,17 +164,19 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * Function} to a {@link ByteBuf}, ensuring that the {@link
    * Function} application takes place on the {@linkplain
    * EventExecutor#inEventLoop() Netty event loop thread}, and returns
-   * the {@link Function}'s return value.
+   * the result of invoking {@link Integer#intValue()} on the {@link
+   * Function}'s return value.
    *
    * @param function the {@link Function} to apply; must not be {@code
-   * null}
+   * null}; must not return {@code null}
    *
    * @return an {@code int} resulting from the {@link Function}
    * application
    *
-   * @exception IOException if an error occurs
-   *
    * @exception NullPointerException if {@code function} is {@code null}
+   *
+   * @exception IOException if the return value of the supplied {@link
+   * Function} could not be acquired for some reason
    */
   protected final int read(final Function<? super ByteBuf, ? extends Integer> function) throws IOException {
     Objects.requireNonNull(function);
@@ -168,18 +195,23 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
       returnValue = readTask.get(); // BLOCKING
     } catch (final ExecutionException executionException) {
       final Throwable cause = executionException.getCause();
-      if (cause instanceof IOException) {
-        throw (IOException)cause;
-      } else if (cause instanceof RuntimeException) {
+      if (cause instanceof RuntimeException) {
         throw (RuntimeException)cause;
+      } else if (cause instanceof Error) {
+        throw (Error)cause;
       } else {
-        throw new IOException(executionException.getMessage(), executionException);
+        // This should be prevented by the compiler:
+        // EventLoopByteBufOperation#call() does not throw any checked
+        // exceptions.
+        throw new InternalError(cause.getMessage(), cause);
       }
     } catch (final InterruptedException interruptedException) {
       Thread.currentThread().interrupt();
       throw new IOException(interruptedException.getMessage(), interruptedException);
     }
-    assert returnValue != null;
+    if (returnValue == null) {
+      throw new IOException("function.apply() == null");
+    }
     return returnValue.intValue();
   }
 

@@ -21,6 +21,8 @@ import java.io.OutputStream;
 
 import java.util.Objects;
 
+import java.util.function.Consumer;
+
 import io.netty.buffer.ByteBuf;
 
 import io.netty.util.concurrent.EventExecutor;
@@ -33,6 +35,8 @@ import io.netty.util.concurrent.GenericFutureListener;
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
+ *
+ * @see #write(byte[], int, int)
  */
 public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
@@ -41,18 +45,19 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * Instance fields.
    */
 
-  
+
   private final EventExecutor eventExecutor;
 
   private final ByteBuf byteBuf;
 
   private final GenericFutureListener<? extends Future<? super Void>> listener;
-  
+
+
   /*
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link EventLoopPinnedByteBufOutputStream}.
    *
@@ -84,28 +89,33 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * Instance methods.
    */
 
-  
+
   @Override
-  public final void write(final byte[] bytes) throws IOException {
+  public final void write(final byte[] bytes) {
+    Objects.requireNonNull(bytes);
     this.perform(bb -> bb.writeBytes(bytes));
   }
 
   @Override
-  public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
+  public final void write(final byte[] bytes, final int offset, final int length) {
+    Objects.requireNonNull(bytes);
+    if (offset < 0 || length < 0 || offset + length > bytes.length) {
+      throw new IndexOutOfBoundsException();
+    }
     this.perform(bb -> bb.writeBytes(bytes, offset, length));
   }
 
   @Override
-  public final void write(final int b) throws IOException {
+  public final void write(final int b) {
     this.perform(bb -> bb.writeByte(b));
   }
 
-  private final void perform(final ByteBufOperation byteBufOperation) throws IOException {
+  private final void perform(final Consumer<? super ByteBuf> byteBufOperation) {
     if (this.eventExecutor.inEventLoop()) {
-      byteBufOperation.applyTo(this.byteBuf);
+      byteBufOperation.accept(this.byteBuf);
     } else {
       final Future<Void> byteBufOperationFuture = this.eventExecutor.submit(() -> {
-          byteBufOperation.applyTo(this.byteBuf);
+          byteBufOperation.accept(this.byteBuf);
           return null;
         });
       assert byteBufOperationFuture != null;
@@ -113,37 +123,6 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
         byteBufOperationFuture.addListener(this.listener);
       }
     }
-  }
-
-
-  /*
-   * Inner and nested classes.
-   */
-  
-  
-  /**
-   * A {@linkplain FunctionalInterface functional interface} whose
-   * implementations typically read from or write to a given {@link
-   * ByteBuf}.
-   *
-   * @author <a href="https://about.me/lairdnelson"
-   * target="_parent">Laird Nelson</a>
-   *
-   * @see #applyTo(ByteBuf)
-   */
-  @FunctionalInterface
-  private static interface ByteBufOperation {
-
-    /**
-     * Operates on the supplied {@link ByteBuf} in some way.
-     *
-     * @param target the {@link ByteBuf} to operate on; must not be
-     * {@code null}
-     *
-     * @exception IOException if an error occurs
-     */
-    public void applyTo(final ByteBuf target) throws IOException;
-    
   }
 
 }

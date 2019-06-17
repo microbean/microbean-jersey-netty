@@ -199,6 +199,11 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
       // Enqueue a task to write and flush the headers on the event
       // loop.
+      //
+      // TODO: suppose this flush goes out with a 200.  And then the
+      // output stream writes a bunch of crap, or blows up.  We want
+      // to "retract" this write but it's too late.  On the other hand
+      // we don't want to buffer everything I don't think.
       channelHandlerContext.writeAndFlush(httpResponse);
 
       if (this.needsOutputStream(contentLength)) {
@@ -211,15 +216,22 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         // heap-based or native.  We don't care; we trust Netty.
         final ByteBuf byteBuf;
         if (contentLength > 0L && contentLength <= Integer.MAX_VALUE) {
+          // Positive content length.
           byteBuf = this.channelHandlerContext.alloc().ioBuffer((int)contentLength);
         } else {
-          assert contentLength < 0L;
+          // Negative content length or ridiculously huge content
+          // length so ignore it.
+          assert contentLength != 0L;
           byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         }
         assert byteBuf != null;
 
         // Ensure that this buffer is released when/if the channel is
         // closed.
+        //
+        // TODO: it would be better to release the buffer when the
+        // chunked input is closed, assuming we can guarantee it won't
+        // be reused (see below).
         channelHandlerContext.channel().closeFuture().addListener(ignored -> byteBuf.release());
 
         // A ChunkedInput despite its name has nothing to do with
@@ -252,7 +264,10 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         // GenericFutureListener that will Do The Right Thing™ with
         // any exceptions.  **Remember that this listener will be
         // invoked on the event loop.**
-        returnValue = new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(), byteBuf, null);
+        returnValue =
+          new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(),
+                                                 byteBuf,
+                                                 null);
       } else {
         returnValue = null;
       }

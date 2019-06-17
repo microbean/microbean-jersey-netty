@@ -34,8 +34,10 @@ import io.netty.handler.stream.ChunkedInput;
  * <p>Instances of this class are safe for concurrent use by multiple
  * threads, but the operations performed on the {@link ByteBuf}
  * instance retained by this class are <em>not</em> guaranteed to be
- * threadsafe.  This class assumes that it will be invoked on Netty's
- * event loop thread.</p>
+ * threadsafe.  <strong>This class assumes that it will be invoked on
+ * Netty's event loop thread.</strong> Invoking it on any thread other
+ * than Netty's event loop thread may result in undefined
+ * behavior.</p>
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
@@ -173,6 +175,14 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
    *
    * <p>This method may, and often does, return {@code null}.</p>
    *
+   * <p>The {@link ByteBuf} that is returned by this implementation
+   * is, if non-{@code null}, a {@linkplain
+   * ByteBuf#readRetainedSlice(int) retained slice} of the {@link
+   * ByteBuf} supplied to this {@link ByteBufChunkedInput} {@linkplain
+   * #ByteBufChunkedInput(ByteBuf, long) at construction time} whose
+   * size is given by the return value of the {@link
+   * #getChunkSize(ByteBuf)} method.</p>
+   *
    * @param ignoredByteBufAllocator a {@link ByteBufAllocator} that
    * this implementation ignores; may be {@code null}
    *
@@ -200,7 +210,9 @@ public class ByteBufChunkedInput implements ChunkedInput<ByteBuf> {
    * will not be {@code null}
    *
    * @return the size of the chunk, in bytes, that will be returned by
-   * the {@link #readChunk(ByteBufAllocator)} method
+   * the {@link #readChunk(ByteBufAllocator)} method; <strong>behavior
+   * is undefined if this value is less than or equal to {@code
+   * 0}</strong>
    *
    * @see #readChunk(ByteBufAllocator)
    */
