@@ -413,81 +413,76 @@
 <span class="sourceLineNo">405</span>   * @param throwable the {@link Throwable} that caused failure;<a name="line.405"></a>
 <span class="sourceLineNo">406</span>   * strictly speaking may be {@code null}<a name="line.406"></a>
 <span class="sourceLineNo">407</span>   *<a name="line.407"></a>
-<span class="sourceLineNo">408</span>   * @see ContainerResponseWriter#failure(Throwable)<a name="line.408"></a>
-<span class="sourceLineNo">409</span>   */<a name="line.409"></a>
-<span class="sourceLineNo">410</span>  @Override<a name="line.410"></a>
-<span class="sourceLineNo">411</span>  public void failure(final Throwable throwable) {<a name="line.411"></a>
-<span class="sourceLineNo">412</span>    assert !this.inEventLoop();<a name="line.412"></a>
-<span class="sourceLineNo">413</span><a name="line.413"></a>
-<span class="sourceLineNo">414</span>    // Note that despite the Exception-less signature of this method<a name="line.414"></a>
-<span class="sourceLineNo">415</span>    // JAX-RS specification section 3.3.4 says, in items number 3 and<a name="line.415"></a>
-<span class="sourceLineNo">416</span>    // 4: "Unchecked exceptions and errors that have not been mapped<a name="line.416"></a>
-<span class="sourceLineNo">417</span>    // MUST be re-thrown and allowed to propagate to the underlying<a name="line.417"></a>
-<span class="sourceLineNo">418</span>    // container", and "Checked exceptions and throwables that have<a name="line.418"></a>
-<span class="sourceLineNo">419</span>    // not been mapped and cannot be thrown directly MUST be wrapped<a name="line.419"></a>
-<span class="sourceLineNo">420</span>    // in a container-specific exception that is then thrown and<a name="line.420"></a>
-<span class="sourceLineNo">421</span>    // allowed to propagate to the underlying container."  It's a tiny<a name="line.421"></a>
-<span class="sourceLineNo">422</span>    // bit unclear as to where the container boundary is in this<a name="line.422"></a>
-<span class="sourceLineNo">423</span>    // method, but we'll throw a ContainerException if there is a<a name="line.423"></a>
-<span class="sourceLineNo">424</span>    // problem that arises with processing the supplied Throwable.<a name="line.424"></a>
-<span class="sourceLineNo">425</span>    try {<a name="line.425"></a>
-<span class="sourceLineNo">426</span>      this.channelHandlerContext.writeAndFlush(new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),<a name="line.426"></a>
-<span class="sourceLineNo">427</span>                                                                           HttpResponseStatus.INTERNAL_SERVER_ERROR)).addListener(ChannelFutureListener.CLOSE);<a name="line.427"></a>
-<span class="sourceLineNo">428</span>    } catch (final RuntimeException runtimeException) {<a name="line.428"></a>
-<span class="sourceLineNo">429</span>      if (throwable == null) {<a name="line.429"></a>
-<span class="sourceLineNo">430</span>        throw runtimeException;<a name="line.430"></a>
-<span class="sourceLineNo">431</span>      } else {<a name="line.431"></a>
-<span class="sourceLineNo">432</span>        throwable.addSuppressed(runtimeException);<a name="line.432"></a>
-<span class="sourceLineNo">433</span>      }<a name="line.433"></a>
+<span class="sourceLineNo">408</span>   * @exception RuntimeException if an error occurs while processing<a name="line.408"></a>
+<span class="sourceLineNo">409</span>   * the supplied {@link Throwable}; the supplied {@link Throwable}<a name="line.409"></a>
+<span class="sourceLineNo">410</span>   * will be {@linkplain Throwable#addSuppressed(Throwable) added as a<a name="line.410"></a>
+<span class="sourceLineNo">411</span>   * suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.411"></a>
+<span class="sourceLineNo">412</span>   *<a name="line.412"></a>
+<span class="sourceLineNo">413</span>   * @exception Error if an error occurs while processing the supplied<a name="line.413"></a>
+<span class="sourceLineNo">414</span>   * {@link Throwable}; the supplied {@link Throwable} will be<a name="line.414"></a>
+<span class="sourceLineNo">415</span>   * {@linkplain Throwable#addSuppressed(Throwable) added as a<a name="line.415"></a>
+<span class="sourceLineNo">416</span>   * suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.416"></a>
+<span class="sourceLineNo">417</span>   *<a name="line.417"></a>
+<span class="sourceLineNo">418</span>   * @see ContainerResponseWriter#failure(Throwable)<a name="line.418"></a>
+<span class="sourceLineNo">419</span>   */<a name="line.419"></a>
+<span class="sourceLineNo">420</span>  @Override<a name="line.420"></a>
+<span class="sourceLineNo">421</span>  public void failure(final Throwable throwable) {<a name="line.421"></a>
+<span class="sourceLineNo">422</span>    assert !this.inEventLoop();<a name="line.422"></a>
+<span class="sourceLineNo">423</span><a name="line.423"></a>
+<span class="sourceLineNo">424</span>    try {<a name="line.424"></a>
+<span class="sourceLineNo">425</span>      final HttpMessage httpMessage = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),<a name="line.425"></a>
+<span class="sourceLineNo">426</span>                                                              HttpResponseStatus.INTERNAL_SERVER_ERROR);<a name="line.426"></a>
+<span class="sourceLineNo">427</span>      HttpUtil.setContentLength(httpMessage, 0L);<a name="line.427"></a>
+<span class="sourceLineNo">428</span>      this.channelHandlerContext.writeAndFlush(httpMessage).addListener(ChannelFutureListener.CLOSE);<a name="line.428"></a>
+<span class="sourceLineNo">429</span>    } catch (final RuntimeException | Error throwMe) {<a name="line.429"></a>
+<span class="sourceLineNo">430</span>      if (throwable != null) {<a name="line.430"></a>
+<span class="sourceLineNo">431</span>        throwMe.addSuppressed(throwable);<a name="line.431"></a>
+<span class="sourceLineNo">432</span>      }<a name="line.432"></a>
+<span class="sourceLineNo">433</span>      throw throwMe;<a name="line.433"></a>
 <span class="sourceLineNo">434</span>    }<a name="line.434"></a>
-<span class="sourceLineNo">435</span>    if (throwable instanceof RuntimeException) {<a name="line.435"></a>
-<span class="sourceLineNo">436</span>      throw (RuntimeException)throwable;<a name="line.436"></a>
-<span class="sourceLineNo">437</span>    } else if (throwable != null) {<a name="line.437"></a>
-<span class="sourceLineNo">438</span>      throw new ContainerException(throwable.getMessage(), throwable);<a name="line.438"></a>
-<span class="sourceLineNo">439</span>    }<a name="line.439"></a>
-<span class="sourceLineNo">440</span>  }<a name="line.440"></a>
-<span class="sourceLineNo">441</span><a name="line.441"></a>
-<span class="sourceLineNo">442</span>  /**<a name="line.442"></a>
-<span class="sourceLineNo">443</span>   * Returns {@code true} when invoked.<a name="line.443"></a>
-<span class="sourceLineNo">444</span>   *<a name="line.444"></a>
-<span class="sourceLineNo">445</span>   * &lt;p&gt;Note that this is a default value.  Response buffering &lt;a<a name="line.445"></a>
-<span class="sourceLineNo">446</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"&gt;can<a name="line.446"></a>
-<span class="sourceLineNo">447</span>   * be configured&lt;/a&gt;.&lt;/p&gt;<a name="line.447"></a>
-<span class="sourceLineNo">448</span>   *<a name="line.448"></a>
-<span class="sourceLineNo">449</span>   * @return {@code true} when invoked<a name="line.449"></a>
-<span class="sourceLineNo">450</span>   *<a name="line.450"></a>
-<span class="sourceLineNo">451</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.451"></a>
-<span class="sourceLineNo">452</span>   *<a name="line.452"></a>
-<span class="sourceLineNo">453</span>   * @see &lt;a<a name="line.453"></a>
-<span class="sourceLineNo">454</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.454"></a>
-<span class="sourceLineNo">455</span>   * target="_parent"&gt;&lt;code&gt; ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.455"></a>
-<span class="sourceLineNo">456</span>   *<a name="line.456"></a>
-<span class="sourceLineNo">457</span>   * @see &lt;a<a name="line.457"></a>
-<span class="sourceLineNo">458</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.458"></a>
-<span class="sourceLineNo">459</span>   * target="_parent"&gt;&lt;code&gt; OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.459"></a>
-<span class="sourceLineNo">460</span>   */<a name="line.460"></a>
-<span class="sourceLineNo">461</span>  @Override<a name="line.461"></a>
-<span class="sourceLineNo">462</span>  public boolean enableResponseBuffering() {<a name="line.462"></a>
-<span class="sourceLineNo">463</span>    assert !this.inEventLoop();<a name="line.463"></a>
-<span class="sourceLineNo">464</span><a name="line.464"></a>
-<span class="sourceLineNo">465</span>    return true;<a name="line.465"></a>
-<span class="sourceLineNo">466</span>  }<a name="line.466"></a>
+<span class="sourceLineNo">435</span>  }<a name="line.435"></a>
+<span class="sourceLineNo">436</span><a name="line.436"></a>
+<span class="sourceLineNo">437</span>  /**<a name="line.437"></a>
+<span class="sourceLineNo">438</span>   * Returns {@code true} when invoked.<a name="line.438"></a>
+<span class="sourceLineNo">439</span>   *<a name="line.439"></a>
+<span class="sourceLineNo">440</span>   * &lt;p&gt;Note that this is a default value.  Response buffering &lt;a<a name="line.440"></a>
+<span class="sourceLineNo">441</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"&gt;can<a name="line.441"></a>
+<span class="sourceLineNo">442</span>   * be configured&lt;/a&gt;.&lt;/p&gt;<a name="line.442"></a>
+<span class="sourceLineNo">443</span>   *<a name="line.443"></a>
+<span class="sourceLineNo">444</span>   * @return {@code true} when invoked<a name="line.444"></a>
+<span class="sourceLineNo">445</span>   *<a name="line.445"></a>
+<span class="sourceLineNo">446</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.446"></a>
+<span class="sourceLineNo">447</span>   *<a name="line.447"></a>
+<span class="sourceLineNo">448</span>   * @see &lt;a<a name="line.448"></a>
+<span class="sourceLineNo">449</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.449"></a>
+<span class="sourceLineNo">450</span>   * target="_parent"&gt;&lt;code&gt; ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.450"></a>
+<span class="sourceLineNo">451</span>   *<a name="line.451"></a>
+<span class="sourceLineNo">452</span>   * @see &lt;a<a name="line.452"></a>
+<span class="sourceLineNo">453</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.453"></a>
+<span class="sourceLineNo">454</span>   * target="_parent"&gt;&lt;code&gt; OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.454"></a>
+<span class="sourceLineNo">455</span>   */<a name="line.455"></a>
+<span class="sourceLineNo">456</span>  @Override<a name="line.456"></a>
+<span class="sourceLineNo">457</span>  public boolean enableResponseBuffering() {<a name="line.457"></a>
+<span class="sourceLineNo">458</span>    assert !this.inEventLoop();<a name="line.458"></a>
+<span class="sourceLineNo">459</span><a name="line.459"></a>
+<span class="sourceLineNo">460</span>    return true;<a name="line.460"></a>
+<span class="sourceLineNo">461</span>  }<a name="line.461"></a>
+<span class="sourceLineNo">462</span><a name="line.462"></a>
+<span class="sourceLineNo">463</span><a name="line.463"></a>
+<span class="sourceLineNo">464</span>  /*<a name="line.464"></a>
+<span class="sourceLineNo">465</span>   * Utility methods.<a name="line.465"></a>
+<span class="sourceLineNo">466</span>   */<a name="line.466"></a>
 <span class="sourceLineNo">467</span><a name="line.467"></a>
 <span class="sourceLineNo">468</span><a name="line.468"></a>
-<span class="sourceLineNo">469</span>  /*<a name="line.469"></a>
-<span class="sourceLineNo">470</span>   * Utility methods.<a name="line.470"></a>
-<span class="sourceLineNo">471</span>   */<a name="line.471"></a>
+<span class="sourceLineNo">469</span>  private final boolean needsOutputStream(final long contentLength) {<a name="line.469"></a>
+<span class="sourceLineNo">470</span>    return contentLength != 0 &amp;&amp; !HttpMethod.HEAD.equals(this.methodSupplier.get());<a name="line.470"></a>
+<span class="sourceLineNo">471</span>  }<a name="line.471"></a>
 <span class="sourceLineNo">472</span><a name="line.472"></a>
-<span class="sourceLineNo">473</span><a name="line.473"></a>
-<span class="sourceLineNo">474</span>  private final boolean needsOutputStream(final long contentLength) {<a name="line.474"></a>
-<span class="sourceLineNo">475</span>    return contentLength != 0 &amp;&amp; !HttpMethod.HEAD.equals(this.methodSupplier.get());<a name="line.475"></a>
-<span class="sourceLineNo">476</span>  }<a name="line.476"></a>
-<span class="sourceLineNo">477</span><a name="line.477"></a>
-<span class="sourceLineNo">478</span>  private final boolean inEventLoop() {<a name="line.478"></a>
-<span class="sourceLineNo">479</span>    return this.channelHandlerContext.executor().inEventLoop();<a name="line.479"></a>
-<span class="sourceLineNo">480</span>  }<a name="line.480"></a>
-<span class="sourceLineNo">481</span><a name="line.481"></a>
-<span class="sourceLineNo">482</span>}<a name="line.482"></a>
+<span class="sourceLineNo">473</span>  private final boolean inEventLoop() {<a name="line.473"></a>
+<span class="sourceLineNo">474</span>    return this.channelHandlerContext.executor().inEventLoop();<a name="line.474"></a>
+<span class="sourceLineNo">475</span>  }<a name="line.475"></a>
+<span class="sourceLineNo">476</span><a name="line.476"></a>
+<span class="sourceLineNo">477</span>}<a name="line.477"></a>
 
 
 
