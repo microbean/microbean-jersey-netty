@@ -405,37 +405,32 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    * @param throwable the {@link Throwable} that caused failure;
    * strictly speaking may be {@code null}
    *
+   * @exception RuntimeException if an error occurs while processing
+   * the supplied {@link Throwable}; the supplied {@link Throwable}
+   * will be {@linkplain Throwable#addSuppressed(Throwable) added as a
+   * suppressed <code>Throwable</code>}
+   *
+   * @exception Error if an error occurs while processing the supplied
+   * {@link Throwable}; the supplied {@link Throwable} will be
+   * {@linkplain Throwable#addSuppressed(Throwable) added as a
+   * suppressed <code>Throwable</code>}
+   *
    * @see ContainerResponseWriter#failure(Throwable)
    */
   @Override
   public void failure(final Throwable throwable) {
     assert !this.inEventLoop();
 
-    // Note that despite the Exception-less signature of this method
-    // JAX-RS specification section 3.3.4 says, in items number 3 and
-    // 4: "Unchecked exceptions and errors that have not been mapped
-    // MUST be re-thrown and allowed to propagate to the underlying
-    // container", and "Checked exceptions and throwables that have
-    // not been mapped and cannot be thrown directly MUST be wrapped
-    // in a container-specific exception that is then thrown and
-    // allowed to propagate to the underlying container."  It's a tiny
-    // bit unclear as to where the container boundary is in this
-    // method, but we'll throw a ContainerException if there is a
-    // problem that arises with processing the supplied Throwable.
     try {
-      this.channelHandlerContext.writeAndFlush(new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),
-                                                                           HttpResponseStatus.INTERNAL_SERVER_ERROR)).addListener(ChannelFutureListener.CLOSE);
-    } catch (final RuntimeException runtimeException) {
-      if (throwable == null) {
-        throw runtimeException;
-      } else {
-        throwable.addSuppressed(runtimeException);
+      final HttpMessage httpMessage = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),
+                                                              HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      HttpUtil.setContentLength(httpMessage, 0L);
+      this.channelHandlerContext.writeAndFlush(httpMessage).addListener(ChannelFutureListener.CLOSE);
+    } catch (final RuntimeException | Error throwMe) {
+      if (throwable != null) {
+        throwMe.addSuppressed(throwable);
       }
-    }
-    if (throwable instanceof RuntimeException) {
-      throw (RuntimeException)throwable;
-    } else if (throwable != null) {
-      throw new ContainerException(throwable.getMessage(), throwable);
+      throw throwMe;
     }
   }
 

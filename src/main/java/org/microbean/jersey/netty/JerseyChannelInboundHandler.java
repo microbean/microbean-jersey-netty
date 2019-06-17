@@ -349,22 +349,19 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     Objects.requireNonNull(httpContent);
     assert channelHandlerContext.executor().inEventLoop();
 
-    // We only get HttpContent messages when there's actually an
-    // incoming payload.  The messageReceived() override that takes an
-    // HttpRequest will have set up our byteBufQueue implementation in
-    // this case.
-    assert this.byteBufQueue != null;
-
+    final ByteBufQueue byteBufQueue = this.byteBufQueue;
+    
     final ByteBuf content = httpContent.content();
     assert content != null;
     assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
 
     if (content.isReadable()) {
       content.retain();
-      this.byteBufQueue.addByteBuf(content);
+      assert byteBufQueue != null;
+      byteBufQueue.addByteBuf(content);
     }
 
-    if (httpContent instanceof LastHttpContent) {
+    if (byteBufQueue != null && httpContent instanceof LastHttpContent) {
       try {
         this.byteBufQueue.close();
       } finally {
