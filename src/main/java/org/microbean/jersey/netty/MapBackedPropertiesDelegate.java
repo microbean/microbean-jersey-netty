@@ -17,6 +17,7 @@
 package org.microbean.jersey.netty;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,15 +40,23 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
 
 
   /*
+   * Static fields.
+   */
+
+  
+  private static final Collection<String> EMPTY_STRING_SET = Collections.emptySet();
+  
+
+  /*
    * Instance fields.
    */
 
   
-  private final Map<String, Object> map;
+  private Map<String, Object> map;
 
 
   /*
-   * Constructors
+   * Constructors.
    */
   
 
@@ -57,7 +66,7 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    * @see #MapBackedPropertiesDelegate(Map)
    */
   MapBackedPropertiesDelegate() {
-    this(new HashMap<>());
+    this(null);
   }
 
   /**
@@ -70,7 +79,7 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    */
   public MapBackedPropertiesDelegate(final Map<String, Object> map) {
     super();
-    this.map = map == null ? new HashMap<>() : map;
+    this.map = map;
   }
 
   /**
@@ -86,7 +95,14 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    */
   @Override
   public final Object getProperty(final String name) {
-    return this.map.get(name);
+    final Map<String, Object> map = this.map;
+    final Object returnValue;
+    if (map == null) {
+      returnValue = null;
+    } else {
+      returnValue = map.get(name);
+    }
+    return returnValue;
   }
 
   /**
@@ -103,7 +119,14 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    */
   @Override
   public final Collection<String> getPropertyNames() {
-    return this.map.keySet();
+    final Map<String, Object> map = this.map;
+    final Collection<String> returnValue;
+    if (map == null || map.isEmpty()) {
+      returnValue = EMPTY_STRING_SET;
+    } else {
+      returnValue = map.keySet();
+    }
+    return returnValue;
   }
 
   /**
@@ -117,7 +140,12 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    */
   @Override
   public final void setProperty(final String name, final Object value) {
-    this.map.put(name, value);
+    Map<String, Object> map = this.map;
+    if (map == null) {
+      map = new HashMap<>();
+      this.map = map;
+    }
+    map.put(null, value);
   }
 
   /**
@@ -129,7 +157,10 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    */
   @Override
   public final void removeProperty(final String name) {
-    this.map.remove(name);
+    final Map<String, Object> map = this.map;
+    if (map != null) {
+      map.remove(name);
+    }
   }
   
 }
