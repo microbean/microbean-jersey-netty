@@ -17,7 +17,6 @@
 package org.microbean.jersey.netty;
 
 import java.io.InputStream;
-import java.io.IOException;
 
 import java.net.URI;
 
@@ -28,25 +27,16 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-import javax.inject.Provider;
-
 import javax.ws.rs.core.SecurityContext;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator; // for javadoc only
-import io.netty.buffer.CompositeByteBuf;
-
-import io.netty.channel.Channel; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 
@@ -328,9 +318,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
    * retained} and {@linkplain ByteBufQueue#addByteBuf(ByteBuf) added
    * to an internal <code>ByteBufQueue</code> implementation} created
    * by the {@link #messageReceived(ChannelHandlerContext,
-   * HttpRequest)} method.  Then, if the {@link HttpContent} is an
-   * instance of {@link LastHttpContent}, that internal {@link
-   * ByteBufQueue} is {@linkplain ByteBufQueue#close() closed}.</p>
+   * HttpRequest)} method.
    *
    * <p>This method must be invoked {@linkplain
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
@@ -350,7 +338,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     assert channelHandlerContext.executor().inEventLoop();
 
     final ByteBufQueue byteBufQueue = this.byteBufQueue;
-    
+
     final ByteBuf content = httpContent.content();
     assert content != null;
     assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
@@ -362,11 +350,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     }
 
     if (byteBufQueue != null && httpContent instanceof LastHttpContent) {
-      try {
-        this.byteBufQueue.close();
-      } finally {
-        this.byteBufQueue = null;
-      }
+      this.byteBufQueue = null;
     }
   }
 
@@ -382,13 +366,6 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
    * EventLoopPinnedByteBufInputStream} and is also {@linkplain
    * ContainerRequest#setEntityStream(InputStream) installed} on the
    * {@link ContainerRequest}.</p>
-   *
-   * <p>The internals of this method also {@linkplain
-   * ByteBufAllocator#compositeBuffer() may allocate a
-   * <code>CompositeByteBuf</code>} which will be {@linkplain
-   * ByteBuf#release() released} when the {@linkplain
-   * Channel#closeFuture() underlying <code>Channel</code>
-   * closes}.</p>
    *
    * <p>This method must be invoked {@linkplain
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
@@ -437,16 +414,12 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Htt
     }
 
     if (HttpUtil.getContentLength(httpRequest, -1L) > 0L || HttpUtil.isTransferEncodingChunked(httpRequest)) {
-
-      final CompositeByteBuf compositeByteBuf = channelHandlerContext.alloc().compositeBuffer();
-      assert compositeByteBuf != null;
-      channelHandlerContext.channel().closeFuture().addListener(ignored -> compositeByteBuf.release());
-
-      final EventLoopPinnedByteBufInputStream entityStream = new EventLoopPinnedByteBufInputStream(compositeByteBuf, channelHandlerContext.executor());
+      final EventLoopPinnedByteBufInputStream entityStream =
+        new EventLoopPinnedByteBufInputStream(channelHandlerContext.alloc(),
+                                              channelHandlerContext.executor());
       assert this.byteBufQueue == null;
       this.byteBufQueue = entityStream;
       returnValue.setEntityStream(entityStream);
-
     } else {
       returnValue.setEntityStream(UnreadableInputStream.instance);
     }

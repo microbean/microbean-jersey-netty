@@ -29,6 +29,7 @@ import java.util.concurrent.Phaser;
 import java.util.function.Function;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 
 import io.netty.util.concurrent.EventExecutor;
@@ -55,39 +56,45 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * Instance fields.
    */
 
-  
+
   private final CompositeByteBuf byteBuf;
 
   private final EventExecutor eventExecutor;
 
   private final Phaser phaser;
 
+  private volatile boolean closed;
+
 
   /*
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link EventLoopPinnedByteBufInputStream}.
    *
-   * @param compositeByteBuf the {@link CompositeByteBuf} that will be
-   * {@linkplain CompositeByteBuf#readBytes(byte[], int, int) read}
-   * from; must not be {@code null}
+   * @param byteBufAllocator a {@link ByteBufAllocator} that will be
+   * used to allocate an internal {@link CompositeByteBuf} of some
+   * variety; must not be {@code null}
    *
    * @param eventExecutor an {@link EventExecutor} that will
    * {@linkplain EventExecutor#inEventLoop() ensure operations occur
    * on the Netty event loop}; must not be {@code null}
    *
    * @exception NullPointerException if either {@code
-   * compositeByteBuf} or {@code eventExecutor} is {@code null}
+   * byteBufAllocator} or {@code eventExecutor} is {@code null}
    */
-  public EventLoopPinnedByteBufInputStream(final CompositeByteBuf compositeByteBuf,
+  public EventLoopPinnedByteBufInputStream(final ByteBufAllocator byteBufAllocator,
                                            final EventExecutor eventExecutor) {
     super();
-    this.phaser = new Phaser(2);
-    this.byteBuf = Objects.requireNonNull(compositeByteBuf);
+    Objects.requireNonNull(byteBufAllocator);
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
+    this.byteBuf = byteBufAllocator.compositeBuffer();
+    if (this.byteBuf == null) {
+      throw new IllegalArgumentException("byteBufAllocator.compositeBuffer() == null");
+    }
+    this.phaser = new Phaser(2);
   }
 
 
@@ -96,13 +103,52 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    */
 
 
+  /**
+   * Closes this {@link EventLoopPinnedByteBufInputStream}.
+   */
+  @Override
+  public final void close() {
+    if (!this.closed) {
+      if (this.eventExecutor.inEventLoop()) {
+        try {
+          assert this.byteBuf.refCnt() == 1;
+          final boolean released = this.byteBuf.release();
+          assert released;
+        } finally {
+          this.closed = true;
+          this.phaser.forceTermination();
+        }
+      } else {
+        this.eventExecutor.execute(() -> {
+            if (!this.closed) {
+              try {
+                assert this.byteBuf.refCnt() == 1;
+                final boolean released = this.byteBuf.release();
+                assert released;
+              } finally {
+                this.closed = true;
+                this.phaser.forceTermination();
+              }
+            }
+          });
+      }
+    }
+  }
+
   @Override
   public final int read() throws IOException {
+    if (this.closed) {
+      throw new IOException("closed");
+    }
     return this.read(sourceByteBuf -> Integer.valueOf(sourceByteBuf.readByte()));
   }
 
   @Override
   public final int read(final byte[] targetBytes) throws IOException {
+    Objects.requireNonNull(targetBytes);
+    if (this.closed) {
+      throw new IOException("closed");
+    }
     return this.read(targetBytes, 0, targetBytes.length);
   }
 
@@ -114,6 +160,8 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
       throw new IndexOutOfBoundsException();
     } else if (length == 0) {
       returnValue = 0;
+    } else if (this.closed) {
+      throw new IOException("closed");
     } else {
       returnValue = this.read(sourceByteBuf -> {
           final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
@@ -143,14 +191,17 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    */
   public final void addByteBuf(final ByteBuf byteBuf) {
     Objects.requireNonNull(byteBuf);
-    if (byteBuf != this.byteBuf) {
+    if (!this.closed && byteBuf != this.byteBuf) {
       if (this.eventExecutor.inEventLoop()) {
         this.byteBuf.addComponent(true /* advance the writerIndex */, byteBuf);
+        this.phaser.arrive(); // (Nonblocking)
       } else {
-        this.eventExecutor.execute(() -> this.byteBuf.addComponent(true /* advance the writerIndex */, byteBuf));
+        this.eventExecutor.execute(() -> {
+            this.byteBuf.addComponent(true /* advance the writerIndex */, byteBuf);
+            this.phaser.arrive(); // (Nonblocking)
+          });
       }
     }
-    this.phaser.arrive(); // (Nonblocking)
   }
 
 
@@ -176,38 +227,52 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * @exception NullPointerException if {@code function} is {@code null}
    *
    * @exception IOException if the return value of the supplied {@link
-   * Function} could not be acquired for some reason
+   * Function} could not be acquired for some reason, or if this
+   * {@link EventLoopPinnedByteBufInputStream} has been {@linkplain
+   * #close() closed}
    */
   protected final int read(final Function<? super ByteBuf, ? extends Integer> function) throws IOException {
     Objects.requireNonNull(function);
+    if (this.closed) {
+      throw new IOException("closed");
+    }
     final int phaseNumber = this.phaser.arrive();
-    while (this.byteBuf.numComponents() <= 0) {
+    while (!this.closed && this.byteBuf.numComponents() <= 0) {
       this.phaser.awaitAdvance(phaseNumber); // BLOCKING
     }
-    final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(this.byteBuf, function));
-    if (this.eventExecutor.inEventLoop()) {
-      readTask.run();
-    } else {
-      this.eventExecutor.execute(readTask);
-    }
     Integer returnValue = null;
-    try {
-      returnValue = readTask.get(); // BLOCKING
-    } catch (final ExecutionException executionException) {
-      final Throwable cause = executionException.getCause();
-      if (cause instanceof RuntimeException) {
-        throw (RuntimeException)cause;
-      } else if (cause instanceof Error) {
-        throw (Error)cause;
+    if (this.closed) {
+      // We don't throw an exception here, because the read() call was
+      // already invoked while we were still not closed.  Instead,
+      // this indicates end-of-stream semantics.
+      returnValue = Integer.valueOf(-1);
+    } else {
+      final FutureTask<Integer> readTask = new FutureTask<>(new EventLoopByteBufOperation(function));
+      if (this.eventExecutor.inEventLoop()) {
+        readTask.run();
       } else {
-        // This should be prevented by the compiler:
-        // EventLoopByteBufOperation#call() does not throw any checked
-        // exceptions.
-        throw new InternalError(cause.getMessage(), cause);
+        this.eventExecutor.execute(readTask);
       }
-    } catch (final InterruptedException interruptedException) {
-      Thread.currentThread().interrupt();
-      throw new IOException(interruptedException.getMessage(), interruptedException);
+      try {
+        returnValue = readTask.get(); // BLOCKING
+      } catch (final ExecutionException executionException) {
+        final Throwable cause = executionException.getCause();
+        if (cause instanceof RuntimeException) {
+          throw (RuntimeException)cause;
+        } else if (cause instanceof IOException) {
+          throw (IOException)cause;
+        } else if (cause instanceof Error) {
+          throw (Error)cause;
+        } else {
+          // This should be prevented by the compiler:
+          // EventLoopByteBufOperation#call() does not throw any other
+          // checked exceptions.
+          throw new InternalError(cause.getMessage(), cause);
+        }
+      } catch (final InterruptedException interruptedException) {
+        Thread.currentThread().interrupt();
+        throw new IOException(interruptedException.getMessage(), interruptedException);
+      }
     }
     if (returnValue == null) {
       throw new IOException("function.apply() == null");
@@ -220,23 +285,29 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * Inner and nested classes.
    */
 
-  
-  private static final class EventLoopByteBufOperation implements Callable<Integer> {
 
-    private final ByteBuf byteBuf;
+  private final class EventLoopByteBufOperation implements Callable<Integer> {
 
     private final Function<? super ByteBuf, ? extends Integer> function;
 
-    private EventLoopByteBufOperation(final ByteBuf byteBuf,
-                                      final Function<? super ByteBuf, ? extends Integer> function) {
+    private EventLoopByteBufOperation(final Function<? super ByteBuf, ? extends Integer> function) {
       super();
-      this.byteBuf = Objects.requireNonNull(byteBuf);
       this.function = Objects.requireNonNull(function);
     }
 
     @Override
-    public final Integer call() {
-      return this.byteBuf.refCnt() > 0 && this.byteBuf.isReadable() ? function.apply(this.byteBuf) : Integer.valueOf(-1);
+    public final Integer call() throws IOException {
+      if (closed) {
+        throw new IOException("closed");
+      }
+      assert byteBuf.refCnt() == 1;
+      // The byteBuf may be expanding, of course, but we can safely
+      // return -1 here if it is not readable because the
+      // #read(Function) method blocks to ensure there are other
+      // components to read.  In other words, non-readability here is
+      // a definitive indication of end-of-stream semantics, so -1 is
+      // appropriate as a return value in such a case.
+      return byteBuf.isReadable() ? function.apply(byteBuf) : Integer.valueOf(-1);
     }
 
   }

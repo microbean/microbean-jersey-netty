@@ -16,22 +16,18 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.Closeable;
-
 import io.netty.buffer.ByteBuf;
 
 /**
- * A {@link Closeable} whose implementations can add a {@link ByteBuf}
- * to themselves.
+ * An interface indicating that implementations can add a {@link
+ * ByteBuf} to themselves.
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
  * @see #addByteBuf(ByteBuf)
- *
- * @see Closeable
  */
-public interface ByteBufQueue extends Closeable {
+public interface ByteBufQueue {
 
   /**
    * Adds the supplied {@link ByteBuf} to this {@link ByteBufQueue}

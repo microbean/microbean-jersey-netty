@@ -16,8 +16,6 @@
  */
 package org.microbean.jersey.netty;
 
-import java.util.Objects;
-
 import javax.ws.rs.core.Application;
 
 import org.glassfish.jersey.server.ApplicationHandler;

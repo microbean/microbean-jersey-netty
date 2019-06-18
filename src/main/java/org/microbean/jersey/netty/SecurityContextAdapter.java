@@ -20,13 +20,9 @@ import java.net.URI; // for javadoc only
 
 import java.security.Principal;
 
-import java.util.Objects;
-
 import java.util.function.BiFunction; // for javadoc only
 
 import javax.ws.rs.core.SecurityContext;
-
-import io.netty.channel.ChannelHandlerContext;
 
 import org.glassfish.jersey.server.ApplicationHandler; // for javadoc only
 

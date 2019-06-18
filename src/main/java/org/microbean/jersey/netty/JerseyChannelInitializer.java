@@ -18,11 +18,8 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
-import java.util.Objects;
-
 import java.util.function.BiFunction;
 
-import javax.ws.rs.core.Application;
 import javax.ws.rs.core.SecurityContext;
 
 import io.netty.buffer.ByteBufAllocator;
