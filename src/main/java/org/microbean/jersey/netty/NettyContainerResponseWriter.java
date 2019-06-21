@@ -29,15 +29,18 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 import io.netty.buffer.ByteBuf;
 
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
@@ -46,6 +49,13 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
+
+import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
+import io.netty.handler.codec.http2.Http2DataFrame;
+import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.handler.codec.http2.Http2HeadersFrame;
 
 import io.netty.handler.stream.ChunkedInput;
 
@@ -73,7 +83,10 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
  * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
  *
  * @see #createChunkedInput(EventExecutor, ByteBuf, long)
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
 
@@ -81,12 +94,16 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    * Instance fields.
    */
 
-  
+
   private final ChannelHandlerContext channelHandlerContext;
 
-  private final HttpMessage httpRequest;
+  private final Object requestObject;
 
   private final Supplier<? extends HttpMethod> methodSupplier;
+
+  private final BiFunction<? super ByteBuf, ? super Long, ? extends ChunkedInput<?>> chunkedInputBiFunction;
+
+  private final Supplier<?> failureMessageSupplier;
 
   private final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier;
 
@@ -99,6 +116,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   private volatile ChunkedInput<?> chunkedInput;
 
   private volatile ReferenceCounted byteBuf;
+
 
   /*
    * Constructors.
@@ -125,16 +143,59 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
   public NettyContainerResponseWriter(final HttpRequest httpRequest,
                                       final ChannelHandlerContext channelHandlerContext,
                                       final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
-    this(httpRequest, httpRequest::method, channelHandlerContext, scheduledExecutorServiceSupplier);
+    this(httpRequest,
+         httpRequest::method,
+         (bb, cl) -> new ByteBufChunkedInput(bb, cl),
+         () -> {
+           final HttpMessage returnValue = new DefaultFullHttpResponse(httpRequest.protocolVersion(),
+                                                                       HttpResponseStatus.INTERNAL_SERVER_ERROR);
+           HttpUtil.setContentLength(returnValue, 0L);
+           return returnValue;
+         },
+         channelHandlerContext,
+         scheduledExecutorServiceSupplier);
   }
 
-  private NettyContainerResponseWriter(final HttpMessage httpRequest,
+  /**
+   * Creates a new {@link NettyContainerResponseWriter}.
+   *
+   * @param http2HeadersFrame the {@link Http2HeadersFrame}
+   * representing the request being responded to; must not be {@code
+   * null}
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param scheduledExecutorServiceSupplier a {@link Supplier} that
+   * can {@linkplain Supplier#get() supply} a {@link
+   * ScheduledExecutorService}; must not be {@code null}
+   *
+   * @exception NullPointerException if any of the parameters is
+   * {@code null}
+   */
+  public NettyContainerResponseWriter(final Http2HeadersFrame http2HeadersFrame,
+                                      final ChannelHandlerContext channelHandlerContext,
+                                      final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
+    this(http2HeadersFrame,
+         () -> HttpMethod.valueOf(http2HeadersFrame.headers().method().toString().toUpperCase()),
+         (bb, cl) -> new FunctionalByteBufChunkedInput<Http2DataFrame>(bb, bb2 -> new DefaultHttp2DataFrame(bb2), cl),
+         () -> new DefaultHttp2Headers().status(HttpResponseStatus.INTERNAL_SERVER_ERROR.codeAsText()),
+         channelHandlerContext,
+         scheduledExecutorServiceSupplier);
+  }
+
+  private NettyContainerResponseWriter(final Object requestObject,
                                        final Supplier<? extends HttpMethod> methodSupplier,
+                                       final BiFunction<? super ByteBuf, ? super Long, ? extends ChunkedInput<?>> chunkedInputBiFunction,
+                                       final Supplier<?> failureMessageSupplier,
                                        final ChannelHandlerContext channelHandlerContext,
                                        final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
     super();
-    this.httpRequest = Objects.requireNonNull(httpRequest);
+    this.requestObject = Objects.requireNonNull(requestObject);
     this.methodSupplier = Objects.requireNonNull(methodSupplier);
+    this.chunkedInputBiFunction = Objects.requireNonNull(chunkedInputBiFunction);
+    this.failureMessageSupplier = Objects.requireNonNull(failureMessageSupplier);
     this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);
     this.scheduledExecutorServiceSupplier = Objects.requireNonNull(scheduledExecutorServiceSupplier);
   }
@@ -162,50 +223,16 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
     } else {
       this.responseWritten = true;
 
-      final String reasonPhrase = containerResponse.getStatusInfo().getReasonPhrase();
-      final int statusCode = containerResponse.getStatus();
-      final HttpResponseStatus status = reasonPhrase == null ? HttpResponseStatus.valueOf(statusCode) : new HttpResponseStatus(statusCode, reasonPhrase);
-
-      final HttpResponse httpResponse;
-      if (contentLength == 0L) {
-        httpResponse = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(), status);
+      if (this.requestObject instanceof HttpMessage) {
+        writeAndFlushStatusAndHeaders((HttpMessage)this.requestObject, containerResponse, contentLength);
+      } else if (this.requestObject instanceof Http2HeadersFrame) {
+        writeAndFlushStatusAndHeaders(containerResponse, contentLength);
       } else {
-        httpResponse = new DefaultHttpResponse(this.httpRequest.protocolVersion(), status);
+        throw new ContainerException("!(this.requestObject instanceof HttpMessage) && !(this.requestObject instanceof Http2HeadersFrame): " + this.requestObject);
       }
-      
-      if (contentLength < 0L) {
-        HttpUtil.setTransferEncodingChunked(httpResponse, true);
-      } else {
-        HttpUtil.setContentLength(httpResponse, contentLength);
-      }
-
-      final Map<? extends String, ? extends List<String>> containerResponseHeaders = containerResponse.getStringHeaders();
-      if (containerResponseHeaders != null && !containerResponseHeaders.isEmpty()) {
-        final Collection<? extends Entry<? extends String, ? extends List<String>>> entrySet = containerResponseHeaders.entrySet();
-        if (entrySet != null && !entrySet.isEmpty()) {
-          final HttpHeaders headers = httpResponse.headers();
-          for (final Entry<? extends String, ? extends List<String>> entry : entrySet) {
-            if (entry != null) {
-              headers.add(entry.getKey(), entry.getValue());
-            }
-          }
-        }
-      }
-
-      if (HttpUtil.isKeepAlive(this.httpRequest)) {
-        HttpUtil.setKeepAlive(httpResponse, true);
-      }
-
-      // Enqueue a task to write and flush the headers on the event
-      // loop.
-      //
-      // TODO: suppose this flush goes out with a 200.  And then the
-      // output stream writes a bunch of crap, or blows up.  We want
-      // to "retract" this write but it's too late.  On the other hand
-      // we don't want to buffer everything I don't think.
-      channelHandlerContext.writeAndFlush(httpResponse);
 
       if (this.needsOutputStream(contentLength)) {
+        assert contentLength != 0L;
 
         // We've determined that there is a payload/entity.  Our
         // ultimate responsibility is to return an OutputStream the
@@ -220,13 +247,12 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         } else {
           // Negative content length or ridiculously huge content
           // length so ignore it for capacity purposes.
-          assert contentLength != 0L;
           byteBuf = this.channelHandlerContext.alloc().ioBuffer();
         }
         assert byteBuf != null;
 
         // We store a reference to it ONLY so that we can release it
-        // at a later date.
+        // at #commit() or #failure(Throwable) time.
         this.byteBuf = byteBuf;
 
         // A ChunkedInput despite its name has nothing to do with
@@ -245,7 +271,7 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         }
         this.chunkedInput = chunkedInput;
 
-        // Enqueue a task that will query the ByteBufChunkedInput for
+        // Enqueue a task that will query the ChunkedInput for
         // its chunks via its readChunk() method on the event loop.
         channelHandlerContext.write(this.chunkedInput);
 
@@ -270,6 +296,51 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       }
     }
     return returnValue;
+  }
+
+  private final void writeAndFlushStatusAndHeaders(final HttpMessage httpRequest,
+                                                   final ContainerResponse containerResponse,
+                                                   final long contentLength) {
+    Objects.requireNonNull(httpRequest);
+    Objects.requireNonNull(containerResponse);
+
+    final String reasonPhrase = containerResponse.getStatusInfo().getReasonPhrase();
+    final HttpResponseStatus status = reasonPhrase == null ? HttpResponseStatus.valueOf(containerResponse.getStatus()) : new HttpResponseStatus(containerResponse.getStatus(), reasonPhrase);
+
+    final HttpResponse httpResponse;
+    if (contentLength < 0L) {
+      httpResponse = new DefaultHttpResponse(httpRequest.protocolVersion(), status);
+      HttpUtil.setTransferEncodingChunked(httpResponse, true);
+    } else if (contentLength == 0L) {
+      httpResponse = new DefaultFullHttpResponse(httpRequest.protocolVersion(), status);
+      HttpUtil.setContentLength(httpResponse, 0L);
+    } else {
+      httpResponse = new DefaultHttpResponse(httpRequest.protocolVersion(), status);
+      HttpUtil.setContentLength(httpResponse, contentLength);
+    }
+
+    final HttpHeaders headers = httpResponse.headers();
+    assert headers != null;
+    transferHeaders(containerResponse.getStringHeaders(), UnaryOperator.identity(), headers::add);
+    if (HttpUtil.isKeepAlive(httpRequest)) {
+      HttpUtil.setKeepAlive(httpResponse, true);
+    }
+    this.channelHandlerContext.writeAndFlush(httpResponse);
+  }
+
+  private final void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
+                                                   final long contentLength) {
+    Objects.requireNonNull(containerResponse);
+
+    final Http2Headers http2Headers = new DefaultHttp2Headers();
+    http2Headers.status(Integer.toString(containerResponse.getStatus()));
+    transferHeaders(containerResponse.getStringHeaders(), s -> s.toLowerCase(), http2Headers::add);
+    if (contentLength >= 0L) {
+      // CONTENT_LENGTH is a constant that is guaranteed to be in
+      // lowercase so we aren't inconsistent.
+      http2Headers.set(HttpHeaderNames.CONTENT_LENGTH, Long.toString(contentLength));
+    }
+    this.channelHandlerContext.writeAndFlush(new DefaultHttp2HeadersFrame(http2Headers, contentLength == 0L));
   }
 
   /**
@@ -321,9 +392,13 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
    * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)
    *
    * @see ChunkedInput#readChunk(ByteBufAllocator)
+   *
+   * @deprecated This method will be removed shortly and without prior
+   * notice.
    */
-  protected ChunkedInput<ByteBuf> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
-    return new ByteBufChunkedInput(source, contentLength);
+  @Deprecated
+  protected ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
+    return this.chunkedInputBiFunction.apply(source, Long.valueOf(contentLength));
   }
 
   @Override
@@ -406,26 +481,26 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
         } else {
           assert byteBuf != null;
           assert byteBuf.refCnt() == 1;
-          
+
           // Mark our ChunkedInput as *closed to new input*.  It may
           // still contain contents that need to be read.  (This
           // effectively flips an internal switch in the ChunkedInput
           // that allows for isEndOfInput() to one day return true.)
           chunkedInput.close();
-          
+
           // This will tell the ChunkedWriteHandler outbound from us
           // to "drain" our ByteBufChunkedInput via successive calls
           // to #readChunk(ByteBufAllocator).  The isEndOfInput()
           // method will be called as part of this process and will
           // eventually return true.
           channelHandlerContext.flush();
-          
+
           // Assert that the ChunkedInput is drained and release its
           // wrapped ByteBuf.
           assert chunkedInput.isEndOfInput();
           final boolean released = byteBuf.release();
           assert released;
-          
+
           // Send the magic message that tells the HTTP machinery to
           // finish up.
           channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
@@ -458,9 +533,6 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
     assert !this.inEventLoop();
 
     try {
-      final HttpMessage httpMessage = new DefaultFullHttpResponse(this.httpRequest.protocolVersion(),
-                                                                  HttpResponseStatus.INTERNAL_SERVER_ERROR);
-      HttpUtil.setContentLength(httpMessage, 0L);
       final ChunkedInput<?> chunkedInput = this.chunkedInput;
       this.chunkedInput = null;
       final ReferenceCounted byteBuf = this.byteBuf;
@@ -468,7 +540,10 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
       this.channelHandlerContext.executor().submit(() -> {
           try {
             assert inEventLoop();
-            channelHandlerContext.write(httpMessage);
+            final Object failureMessage = this.failureMessageSupplier.get();
+            if (failureMessage != null) {
+              channelHandlerContext.write(failureMessage);
+            }
             if (chunkedInput == null) {
               assert byteBuf == null;
             } else {
@@ -534,6 +609,24 @@ public class NettyContainerResponseWriter implements ContainerResponseWriter {
 
   private final boolean inEventLoop() {
     return this.channelHandlerContext.executor().inEventLoop();
+  }
+
+  private static final void transferHeaders(final Map<? extends String, ? extends List<String>> headersSource,
+                                            UnaryOperator<String> keyTransformer,
+                                            final BiConsumer<? super String, ? super List<String>> headersTarget) {
+    if (headersTarget != null && headersSource != null && !headersSource.isEmpty()) {
+      final Collection<? extends Entry<? extends String, ? extends List<String>>> entrySet = headersSource.entrySet();
+      if (entrySet != null && !entrySet.isEmpty()) {
+        if (keyTransformer == null) {
+          keyTransformer = UnaryOperator.identity();
+        }
+        for (final Entry<? extends String, ? extends List<String>> entry : entrySet) {
+          if (entry != null) {
+            headersTarget.accept(keyTransformer.apply(entry.getKey()), entry.getValue());
+          }
+        }
+      }
+    }
   }
 
 }

@@ -29,8 +29,8 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
 /**
- * An {@link OutputStream} whose operations occur on Netty's event
- * loop.
+ * An {@link OutputStream} that writes to a {@link ByteBuf} on Netty's
+ * event loop.
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
