@@ -47,7 +47,7 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
   private final EventExecutor eventExecutor;
 
-  private final ByteBuf byteBuf;
+  private final ByteBuf target;
 
   private final GenericFutureListener<? extends Future<? super Void>> listener;
 
@@ -64,7 +64,7 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * to {@linkplain EventExecutor#inEventLoop() ensure all operations
    * are executed on the Netty event loop}; must not be {@code null}
    *
-   * @param byteBuf the {@link ByteBuf} that will be {@linkplain
+   * @param target the {@link ByteBuf} that will be {@linkplain
    * ByteBuf#writeBytes(byte[], int, int) written to}; must not be
    * {@code null}
    *
@@ -75,11 +75,11 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * null}
    */
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
-                                            final ByteBuf byteBuf,
+                                            final ByteBuf target,
                                             final GenericFutureListener<? extends Future<? super Void>> listener) {
     super();
     this.eventExecutor = Objects.requireNonNull(eventExecutor);
-    this.byteBuf = Objects.requireNonNull(byteBuf);
+    this.target = Objects.requireNonNull(target);
     this.listener = listener;
   }
 
@@ -109,17 +109,17 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
     this.perform(bb -> bb.writeByte(b));
   }
 
-  private final void perform(final Consumer<? super ByteBuf> byteBufOperation) {
+  private final void perform(final Consumer<? super ByteBuf> byteBufWriter) {
     if (this.eventExecutor.inEventLoop()) {
-      byteBufOperation.accept(this.byteBuf);
+      byteBufWriter.accept(this.target);
     } else {
-      final Future<Void> byteBufOperationFuture = this.eventExecutor.submit(() -> {
-          byteBufOperation.accept(this.byteBuf);
+      final Future<Void> byteBufWriterFuture = this.eventExecutor.submit(() -> {
+          byteBufWriter.accept(this.target);
           return null;
         });
-      assert byteBufOperationFuture != null;
+      assert byteBufWriterFuture != null;
       if (this.listener != null) {
-        byteBufOperationFuture.addListener(this.listener);
+        byteBufWriterFuture.addListener(this.listener);
       }
     }
   }

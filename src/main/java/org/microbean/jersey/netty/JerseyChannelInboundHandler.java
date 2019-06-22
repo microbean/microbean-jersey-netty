@@ -25,8 +25,6 @@ import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 
 import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import javax.ws.rs.core.SecurityContext;
@@ -87,8 +85,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * <p>This field is never {@code null}.</p>
    *
-   * @see #JerseyChannelInboundHandler(URI, ApplicationHandler,
-   * BiFunction)
+   * @see #JerseyChannelInboundHandler(URI, ApplicationHandler)
    */
   private final URI baseUri;
 
@@ -97,22 +94,9 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * <p>This field is never {@code null}.</p>
    *
-   * @see #JerseyChannelInboundHandler(URI, ApplicationHandler,
-   * BiFunction)
+   * @see #JerseyChannelInboundHandler(URI, ApplicationHandler)
    */
   private final ApplicationHandler applicationHandler;
-
-  /**
-   * A {@link BiFunction} that returns a {@link SecurityContext} when
-   * supplied with a {@link ChannelHandlerContext} and an {@link
-   * HttpRequest}.
-   *
-   * <p>This field may be {@code null}.</p>
-   *
-   * @see #JerseyChannelInboundHandler(URI, ApplicationHandler,
-   * BiFunction)
-   */
-  private final BiFunction<? super ChannelHandlerContext, ? super HttpRequest, ? extends SecurityContext> httpSecurityContextBiFunction;
 
   /**
    * A {@link ByteBufQueue} that is installed by the {@link
@@ -151,19 +135,12 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * null} in which case a {@linkplain
    * ApplicationHandler#ApplicationHandler() new} {@link
    * ApplicationHandler} will be used instead
-   *
-   * @param httpSecurityContextBiFunction a {@link BiFunction} that
-   * returns a {@link SecurityContext} when supplied with a {@link
-   * ChannelHandlerContext} and an {@link HttpRequest}; may be {@code
-   * null}
    */
   public JerseyChannelInboundHandler(final URI baseUri,
-                                     final ApplicationHandler applicationHandler,
-                                     final BiFunction<? super ChannelHandlerContext, ? super HttpRequest, ? extends SecurityContext> httpSecurityContextBiFunction) {
+                                     final ApplicationHandler applicationHandler) {
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
-    this.httpSecurityContextBiFunction = httpSecurityContextBiFunction;
   }
 
 
@@ -195,7 +172,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
 
   /**
    * Arranges for the {@link ApplicationHandler} {@linkplain
-   * #JerseyChannelInboundHandler(URI, ApplicationHandler, BiFunction)
+   * #JerseyChannelInboundHandler(URI, ApplicationHandler)
    * supplied at construction time} to process the HTTP or HTTP/2
    * message represented by the supplied {@link Object}.
    *
@@ -212,17 +189,13 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * @exception Exception if an error occurs
    *
-   * @see #messageReceived(ChannelHandlerContext, HttpRequest)
-   *
    * @see #messageReceived(ChannelHandlerContext, ByteBuf, boolean)
    */
   @Override
   protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final Object message) throws Exception {
     Objects.requireNonNull(channelHandlerContext);
-    if (message instanceof HttpRequest) {
-      this.messageReceived(channelHandlerContext, (HttpRequest)message);
-    } else if (message instanceof Http2HeadersFrame) {
-      this.messageReceived(channelHandlerContext, (Http2HeadersFrame)message);
+    if (message instanceof HttpRequest || message instanceof Http2HeadersFrame) {
+      this.messageReceived(channelHandlerContext, message);
     } else if (message instanceof HttpContent || message instanceof Http2DataFrame) {
       this.messageReceived(channelHandlerContext,
                            ((ByteBufHolder)message).content(),
@@ -230,45 +203,6 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     } else {
       assert false; // for now
     }
-  }
-
-  /**
-   * Processes the supplied {@link HttpRequest} representing one
-   * portion of an overall HTTP message.
-   *
-   * <p>Internally, a {@link ContainerRequest} is created, a new
-   * {@link NettyContainerResponseWriter} is {@linkplain
-   * ContainerRequest#setWriter(ContainerResponseWriter) installed on
-   * it}, and the {@link ApplicationHandler#handle(ContainerRequest)}
-   * method is invoked on a thread guaranteed not to be the Netty
-   * event loop.</p>
-   *
-   * <p>This method must be invoked {@linkplain
-   * EventExecutor#inEventLoop() in the Netty event loop}.</p>
-   *
-   * @param channelHandlerContext the {@link ChannelHandlerContext}
-   * representing the current Netty execution; must not be {@code
-   * null}
-   *
-   * @param httpRequest the {@link HttpRequest} to process; must not
-   * be {@code null}
-   *
-   * @exception Exception if an error occurs
-   *
-   * @see #createContainerRequest(ChannelHandlerContext, HttpRequest)
-   *
-   * @see ApplicationHandler#handle(ContainerRequest)
-   *
-   * @see ExecutorServiceProvider
-   *
-   * @see NettyContainerResponseWriter
-   */
-  protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final HttpRequest httpRequest) throws Exception {
-    this.messageReceived(channelHandlerContext, (Object)httpRequest);
-  }
-
-  protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final Http2HeadersFrame http2HeadersFrame) throws Exception {
-    this.messageReceived(channelHandlerContext, (Object)http2HeadersFrame);
   }
 
   private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final Object requestObject) throws Exception {
@@ -288,22 +222,22 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     if (requestObject instanceof HttpRequest) {
       final HttpRequest httpRequest = (HttpRequest)requestObject;
       containerRequest = this.createContainerRequest(channelHandlerContext, httpRequest);
-      writer = this.createNettyContainerResponseWriter(httpRequest,
-                                                       channelHandlerContext,
-                                                       supplier);
+      writer = this.createContainerResponseWriter(httpRequest,
+                                                  channelHandlerContext,
+                                                  supplier);
     } else {
       assert requestObject instanceof Http2HeadersFrame;
       final Http2HeadersFrame http2HeadersFrame = (Http2HeadersFrame)requestObject;
       containerRequest = this.createContainerRequest(channelHandlerContext, http2HeadersFrame);
-      writer = this.createNettyContainerResponseWriter(http2HeadersFrame,
-                                                       channelHandlerContext,
-                                                       supplier);
+      writer = this.createContainerResponseWriter(http2HeadersFrame,
+                                                  channelHandlerContext,
+                                                  supplier);
     }
     if (containerRequest == null) {
       throw new IllegalStateException("createContainerRequest() == null");
     }
     if (writer == null) {
-      throw new IllegalStateException("createNettyContainerResponseWriter() == null");
+      throw new IllegalStateException("createContainerResponseWriter() == null");
     }
     containerRequest.setWriter(writer);
 
@@ -313,33 +247,41 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
   }
 
   /**
-   * Processes the supplied {@link HttpContent} representing one
-   * portion of an overall HTTP message.
+   * Processes the supplied {@link ByteBuf} representing one of
+   * possibly many "content" portions of an overall HTTP message.
    *
-   * <p>Internally, the {@link HttpContent}'s {@linkplain
-   * HttpContent#content() content}, if {@linkplain
+   * <p>Internally, the supplied {@code content}, if {@linkplain
    * ByteBuf#isReadable() readable}, is {@linkplain ByteBuf#retain()
    * retained} and {@linkplain ByteBufQueue#addByteBuf(ByteBuf) added
    * to an internal <code>ByteBufQueue</code> implementation} created
-   * by the {@link #messageReceived(ChannelHandlerContext,
-   * HttpRequest)} method.
+   * by the {@link #channelRead0(ChannelHandlerContext, Object)}
+   * method.
    *
-   * <p>This method must be invoked {@linkplain
+   * <p>This method will be invoked {@linkplain
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
    *
    * @param channelHandlerContext the {@link ChannelHandlerContext}
    * representing the current Netty execution; must not be {@code
    * null}
    *
-   * @param httpContent the {@link HttpContent} to process; must not
-   * be {@code null}
+   * @param content the {@link ByteBuf} to process; must not be {@code
+   * null}
+   *
+   * @param lastOne {@code true} if {@code content} is known to be the
+   * last such content chunk; {@code false} in all other cases
    *
    * @exception Exception if an error occurs
+   *
+   * @see #channelRead0(ChannelHandlerContext, Object)
    */
-  protected void messageReceived(final ChannelHandlerContext channelHandlerContext, final ByteBuf content, final boolean lastOne) throws Exception {
+  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final ByteBuf content, final boolean lastOne) throws Exception {
     Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(content);
-    assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
+    // TODO: in HTTP/2 incoming-payload scenarios this (commented out)
+    // refCnt() returnValue can be 4?!  May have to do with all the
+    // various handlers up front dealing with upgrades etc.
+    //
+    // assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
     assert channelHandlerContext.executor().inEventLoop();
 
     final ByteBufQueue byteBufQueue = this.byteBufQueue;
@@ -368,7 +310,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * ContainerRequest#setEntityStream(InputStream) installed} on the
    * {@link ContainerRequest}.</p>
    *
-   * <p>This method must be invoked {@linkplain
+   * <p>This method will be invoked {@linkplain
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
    *
    * @param channelHandlerContext the {@link ChannelHandlerContext}
@@ -390,6 +332,37 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     return this.createContainerRequest(channelHandlerContext, (Object)httpRequest);
   }
 
+  /**
+   * Creates a {@link ContainerRequest} representing the supplied
+   * {@link Http2HeadersFrame} and returns it.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * <p>Internally, this method sets up an internal {@link
+   * ByteBufQueue} if necessary representing incoming entity data.
+   * The {@link ByteBufQueue} in question is an instance of {@link
+   * EventLoopPinnedByteBufInputStream} and is also {@linkplain
+   * ContainerRequest#setEntityStream(InputStream) installed} on the
+   * {@link ContainerRequest}.</p>
+   *
+   * <p>This method will be invoked {@linkplain
+   * EventExecutor#inEventLoop() in the Netty event loop}.</p>
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param http2HeadersFrame the {@link Http2HeadersFrame} to
+   * process; must not be {@code null}
+   *
+   * @return a new {@link ContainerRequest}; never {@code null}
+   *
+   * @see ContainerRequest
+   *
+   * @see EventLoopPinnedByteBufInputStream
+   *
+   * @see ByteBufQueue
+   */
   protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final Http2HeadersFrame http2HeadersFrame) {
     return this.createContainerRequest(channelHandlerContext, (Object)http2HeadersFrame);
   }
@@ -402,7 +375,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     final String method;
     final String uriString;
     final Iterable<? extends CharSequence> nettyHeaderNames;
-    if (requestObject instanceof HttpRequest) {
+   if (requestObject instanceof HttpRequest) {
       final HttpRequest httpRequest = (HttpRequest)requestObject;
       final HttpHeaders httpHeaders = httpRequest.headers();
       assert httpHeaders != null;
@@ -434,10 +407,10 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       headersInstaller = (containerRequest, name) -> containerRequest.headers(name.toString(), ((HttpRequest)requestObject).headers().getAll(name));
     } else {
       assert requestObject instanceof Http2HeadersFrame;
-      headersInstaller = (containerRequest, name) -> containerRequest.headers(name.toString(), ((Http2HeadersFrame)requestObject).headers().valueIterator(name));
+      headersInstaller = (containerRequest, name) -> containerRequest.headers(name.toString(), (Iterable<CharSequence>)() -> ((Http2HeadersFrame)requestObject).headers().valueIterator(name));
     }
     
-    transferHeaders(nettyHeaderNames, returnValue, headersInstaller);
+    copyHeaders(nettyHeaderNames, returnValue, headersInstaller);
 
     if (needsInputStream(requestObject)) {
       final EventLoopPinnedByteBufInputStream entityStream =
@@ -468,24 +441,19 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * @see SecurityContextAdapter
    */
   private final SecurityContext createSecurityContext(final ChannelHandlerContext channelHandlerContext, final Object httpRequest) {
-    if (httpRequest instanceof HttpRequest) {
-      if (this.httpSecurityContextBiFunction != null) {
-        return this.httpSecurityContextBiFunction.apply(channelHandlerContext, (HttpRequest)httpRequest);
-      }
-    }
     return new SecurityContextAdapter();
   }
   
   /**
-   * Creates and returns a new {@link NettyContainerResponseWriter}
-   * when invoked.
+   * Creates and returns a new {@link ContainerResponseWriter} when
+   * invoked.
    *
    * <p>This method never returns {@code null}.</p>
    *
    * <p>Overrides of this method must not return {@code null}.</p>
    *
    * <p>This implementation simply invokes the {@link
-   * NettyContainerResponseWriter#NettyContainerResponseWriter(HttpRequest,
+   * HttpContainerResponseWriter#HttpContainerResponseWriter(HttpRequest,
    * ChannelHandlerContext, Supplier)} constructor and returns the new
    * object.</p>
    *
@@ -493,7 +461,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
    *
    * <p>This method is called by the {@link
-   * #messageReceived(ChannelHandlerContext, HttpRequest)} method.
+   * #createContainerRequest(ChannelHandlerContext, HttpRequest)} method.
    * Overrides must not call that method or an infinite loop may
    * result.</p>
    *
@@ -508,25 +476,64 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * can {@linkplain Supplier#get() supply} a {@link
    * ScheduledExecutorService}; must not be {@code null}
    *
-   * @return a new {@link NettyContainerResponseWriter}; never {@code
-   * null}
+   * @return a new {@link ContainerResponseWriter}; never {@code null}
    *
    * @see
-   * NettyContainerResponseWriter#NettyContainerResponseWriter(HttpRequest,
+   * HttpContainerResponseWriter#HttpContainerResponseWriter(HttpRequest,
    * ChannelHandlerContext, Supplier)
    *
-   * @see #messageReceived(ChannelHandlerContext, HttpRequest)
+   * @see #createContainerRequest(ChannelHandlerContext, HttpRequest)
    */
-  protected ContainerResponseWriter createNettyContainerResponseWriter(final HttpRequest httpRequest,
-                                                                       final ChannelHandlerContext channelHandlerContext,
-                                                                       final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
-    return new Http11NettyContainerResponseWriter(httpRequest, channelHandlerContext, scheduledExecutorServiceSupplier);
+  protected ContainerResponseWriter createContainerResponseWriter(final HttpRequest httpRequest,
+                                                                  final ChannelHandlerContext channelHandlerContext,
+                                                                  final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
+    return new HttpContainerResponseWriter(httpRequest, channelHandlerContext, scheduledExecutorServiceSupplier);
   }
 
-  protected ContainerResponseWriter createNettyContainerResponseWriter(final Http2HeadersFrame http2HeadersFrame,
-                                                                       final ChannelHandlerContext channelHandlerContext,
-                                                                       final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
-    return new Http2NettyContainerResponseWriter(http2HeadersFrame, channelHandlerContext, scheduledExecutorServiceSupplier);
+  /**
+   * Creates and returns a new {@link ContainerResponseWriter} when
+   * invoked.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * <p>Overrides of this method must not return {@code null}.</p>
+   *
+   * <p>This implementation simply invokes the {@link
+   * Http2ContainerResponseWriter#Http2ContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)} constructor and returns the new
+   * object.</p>
+   *
+   * <p>In normal usage, this method is invoked {@linkplain
+   * EventExecutor#inEventLoop() in the Netty event loop}.</p>
+   *
+   * <p>This method is called by the {@link
+   * #createContainerRequest(ChannelHandlerContext,
+   * Http2HeadersFrame)} method.  Overrides must not call that method
+   * or an infinite loop may result.</p>
+   *
+   * @param http2HeadersFrame the {@link Http2HeadersFrame} being
+   * processed; must not be {@code null}
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param scheduledExecutorServiceSupplier a {@link Supplier} that
+   * can {@linkplain Supplier#get() supply} a {@link
+   * ScheduledExecutorService}; must not be {@code null}
+   *
+   * @return a new {@link ContainerResponseWriter}; never {@code null}
+   *
+   * @see
+   * Http2ContainerResponseWriter#Http2ContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)
+   *
+   * @see #createContainerRequest(ChannelHandlerContext, HttpRequest)
+   */
+  protected ContainerResponseWriter createContainerResponseWriter(final Http2HeadersFrame http2HeadersFrame,
+                                                                  final ChannelHandlerContext channelHandlerContext,
+                                                                  final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
+    return new Http2ContainerResponseWriter(http2HeadersFrame, channelHandlerContext, scheduledExecutorServiceSupplier);
   }
 
 
@@ -571,9 +578,9 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * headersInstaller} is {@code null} and {@code nettyHeaderNames} is
    * non-{@code null}
    */
-  public static final void transferHeaders(final Iterable<? extends CharSequence> nettyHeaderNames,
-                                           final ContainerRequest target,
-                                           final BiConsumer<? super ContainerRequest, ? super CharSequence> headersInstaller) {
+  public static final void copyHeaders(final Iterable<? extends CharSequence> nettyHeaderNames,
+                                       final ContainerRequest target,
+                                       final BiConsumer<? super ContainerRequest, ? super CharSequence> headersInstaller) {
     if (nettyHeaderNames != null) {
       Objects.requireNonNull(target);
       Objects.requireNonNull(headersInstaller);

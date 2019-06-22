@@ -49,8 +49,22 @@ import org.glassfish.jersey.server.ContainerResponse;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
 
-import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
-
+/**
+ * A partial {@link ContainerResponseWriter} implementation that is
+ * aware of Netty constructs.
+ *
+ * @param <T> a type representing the "headers and status" portion of
+ * an incoming HTTP or HTTP/2 request
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
+ *
+ * @see #commit()
+ *
+ * @see #failure(Throwable)
+ */
 public abstract class AbstractNettyContainerResponseWriter<T> implements ContainerResponseWriter {
 
 
@@ -58,8 +72,21 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Instance fields.
    */
 
+
+  /**
+   * The incoming HTTP request.
+   *
+   * <p>This field may be {@code null}.</p>
+   */
   protected final T requestObject;
 
+  /**
+   * The {@link ChannelHandlerContext} representing the current Netty execution.
+   *
+   * <p>This field is never {@code null}.</p>
+   *
+   * @see ChannelHandlerContext
+   */
   protected final ChannelHandlerContext channelHandlerContext;
 
   private final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier;
@@ -78,6 +105,25 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    */
 
 
+  /**
+   * Creates a new {@link AbstractNettyContainerResponseWriter} implementation.
+   *
+   * @param requestObject an object representing the "headers and
+   * status" portion of an incoming HTTP or HTTP/2 request; may be
+   * {@code null} somewhat pathologically
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param scheduledExecutorServiceSupplier a {@link Supplier} of
+   * {@link ScheduledExecutorService} instances that can be used to
+   * offload tasks from the Netty event loop; must not be {@code null}
+   *
+   * @exception NullPointerException if either {@code
+   * channelHandlerContext} or {@link
+   * scheduledExecutorServiceSupplier} is {@code null}
+   */
   protected AbstractNettyContainerResponseWriter(final T requestObject,
                                                  final ChannelHandlerContext channelHandlerContext,
                                                  final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
@@ -94,7 +140,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    */
   
   @Override
-  public OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
+  public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
     Objects.requireNonNull(containerResponse);
     assert !this.inEventLoop();
 
@@ -174,9 +220,9 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * <p>This implementation ensures that {@link ChunkedInput#close()}
    * is called on the Netty event loop on the {@link ChunkedInput}
    * returned by the {@link #createChunkedInput(EventExecutor,
-   * ByteBuf, long)} method, and that a {@link
-   * LastHttpContent#EMPTY_LAST_CONTENT} message is written
-   * immediately afterwards, and that the {@link
+   * ByteBuf, long)} method, and that a {@linkplain
+   * #writeLastContentMessage() final content message is written
+   * immediately afterwards}, and that the {@link
    * ChannelHandlerContext} is {@linkplain
    * ChannelHandlerContext#flush() flushed}.  All of these invocations
    * occur on the event loop.</p>
@@ -185,7 +231,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    *
    * @see #createChunkedInput(EventExecutor, ByteBuf, long)
    *
-   * @see LastHttpContent#EMPTY_LAST_CONTENT
+   * @see #writeLastContentMessage()
    *
    * @see ChannelHandlerContext#write(Object)
    *
@@ -254,7 +300,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * @see ContainerResponseWriter#failure(Throwable)
    */
   @Override
-  public void failure(final Throwable throwable) {
+  public final void failure(final Throwable throwable) {
     assert !this.inEventLoop();
 
     try {
@@ -362,18 +408,103 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Abstract methods.
    */
 
-  
+
+  /**
+   * Returns {@code true} if the current {@link ContainerResponse}
+   * being written needs an {@link OutputStream}.
+   *
+   * @param contentLength the length of the content in bytes; may be
+   * less than {@code 0} if the content length is unknown
+   *
+   * @return {@code true} if an {@link OutputStream} should be created
+   * and set up; {@code false} otherwise
+   *
+   * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
+   */
   protected abstract boolean needsOutputStream(final long contentLength);
 
+  /**
+   * Called to allow this {@link AbstractNettyContainerResponseWriter}
+   * implementation to {@linkplain ChannelHandlerContext#write(Object)
+   * write} a message that indicates that there is not going to be any
+   * further content sent back to the client.
+   *
+   * @see #channelHandlerContext
+   *
+   * @see ChannelHandlerContext#write(Object)
+   */
   protected abstract void writeLastContentMessage();
   
+  /**
+   * Called when this {@link AbstractNettyContainerResponseWriter}
+   * should {@linkplain ChannelHandlerContext#writeAndFlush(Object)
+   * write and flush} a message containing relevant headers and the
+   * HTTP status of the response being processed.
+   *
+   * @param containerResponse the {@link ContainerResponse} being
+   * processed; must not be {@code null}
+   *
+   * @param contentLength the length of the content in bytes; may be
+   * less than {@code 0} if the content length is unknown
+   */
   protected abstract void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
                                                         final long contentLength);
 
+  /**
+   * Called to create a {@link ChunkedInput} that will be used as part
+   * of setting up an {@link OutputStream} for the {@link
+   * ContainerResponse} being processed.
+   *
+   * <p>Implementations of this method must not return {@code
+   * null}.</p>
+   *
+   * <p>Implementations of this method will be called only after
+   * {@link #needsOutputStream(long)} has returned {@code true}.</p>
+   *
+   * <p>Implementations of this method will always be called on a
+   * {@link Thread} that is <strong>not</strong> the {@linkplain
+   * #inEventLoop() Netty event loop}.</p>
+   *
+   * <p>Implementations of this method must arrange to read from the
+   * supplied {@link ByteBuf}.  Undefined behavior will result if this
+   * is not the case.</p>
+   *
+   * @param eventExecutor an {@link EventExecutor} supplied for
+   * convenience in case any operations need to be performed on the
+   * supplied {@link ByteBuf} or on the Netty event loop in general;
+   * must not be {@code null}
+   *
+   * @param source the {@link ByteBuf} serving as the source of data;
+   * must not be {@code null}; must only be read from, not written to
+   *
+   * @param contentLength the overall length of the content, in bytes,
+   * for which a {@link ChunkedInput} is being created; must not be
+   * {@code 0}; may be less than {@code 0} if the content length is
+   * unknown
+   *
+   * @return a non-{@code null} {@link ChunkedInput} implementation
+   * that will treat the supplied {@code ByteBuf} as its source in
+   * some manner
+   *
+   * @see ChunkedInput
+   */
   protected abstract ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor,
                                                         final ByteBuf source,
                                                         final long contentLength);
-  
+
+  /**
+   * Called to {@linkplain ChannelHandlerContext#write(Object) write a
+   * message} indicating a general unspecified server failure.
+   *
+   * <p>Implementations of this method are called from the {@link
+   * #failure(Throwable)} method.</p>
+   *
+   * <p>Implementations of this method will always be called on a
+   * {@link Thread} that is <strong>not</strong> the {@linkplain
+   * #inEventLoop() Netty event loop}.</p>
+   *
+   * @see #failure(Throwable)
+   */
   protected abstract void writeFailureMessage();
 
 
@@ -386,9 +517,14 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
     return this.channelHandlerContext.executor().inEventLoop();
   }
 
-  protected static final void transferHeaders(final Map<? extends String, ? extends List<String>> headersSource,
-                                              UnaryOperator<String> keyTransformer,
-                                              final BiConsumer<? super String, ? super List<String>> headersTarget) {
+  public static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
+                                       final BiConsumer<? super String, ? super List<String>> headersTarget) {
+    copyHeaders(headersSource, UnaryOperator.identity(), headersTarget);
+  }
+  
+  public static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
+                                       UnaryOperator<String> keyTransformer,
+                                       final BiConsumer<? super String, ? super List<String>> headersTarget) {
     if (headersTarget != null && headersSource != null && !headersSource.isEmpty()) {
       final Collection<? extends Entry<? extends String, ? extends List<String>>> entrySet = headersSource.entrySet();
       if (entrySet != null && !entrySet.isEmpty()) {

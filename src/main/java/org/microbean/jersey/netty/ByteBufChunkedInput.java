@@ -35,6 +35,8 @@ import io.netty.buffer.ByteBufAllocator; // for javadoc only
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
+ *
+ * @see FunctionalByteBufChunkedInput
  */
 public class ByteBufChunkedInput extends FunctionalByteBufChunkedInput<ByteBuf> {
 

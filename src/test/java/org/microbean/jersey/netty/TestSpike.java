@@ -50,7 +50,7 @@ public class TestSpike {
         .group(group)
         .channel(NioServerSocketChannel.class)
         .localAddress(new InetSocketAddress("localhost", 8080))
-        .childHandler(new JerseyChannelInitializer(null, null, new ApplicationHandler(new Application()), null));
+        .childHandler(new JerseyChannelInitializer(null, null, 20000000L, new ApplicationHandler(new Application())));
       final ChannelFuture bindFuture = serverBootstrap.bind();
       bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** server closed"));
       bindFuture.sync();

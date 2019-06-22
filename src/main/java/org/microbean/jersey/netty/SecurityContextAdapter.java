@@ -20,8 +20,6 @@ import java.net.URI; // for javadoc only
 
 import java.security.Principal;
 
-import java.util.function.BiFunction; // for javadoc only
-
 import javax.ws.rs.core.SecurityContext;
 
 import org.glassfish.jersey.server.ApplicationHandler; // for javadoc only
@@ -36,7 +34,7 @@ import org.glassfish.jersey.server.ApplicationHandler; // for javadoc only
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
- * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI, ApplicationHandler, BiFunction)
+ * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI, ApplicationHandler)
  */
 public class SecurityContextAdapter implements SecurityContext {
 

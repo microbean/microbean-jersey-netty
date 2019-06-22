@@ -16,32 +16,18 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.OutputStream;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import io.netty.buffer.ByteBuf;
 
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
@@ -51,39 +37,24 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2DataFrame;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.handler.codec.http2.Http2HeadersFrame;
-
 import io.netty.handler.stream.ChunkedInput;
-
-import io.netty.util.ReferenceCounted;
 
 import io.netty.util.concurrent.EventExecutor;
 
-import org.glassfish.jersey.server.ContainerException;
 import org.glassfish.jersey.server.ContainerResponse;
 
-import org.glassfish.jersey.server.spi.ContainerResponseWriter;
-import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
-
-import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
-
 /**
+ * An {@link AbstractNettyContainerResponseWriter} that works with
+ * {@link HttpRequest}-typed request objects.
+ *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
- * @see ContainerResponseWriter
+ * @see AbstractNettyContainerResponseWriter
+ *
+ * @see Http2ContainerResponseWriter
  */
-public class Http11NettyContainerResponseWriter extends AbstractNettyContainerResponseWriter<HttpRequest> {
-
-
-  /*
-   * Instance fields.
-   */
+public class HttpContainerResponseWriter extends AbstractNettyContainerResponseWriter<HttpRequest> {
 
 
   /*
@@ -92,7 +63,7 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
 
 
   /**
-   * Creates a new {@link Http11NettyContainerResponseWriter}.
+   * Creates a new {@link HttpContainerResponseWriter}.
    *
    * @param httpRequest the {@link HttpRequest} being responded to;
    * must not be {@code null}
@@ -108,9 +79,9 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
    * @exception NullPointerException if any of the parameters is
    * {@code null}
    */
-  public Http11NettyContainerResponseWriter(final HttpRequest httpRequest,
-                                            final ChannelHandlerContext channelHandlerContext,
-                                            final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
+  public HttpContainerResponseWriter(final HttpRequest httpRequest,
+                                     final ChannelHandlerContext channelHandlerContext,
+                                     final Supplier<? extends ScheduledExecutorService> scheduledExecutorServiceSupplier) {
     super(httpRequest, channelHandlerContext, scheduledExecutorServiceSupplier);
   }
 
@@ -118,8 +89,25 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
   /*
    * Instance methods.
    */
-  
-  
+
+
+  /**
+   * Implements the {@link
+   * AbstractNettyContainerResponseWriter#writeAndFlushStatusAndHeaders(ContainerResponse,
+   * long)} method by {@linkplain
+   * ChannelHandlerContext#writeAndFlush(Object) writing and flushing}
+   * an {@link HttpResponse} object containing a relevant {@link
+   * HttpResponseStatus} object.
+   *
+   * @param containerResponse the {@link ContainerResponse} being
+   * processed; must not be {@code null}
+   *
+   * @param contentLength the length of the content in bytes; will be
+   * less than {@code 0} if the content length is unknown
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   */
   @Override
   protected final void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
                                                      final long contentLength) {
@@ -140,65 +128,48 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
       HttpUtil.setContentLength(httpResponse, contentLength);
     }
 
-    final HttpHeaders headers = httpResponse.headers();
-    assert headers != null;
-    transferHeaders(containerResponse.getStringHeaders(), UnaryOperator.identity(), headers::add);
+    final HttpHeaders nettyHeaders = httpResponse.headers();
+    assert nettyHeaders != null;
+    copyHeaders(containerResponse.getStringHeaders(), UnaryOperator.identity(), nettyHeaders::add);
     if (HttpUtil.isKeepAlive(this.requestObject)) {
       HttpUtil.setKeepAlive(httpResponse, true);
     }
     this.channelHandlerContext.writeAndFlush(httpResponse);
   }
 
+  /**
+   * Implements the {@link
+   * AbstractNettyContainerResponseWriter#needsOutputStream(long)}
+   * method by returning {@code true} if and only if the supplied
+   * {@code contentLength} is not equal to {@code 0L} and if the
+   * {@linkplain HttpRequest#method() request method} is not {@link
+   * HttpMethod#HEAD HEAD}.
+   *
+   * @param contentLength the length of the content in bytes; will be
+   * less than {@code 0} if the content length is unknown
+   *
+   * @return {@code true} if {@code contentLength} is not equal to
+   * {@code 0L} and if the {@linkplain HttpRequest#method() request
+   * method} is not {@link HttpMethod#HEAD HEAD}; {@code false} in all
+   * other cases
+   */
   @Override
   protected final boolean needsOutputStream(final long contentLength) {
-    return contentLength != 0 && !HttpMethod.HEAD.equals(this.requestObject.method());
+    return contentLength != 0L && !HttpMethod.HEAD.equals(this.requestObject.method());
   }
-  
+
   /**
-   * Creates and returns a new {@link ChunkedInput} instance whose
-   * {@link ChunkedInput#readChunk(ByteBufAllocator)} method will
-   * stream {@link ByteBuf} chunks to the Netty transport.
+   * Returns a new {@link ByteBufChunkedInput} when invoked.
    *
-   * <p>This method never returns {@code null}.</p>
+   * @param eventExecutor {@inheritDoc}
    *
-   * <p>In normal usage this method will be invoked on a thread that
-   * is <strong>not</strong> {@linkplain EventExecutor#inEventLoop()
-   * in the Netty event loop}.  Care <strong>must</strong> be taken if
-   * an override of this method decides to invoke any methods on the
-   * supplied {@link ByteBuf} to ensure those methods are invoked in
-   * the Netty event loop.  This implementation does not invoke any
-   * {@link ByteBuf} methods and overrides are strongly urged to
-   * follow suit.</p>
+   * @param source {@inheritDoc}
    *
-   * <p>Overrides of this method must not return {@code null}.</p>
+   * @param contentLength {@inheritDoc}
    *
-   * <p>This method is called from the {@link
-   * #writeResponseStatusAndHeaders(long, ContainerResponse)} method.
-   * Overrides must not call that method or an infinite loop may
-   * result.</p>
+   * @return a new {@link ByteBufChunkedInput}; never {@code null}
    *
-   * @param eventExecutor an {@link EventExecutor}, supplied for
-   * convenience, that can be used to ensure certain tasks are
-   * executed in the Netty event loop; must not be {@code null}
-   *
-   * @param source the {@link ByteBuf}, <strong>which might be
-   * mutating</strong> in the Netty event loop, that the returned
-   * {@link ChunkedInput} should read from in some way when its {@link
-   * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
-   * the Netty event loop; must not be {@code null}
-   *
-   * @param contentLength a {@code long} representing the value of any
-   * {@code Content-Length} header that might have been present; it is
-   * guaranteed that when this method is invoked by the default
-   * implementation of the {@link #writeResponseStatusAndHeaders(long,
-   * ContainerResponse)} method this parameter will never be {@code
-   * 0L} but might very well be less than {@code 0L} to indicate an
-   * unknown content length
-   *
-   * @return a new {@link ChunkedInput} that reads in some way from
-   * the supplied {@code source} when its {@link
-   * ChunkedInput#readChunk(ByteBufAllocator)} method is called from
-   * the Netty event loop; never {@code null}
+   * @see AbstractNettyContainerResponseWriter#createChunkedInput(EventExecutor, ByteBuf, long)
    *
    * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)
    *
@@ -209,6 +180,15 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
     return new ByteBufChunkedInput(source, contentLength);
   }
 
+  /**
+   * {@linkplain ChannelHandlerContext#writeAndFlush(Object) Writes
+   * and flushes} {@link LastHttpContent#EMPTY_LAST_CONTENT} when
+   * invoked.
+   *
+   * @see LastHttpContent
+   *
+   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage()
+   */
   @Override
   protected final void writeLastContentMessage() {
     // Send the magic message that tells the HTTP machinery to
@@ -216,6 +196,14 @@ public class Http11NettyContainerResponseWriter extends AbstractNettyContainerRe
     this.channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
   }
 
+  /**
+   * {@linkplain ChannelHandlerContext#write(Object) Writes} a new
+   * {@link DefaultFullHttpResponse} message with a {@code
+   * Content-Length} of {@code 0} and a status equal to {@link
+   * HttpResponseStatus#INTERNAL_SERVER_ERROR}.
+   *
+   * @see AbstractNettyContainerResponseWriter#writeFailureMessage()
+   */
   @Override
   protected final void writeFailureMessage() {
     final HttpMessage failureMessage =

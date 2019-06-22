@@ -27,6 +27,16 @@ import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.handler.stream.ChunkedInput;
 
+/**
+ * A {@link ChunkedInput} implementation that uses a {@link Function}
+ * to read from a {@link ByteBuf} and return a relevant chunk of its
+ * data.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #readChunk(ByteBufAllocator)
+ */
 public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
 
 
@@ -179,8 +189,9 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
 
   /**
    * Returns a chunk of this {@link FunctionalByteBufChunkedInput}'s
-   * overall input as represented by the {@link ByteBuf} supplied to
-   * it {@linkplain #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at
+   * overall input as represented by the {@link ByteBuf} and using the
+   * {@link Function} supplied to it {@linkplain
+   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at
    * construction time}.
    *
    * <p>This method may, and often does, return {@code null}.</p>
@@ -203,6 +214,8 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    * long) at construction time}, or {@code null}
    *
    * @see #getChunkSize(ByteBuf)
+   *
+   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)
    */
   @Override
   public final T readChunk(final ByteBufAllocator ignoredByteBufAllocator) {

@@ -18,9 +18,7 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
-import java.util.function.BiFunction;
-
-import javax.ws.rs.core.SecurityContext;
+import java.util.Objects;
 
 import io.netty.buffer.ByteBufAllocator;
 
@@ -29,17 +27,29 @@ import io.netty.channel.ChannelHandler; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.SimpleChannelInboundHandler;
 
-import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+
+import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
+import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 
 import io.netty.handler.logging.LoggingHandler;
 
+import io.netty.handler.ssl.ApplicationProtocolNames;
+import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 
 import io.netty.handler.stream.ChunkedWriteHandler;
+
+import io.netty.util.AsciiString;
+import io.netty.util.ReferenceCountUtil;
 
 import org.glassfish.jersey.server.ApplicationHandler;
 
@@ -66,10 +76,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
   private final SslContext sslContext;
 
+  private final long maxIncomingContentLength;
+  
   private final ApplicationHandler applicationHandler;
 
-  private final BiFunction<? super ChannelHandlerContext, ? super HttpRequest, ? extends SecurityContext> securityContextBiFunction;
-  
 
   /*
    * Constructors.
@@ -92,21 +102,20 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * representing Jersey; may be {@code null} in which case a
    * {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
-   *
-   * @param securityContextBiFunction a {@link BiFunction} that
-   * returns a {@link SecurityContext} when supplied with a {@link
-   * ChannelHandlerContext} and an {@link HttpRequest}; may be {@code
-   * null}
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
-                                  final ApplicationHandler applicationHandler,
-                                  final BiFunction<? super ChannelHandlerContext, ? super HttpRequest, ? extends SecurityContext> securityContextBiFunction) {
+                                  final long maxIncomingContentLength,
+                                  final ApplicationHandler applicationHandler) {
     super();
     this.baseUri = baseUri;
     this.sslContext = sslContext;
+    if (maxIncomingContentLength < 0L) {
+      this.maxIncomingContentLength = Long.MAX_VALUE;
+    } else {
+      this.maxIncomingContentLength = maxIncomingContentLength;
+    }
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
-    this.securityContextBiFunction = securityContextBiFunction;
   }
 
 
@@ -134,22 +143,62 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   public final void initChannel(final Channel channel) {
     if (channel != null) {
       this.preInitChannel(channel);
+
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
-      if (this.sslContext != null) {
-        final SslHandler sslHandler = createSslHandler(this.sslContext, channel.alloc());
-        if (sslHandler != null) {
-          channelPipeline.addLast(sslHandler.getClass().getSimpleName(), sslHandler);
-        }
+      
+      final SslHandler sslHandler;
+      if (this.sslContext == null) {
+        sslHandler = null;
+      } else {
+        sslHandler = createSslHandler(this.sslContext, channel.alloc());
       }
-      channelPipeline.addLast(HttpServerCodec.class.getSimpleName(), new HttpServerCodec());
-      channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
-      channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(), new ChunkedWriteHandler());
-      channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(), new JerseyChannelInboundHandler(this.baseUri, this.applicationHandler, this.securityContextBiFunction));
+
+      if (sslHandler == null) {
+
+        final HttpServerCodec httpServerCodec = new HttpServerCodec();
+        // TODO: have to find a way to get this in there
+        //
+        // channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
+        final JerseyChannelSubInitializer jerseyChannelSubInitializer = new JerseyChannelSubInitializer();
+        // See https://github.com/netty/netty/issues/7079
+        final int maxIncomingContentLength;
+        if (this.maxIncomingContentLength >= Integer.MAX_VALUE) {
+          maxIncomingContentLength = Integer.MAX_VALUE;
+        } else {
+          maxIncomingContentLength = (int)this.maxIncomingContentLength;
+        }
+        final HttpServerUpgradeHandler httpServerUpgradeHandler = new HttpServerUpgradeHandler(httpServerCodec, protocol -> AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol) ? new Http2ServerUpgradeCodec(Http2MultiplexCodecBuilder.forServer(jerseyChannelSubInitializer).build()) : null, maxIncomingContentLength);
+        final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler = new CleartextHttp2ServerUpgradeHandler(httpServerCodec, httpServerUpgradeHandler, jerseyChannelSubInitializer /* <-- use this guy for http2, otherwise do nothing */);
+        channelPipeline.addLast(cleartextHttp2ServerUpgradeHandler);
+        // We add a handler for the (probably very common) case where
+        // no one (a) connected with HTTP/2 or (b) asked for an HTTP/2
+        // upgrade.  In this case after all the shenanigans we just
+        // jumped through we're just a regular old common HTTP 1.1
+        // connection.  Strangely, we have to handle this in Netty as
+        // a special case even though it is likely to be the most
+        // common one.
+        channelPipeline.addLast(new SimpleChannelInboundHandler<HttpMessage>() {
+            @Override
+            protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final HttpMessage httpMessage) throws Exception {
+              assert channelHandlerContext != null;
+              final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
+              assert channelPipeline != null;
+              channelPipeline.replace(this, JerseyChannelSubInitializer.class.getName(), jerseyChannelSubInitializer);
+              channelHandlerContext.fireChannelRead(ReferenceCountUtil.retain(httpMessage));
+            }
+        });
+
+      } else {
+
+        channelPipeline.addLast(sslHandler.getClass().getSimpleName(), sslHandler);
+        channelPipeline.addLast(HttpNegotiationHandler.class.getSimpleName(), new HttpNegotiationHandler());
+
+      }
+
       this.postInitChannel(channel);
     }
   }
-
 
   /**
    * A hook for performing {@link Channel} initialization before the
@@ -218,6 +267,59 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
   protected SslHandler createSslHandler(final SslContext sslContext, final ByteBufAllocator byteBufAllocator) {
     return sslContext.newHandler(byteBufAllocator);
+  }
+
+
+  /*
+   * Inner classes.
+   */
+
+  
+  private final class JerseyChannelSubInitializer extends ChannelInitializer<Channel> {
+
+    private JerseyChannelSubInitializer() {
+      super();
+    }
+
+    @Override
+    protected final void initChannel(final Channel channel) {
+      assert channel != null;
+      final ChannelPipeline channelPipeline = channel.pipeline();
+      assert channelPipeline != null;
+      channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(), new ChunkedWriteHandler());
+      channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(), new JerseyChannelInboundHandler(baseUri, applicationHandler));
+    }
+    
+  }
+  
+  private final class HttpNegotiationHandler extends ApplicationProtocolNegotiationHandler {
+
+    private HttpNegotiationHandler() {
+      super(ApplicationProtocolNames.HTTP_1_1);
+    }
+
+    @Override
+    protected final void configurePipeline(final ChannelHandlerContext channelHandlerContext, final String protocol) {
+      Objects.requireNonNull(channelHandlerContext);
+      Objects.requireNonNull(protocol);
+
+      final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
+      assert channelPipeline != null;
+      
+      switch (protocol) {
+      case ApplicationProtocolNames.HTTP_2:
+        channelPipeline.addLast(Http2MultiplexCodecBuilder.forServer(new JerseyChannelSubInitializer()).build());
+        break;
+      case ApplicationProtocolNames.HTTP_1_1:
+        channelPipeline.addLast(HttpServerCodec.class.getSimpleName(), new HttpServerCodec());
+        channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
+        channelPipeline.addLast(JerseyChannelSubInitializer.class.getSimpleName(), new JerseyChannelSubInitializer());
+        break;
+      default:
+        throw new IllegalArgumentException("protocol: " + protocol);
+      }
+    }
+    
   }
 
 }
