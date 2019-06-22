@@ -284,31 +284,72 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Invoked on a non-event-loop thread by Jersey when, as far as
    * Jersey is concerned, all processing has completed unsuccessfully.
    *
+   * <p><strong>This method never returns.  It always throws a {@link
+   * RuntimeException} or an {@link Error} of some
+   * variety.</strong></p>
+   *
+   * <h2>Design Notes</h2>
+   *
+   * <p><a
+   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"
+   * target="_parent">JAX-RS: Java&trade; API for RESTful Web
+   * Services, section 3.3.4</a> governs this method, but it is
+   * somewhat ambiguous whether this method represents the container
+   * itself.  All Jersey-supplied {@link ContainerResponseWriter}
+   * implementations (except their <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181"
+   * target="_parent">Netty container</a>, which seems to be <a
+   * href="https://github.com/jersey/jersey/pull/3791"
+   * target="_parent">buggy in this regard</a>) rethrow the supplied
+   * {@link Throwable} as some kind of {@link RuntimeException} from
+   * their implementations of this method, so we follow suit.</p>
+   *
    * @param throwable the {@link Throwable} that caused failure;
    * strictly speaking may be {@code null}
    *
-   * @exception RuntimeException if an error occurs while processing
-   * the supplied {@link Throwable}; the supplied {@link Throwable}
-   * will be {@linkplain Throwable#addSuppressed(Throwable) added as a
-   * suppressed <code>Throwable</code>}
+   * @exception ContainerException <strong>thrown whenever this method
+   * completes without further problems, or if the supplied {@link
+   * Throwable} is itself a {@link ContainerException}, in order to
+   * comply with section 3.3.4 of the JAX-RS 2.1
+   * specification</strong>
    *
-   * @exception Error if an error occurs while processing the supplied
-   * {@link Throwable}; the supplied {@link Throwable} will be
+   * @exception RuntimeException if the supplied {@link Throwable} is
+   * itself a {@link RuntimeException} and this method completes
+   * without further problems, or if an error occurs while processing
+   * the supplied {@link Throwable} in which case the supplied {@link
+   * Throwable} will be {@linkplain Throwable#addSuppressed(Throwable)
+   * added as a suppressed <code>Throwable</code>}
+   *
+   * @exception Error if the supplied {@link Throwable} is itself an
+   * {@link Error} and this method completes without further problems,
+   * or if an error occurs while processing the supplied {@link
+   * Throwable} in which case the supplied {@link Throwable} will be
    * {@linkplain Throwable#addSuppressed(Throwable) added as a
    * suppressed <code>Throwable</code>}
    *
    * @see ContainerResponseWriter#failure(Throwable)
+   *
+   * @see <a
+   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"
+   * target="_parent">JAX-RS: Java&trade; API for RESTful Web
+   * Services, section 3.3.4</a>
    */
   @Override
   public final void failure(final Throwable throwable) {
-    assert !this.inEventLoop();
+    if (!this.inEventLoop()) {
+      final ContainerException throwMe = new ContainerException("!this.inEventLoop()");
+      if (throwable != null) {
+        throwMe.addSuppressed(throwable);
+      }
+      throw throwMe;
+    }
 
-    try {
-      final ChunkedInput<?> chunkedInput = this.chunkedInput;
-      this.chunkedInput = null;
-      final ReferenceCounted byteBuf = this.byteBuf;
-      this.byteBuf = null;
-      if (chunkedInput != null) {
+    final ChunkedInput<?> chunkedInput = this.chunkedInput;
+    this.chunkedInput = null;
+    final ReferenceCounted byteBuf = this.byteBuf;
+    this.byteBuf = null;
+    if (chunkedInput != null) {
+      try {
         this.channelHandlerContext.executor().submit(() -> {
             try {
               assert inEventLoop();
@@ -328,12 +369,50 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
             }
             return null;
           });
+      } catch (final RuntimeException | Error throwMe) {
+        // There was a problem submitting the task to the Netty
+        // infrastructure.  Make sure we don't lose the original
+        // Throwable.
+        if (throwable != null) {
+          throwMe.addSuppressed(throwable);
+        }
+        throw throwMe;
       }
-    } catch (final RuntimeException | Error throwMe) {
-      if (throwable != null) {
-        throwMe.addSuppressed(throwable);
-      }
-      throw throwMe;
+    }
+    
+    // See
+    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/grizzly2-http/src/main/java/org/glassfish/jersey/grizzly2/httpserver/GrizzlyHttpContainer.java#L256-L281,
+    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jdk-http/src/main/java/org/glassfish/jersey/jdkhttp/JdkHttpHandlerContainer.java#L301-L311,
+    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jetty-http/src/main/java/org/glassfish/jersey/jetty/JettyHttpContainer.java#L332-L357,
+    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/jersey-servlet-core/src/main/java/org/glassfish/jersey/servlet/internal/ResponseWriter.java#L212-L238,
+    // and
+    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/simple-http/src/main/java/org/glassfish/jersey/simple/SimpleContainer.java#L219-L232.
+    //
+    // All these Jersey-supplied containers rethrow the supplied
+    // Throwable. But the Netty one does not:
+    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181.
+    //
+    // See also https://github.com/jersey/jersey/pull/3791, where it
+    // is implied that the fact that Jersey's own Netty integration
+    // does NOT rethrow it is a bug.  There is some ambiguity about
+    // whether the failure(Throwable) method (this method) is supposed
+    // to fully handle the supplied Throwable or if it is supposed to
+    // propagate it outwards.  The ambiguity arises because you could
+    // see that this very method is the place where an unhandled
+    // Throwable is propagated--after all, we're in a
+    // ContainerResponseWriter implementation--or you could see that
+    // whatever is housing this class is the container, so the
+    // supplied Throwable should be wrapped and rethrown.  JAX-RS
+    // section 3.3.4 is not very helpful here.  We follow the other
+    // Jersey-supplied containers here.
+    if (throwable instanceof RuntimeException) {
+      throw (RuntimeException)throwable;
+    } else if (throwable instanceof Exception) {
+      throw new ContainerException(throwable.getMessage(), throwable);
+    } else if (throwable instanceof Error) {
+      throw (Error)throwable;
+    } else {
+      throw new InternalError(throwable.getMessage(), throwable);
     }
   }
 
