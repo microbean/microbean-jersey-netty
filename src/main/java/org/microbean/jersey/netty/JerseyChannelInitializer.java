@@ -24,13 +24,12 @@ import io.netty.bootstrap.ServerBootstrap; // for javadoc only
 
 import io.netty.buffer.ByteBufAllocator;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
-
-import io.netty.channel.socket.SocketChannel;
 
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpServerCodec;
@@ -78,11 +77,11 @@ import org.glassfish.jersey.server.ApplicationHandler;
  *
  * @see ChannelInitializer
  *
- * @see #initChannel(SocketChannel)
+ * @see #initChannel(Channel)
  *
  * @see JerseyChannelInboundHandler
  */
-public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> {
+public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
   /*
@@ -374,20 +373,20 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
   /**
    * Sets up Netty with Jersey application support.
    *
-   * @param channel the {@link SocketChannel} representing a networking
+   * @param channel the {@link Channel} representing a networking
    * connection to the outside world; may be {@code null} in which
    * case no action will be taken
    *
-   * @see SocketChannel#pipeline()
+   * @see Channel#pipeline()
    *
    * @see ChannelPipeline#addLast(String, ChannelHandler)
    *
-   * @see #preInitChannel(SocketChannel)
+   * @see #preInitChannel(Channel)
    *
-   * @see #postInitChannel(SocketChannel)
+   * @see #postInitChannel(Channel)
    */
   @Override
-  public final void initChannel(final SocketChannel channel) {
+  public final void initChannel(final Channel channel) {
     if (channel != null) {
       this.preInitChannel(channel);
 
@@ -470,25 +469,25 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
   }
 
   /**
-   * A hook for performing {@link SocketChannel} initialization before
+   * A hook for performing {@link Channel} initialization before
    * the Jersey integration is set up.
    *
    * <p>This implementation {@linkplain
    * ChannelPipeline#addLast(String, ChannelHandler) installs} a
    * {@link LoggingHandler}.</p>
    *
-   * <p>Overrides must not call {@link #initChannel(SocketChannel)} or
+   * <p>Overrides must not call {@link #initChannel(Channel)} or
    * an infinite loop will result.</p>
    *
-   * @param channel the {@link SocketChannel} being {@linkplain
-   * #initChannel(SocketChannel) initialized}; may be {@code null} in
+   * @param channel the {@link Channel} being {@linkplain
+   * #initChannel(Channel) initialized}; may be {@code null} in
    * which case no action will be taken
    *
-   * @see #initChannel(SocketChannel)
+   * @see #initChannel(Channel)
    *
    * @see ChannelPipeline#addLast(String, ChannelHandler)
    */
-  protected void preInitChannel(final SocketChannel channel) {
+  protected void preInitChannel(final Channel channel) {
     if (channel != null) {
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
@@ -497,23 +496,23 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
   }
 
   /**
-   * A hook for performing {@link SocketChannel} initialization after
+   * A hook for performing {@link Channel} initialization after
    * the Jersey integration is set up.
    *
    * <p>This implementation does nothing.</p>
    *
-   * <p>Overrides must not call {@link #initChannel(SocketChannel)} or
+   * <p>Overrides must not call {@link #initChannel(Channel)} or
    * an infinite loop will result.</p>
    *
-   * @param channel the {@link SocketChannel} being {@linkplain
-   * #initChannel(SocketChannel) initialized}; may be {@code null} in
+   * @param channel the {@link Channel} being {@linkplain
+   * #initChannel(Channel) initialized}; may be {@code null} in
    * which case no action will be taken
    *
-   * @see #initChannel(SocketChannel)
+   * @see #initChannel(Channel)
    *
    * @see ChannelPipeline#addLast(String, ChannelHandler)
    */
-  protected void postInitChannel(final SocketChannel channel) {
+  protected void postInitChannel(final Channel channel) {
 
   }
 
@@ -558,7 +557,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
    *
    * @see ChannelInitializer
    */
-  private final class JerseyChannelSubInitializer extends ChannelInitializer<SocketChannel> {
+  private final class JerseyChannelSubInitializer extends ChannelInitializer<Channel> {
 
     /**
      * Creates a new {@link JerseyChannelSubInitializer}.
@@ -571,9 +570,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
      * {@linkplain ChannelPipeline#addLast(String, ChannelHandler)
      * Adds} a {@link ChunkedWriteHandler} and a {@link
      * JerseyChannelInboundHandler} to the {@linkplain
-     * SocketChannel#pipeline() pipeline}.
+     * Channel#pipeline() pipeline}.
      *
-     * @param channel the {@link SocketChannel} being configured; must
+     * @param channel the {@link Channel} being configured; must
      * not be {@code null}
      *
      * @see ChunkedWriteHandler
@@ -581,7 +580,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<SocketChannel> 
      * @see JerseyChannelInboundHandler
      */
     @Override
-    protected final void initChannel(final SocketChannel channel) {
+    protected final void initChannel(final Channel channel) {
       assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
