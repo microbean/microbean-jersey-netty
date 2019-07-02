@@ -35,11 +35,13 @@ import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 
+import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 import io.netty.handler.codec.http2.Http2CodecUtil;
+import io.netty.handler.codec.http2.Http2MultiplexCodec;
 import io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
-import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 
 import io.netty.handler.logging.LoggingHandler;
 
@@ -406,6 +408,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
         final JerseyChannelSubInitializer jerseyChannelSubInitializer = new JerseyChannelSubInitializer();
 
+        final Http2MultiplexCodec http2MultiplexCodec = Http2MultiplexCodecBuilder.forServer(jerseyChannelSubInitializer).build();
+        assert http2MultiplexCodec != null;
+
         // See https://github.com/netty/netty/issues/7079
         final int maxIncomingContentLength;
         if (this.maxIncomingContentLength >= Integer.MAX_VALUE) {
@@ -413,9 +418,26 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         } else {
           maxIncomingContentLength = (int)this.maxIncomingContentLength;
         }
-        final HttpServerUpgradeHandler httpServerUpgradeHandler = new HttpServerUpgradeHandler(httpServerCodec, protocol -> AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocol) ? new Http2ServerUpgradeCodec(Http2MultiplexCodecBuilder.forServer(jerseyChannelSubInitializer).build()) : null, maxIncomingContentLength);
+        
+        final HttpServerUpgradeHandler httpServerUpgradeHandler =
+          new HttpServerUpgradeHandler(httpServerCodec,
+                                       protocolName -> {
+                                         final UpgradeCodec returnValue;
+                                         if (protocolName == null ||
+                                             !AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME,
+                                                                        protocolName)) {
+                                           returnValue = null;
+                                         } else {
+                                           returnValue = new Http2ServerUpgradeCodec(http2MultiplexCodec);
+                                         }
+                                         return returnValue;
+                                       },
+                                       maxIncomingContentLength);
 
-        final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler = new CleartextHttp2ServerUpgradeHandler(httpServerCodec, httpServerUpgradeHandler, jerseyChannelSubInitializer /* <-- use this guy for http2, otherwise do nothing */);
+        final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler =
+          new CleartextHttp2ServerUpgradeHandler(httpServerCodec,
+                                                 httpServerUpgradeHandler,
+                                                 http2MultiplexCodec);
         channelPipeline.addLast(cleartextHttp2ServerUpgradeHandler);
 
         // We add a handler for the (probably very common) case where
@@ -427,7 +449,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         // common one.
         channelPipeline.addLast(new SimpleChannelInboundHandler<HttpMessage>() {
             @Override
-            protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final HttpMessage httpMessage) throws Exception {
+            protected final void channelRead0(final ChannelHandlerContext channelHandlerContext,
+                                              final HttpMessage httpMessage)
+              throws Exception {
               assert channelHandlerContext != null;
               final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
               assert channelPipeline != null;
