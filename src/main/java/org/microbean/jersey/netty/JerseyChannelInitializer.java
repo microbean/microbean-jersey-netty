@@ -39,8 +39,9 @@ import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 
 import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 import io.netty.handler.codec.http2.Http2CodecUtil;
-import io.netty.handler.codec.http2.Http2MultiplexCodec;
-import io.netty.handler.codec.http2.Http2MultiplexCodecBuilder;
+import io.netty.handler.codec.http2.Http2FrameCodec;
+import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
+import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 
 import io.netty.handler.logging.LoggingHandler;
@@ -408,9 +409,6 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
         final JerseyChannelSubInitializer jerseyChannelSubInitializer = new JerseyChannelSubInitializer();
 
-        final Http2MultiplexCodec http2MultiplexCodec = Http2MultiplexCodecBuilder.forServer(jerseyChannelSubInitializer).build();
-        assert http2MultiplexCodec != null;
-
         // See https://github.com/netty/netty/issues/7079
         final int maxIncomingContentLength;
         if (this.maxIncomingContentLength >= Integer.MAX_VALUE) {
@@ -418,7 +416,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         } else {
           maxIncomingContentLength = (int)this.maxIncomingContentLength;
         }
-        
+
+        // Create a handler that will deal with HTTP 1.1-to-HTTP/2
+        // upgrade scenarios.  It by itself doesn't really do anything
+        // but it will be supplied to a new instance of
+        // CleartextHttp2ServerUpgradeHandler.
         final HttpServerUpgradeHandler httpServerUpgradeHandler =
           new HttpServerUpgradeHandler(httpServerCodec,
                                        protocolName -> {
@@ -426,18 +428,49 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                          if (protocolName == null ||
                                              !AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME,
                                                                         protocolName)) {
+
                                            returnValue = null;
                                          } else {
-                                           returnValue = new Http2ServerUpgradeCodec(http2MultiplexCodec);
+                                           returnValue =
+                                             new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
+                                                                         new Http2MultiplexHandler(jerseyChannelSubInitializer));
                                          }
                                          return returnValue;
                                        },
                                        maxIncomingContentLength);
 
+        // Build a CleartextHttp2ServerUpgradeHandler.  This is really
+        // a channel pipeline reconfigurator: it arranges things such
+        // that:
+        //   * A private internal handler is added first (it will see
+        //     if a prior knowledge situation is occurring)
+        //   * The first argument, an HttpServerCodec, is added next
+        //     (it will, if the prior knowledge handler doesn't bypass
+        //     and remove it, be responsible for interpreting an HTTP
+        //     1.1 message that might be destined for an upgrade to
+        //     HTTP/2)
+        //   * The second argument, an HttpServerUpgradeHandler, is
+        //     added next (it will read an HttpMessage (an HTTP 1.1
+        //     message) and will see if it represents an upgrade
+        //     request)
+        //   * The third argument is held in reserve to be used only
+        //     in those cases where the prior knowledge handler kicks
+        //     in
+        // This API is tremendously confusing; it's not just you.
         final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler =
           new CleartextHttp2ServerUpgradeHandler(httpServerCodec,
                                                  httpServerUpgradeHandler,
-                                                 http2MultiplexCodec);
+                                                 new ChannelInitializer<Channel>() {
+                                                   @Override
+                                                   public final void initChannel(final Channel channel) {
+                                                     assert channel != null;
+                                                     final ChannelPipeline channelPipeline = channel.pipeline();
+                                                     assert channelPipeline != null;
+                                                     channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(), Http2FrameCodecBuilder.forServer().build());
+                                                     channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(jerseyChannelSubInitializer));
+                                                   }
+                                                 });
+
         channelPipeline.addLast(cleartextHttp2ServerUpgradeHandler);
 
         // We add a handler for the (probably very common) case where
@@ -460,14 +493,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               // because otherwise we wouldn't have been called (note
               // that our event is an HttpMessage).  Now that we know
               // this is going to be HTTP 1.1 with no upgrades,
-              // replace this handler with a handler that deals with
-              // HTTP 100-class statuses (this handler will never be
-              // called again)...
+              // replace *this* handler we're "in" now with a handler
+              // that deals with HTTP 100-class statuses...
               channelPipeline.replace(this, HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
 
-              // ...and then after that add the initializer that will
-              // install a ChunkedWriteHandler followed by the main
-              // Jersey integration.
+              // ...and then after that add the "real" initializer
+              // that will install a ChunkedWriteHandler followed by
+              // the main Jersey integration.
               channelPipeline.addLast(JerseyChannelSubInitializer.class.getName(), jerseyChannelSubInitializer);
 
               // Forward the event on as we never touched it.
@@ -652,10 +684,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       assert protocol != null;
       final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
       assert channelPipeline != null;
-
       switch (protocol) {
       case ApplicationProtocolNames.HTTP_2:
-        channelPipeline.addLast(Http2MultiplexCodecBuilder.forServer(new JerseyChannelSubInitializer()).build());
+        channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(), Http2FrameCodecBuilder.forServer().build());
+        channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(new JerseyChannelSubInitializer()));
         break;
       case ApplicationProtocolNames.HTTP_1_1:
         channelPipeline.addLast(HttpServerCodec.class.getSimpleName(), new HttpServerCodec());
