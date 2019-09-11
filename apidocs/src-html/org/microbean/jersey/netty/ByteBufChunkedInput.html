@@ -62,32 +62,35 @@
 <span class="sourceLineNo">054</span>   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.54"></a>
 <span class="sourceLineNo">055</span>   * {@code null}<a name="line.55"></a>
 <span class="sourceLineNo">056</span>   *<a name="line.56"></a>
-<span class="sourceLineNo">057</span>   * @see #ByteBufChunkedInput(ByteBuf, long)<a name="line.57"></a>
-<span class="sourceLineNo">058</span>   */<a name="line.58"></a>
-<span class="sourceLineNo">059</span>  public ByteBufChunkedInput(final ByteBuf sourceByteBuf) {<a name="line.59"></a>
-<span class="sourceLineNo">060</span>    this(sourceByteBuf, -1L);<a name="line.60"></a>
-<span class="sourceLineNo">061</span>  }<a name="line.61"></a>
-<span class="sourceLineNo">062</span><a name="line.62"></a>
-<span class="sourceLineNo">063</span>  /**<a name="line.63"></a>
-<span class="sourceLineNo">064</span>   * Creates a new {@link ByteBufChunkedInput}.<a name="line.64"></a>
-<span class="sourceLineNo">065</span>   *<a name="line.65"></a>
-<span class="sourceLineNo">066</span>   * @param sourceByteBuf the {@link ByteBuf} from which chunks will<a name="line.66"></a>
-<span class="sourceLineNo">067</span>   * be {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.67"></a>
-<span class="sourceLineNo">068</span>   * {@code null}<a name="line.68"></a>
-<span class="sourceLineNo">069</span>   *<a name="line.69"></a>
-<span class="sourceLineNo">070</span>   * @param lengthToReport the length of this {@link<a name="line.70"></a>
-<span class="sourceLineNo">071</span>   * ByteBufChunkedInput} in bytes to be reported by the {@link<a name="line.71"></a>
-<span class="sourceLineNo">072</span>   * #length()} method; may be {@code -1L} (and very often is) if a<a name="line.72"></a>
-<span class="sourceLineNo">073</span>   * representation of its length is not available.<a name="line.73"></a>
-<span class="sourceLineNo">074</span>   *<a name="line.74"></a>
-<span class="sourceLineNo">075</span>   * @exception NullPointerException if {@code sourceByteBuf} is<a name="line.75"></a>
-<span class="sourceLineNo">076</span>   * {@code null}<a name="line.76"></a>
-<span class="sourceLineNo">077</span>   */<a name="line.77"></a>
-<span class="sourceLineNo">078</span>  public ByteBufChunkedInput(final ByteBuf sourceByteBuf, final long lengthToReport) {<a name="line.78"></a>
-<span class="sourceLineNo">079</span>    super(sourceByteBuf, bb -&gt; bb, lengthToReport);<a name="line.79"></a>
-<span class="sourceLineNo">080</span>  }<a name="line.80"></a>
-<span class="sourceLineNo">081</span><a name="line.81"></a>
-<span class="sourceLineNo">082</span>}<a name="line.82"></a>
+<span class="sourceLineNo">057</span>   * @exception NullPointerException if {@code sourceByteBuf} is<a name="line.57"></a>
+<span class="sourceLineNo">058</span>   * {@code null}<a name="line.58"></a>
+<span class="sourceLineNo">059</span>   *<a name="line.59"></a>
+<span class="sourceLineNo">060</span>   * @see #ByteBufChunkedInput(ByteBuf, long)<a name="line.60"></a>
+<span class="sourceLineNo">061</span>   */<a name="line.61"></a>
+<span class="sourceLineNo">062</span>  public ByteBufChunkedInput(final ByteBuf sourceByteBuf) {<a name="line.62"></a>
+<span class="sourceLineNo">063</span>    this(sourceByteBuf, -1L);<a name="line.63"></a>
+<span class="sourceLineNo">064</span>  }<a name="line.64"></a>
+<span class="sourceLineNo">065</span><a name="line.65"></a>
+<span class="sourceLineNo">066</span>  /**<a name="line.66"></a>
+<span class="sourceLineNo">067</span>   * Creates a new {@link ByteBufChunkedInput}.<a name="line.67"></a>
+<span class="sourceLineNo">068</span>   *<a name="line.68"></a>
+<span class="sourceLineNo">069</span>   * @param sourceByteBuf the {@link ByteBuf} from which chunks will<a name="line.69"></a>
+<span class="sourceLineNo">070</span>   * be {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.70"></a>
+<span class="sourceLineNo">071</span>   * {@code null}<a name="line.71"></a>
+<span class="sourceLineNo">072</span>   *<a name="line.72"></a>
+<span class="sourceLineNo">073</span>   * @param lengthToReport the length of this {@link<a name="line.73"></a>
+<span class="sourceLineNo">074</span>   * ByteBufChunkedInput} in bytes to be reported by the {@link<a name="line.74"></a>
+<span class="sourceLineNo">075</span>   * #length()} method; may be {@code -1L} (and very often is) if a<a name="line.75"></a>
+<span class="sourceLineNo">076</span>   * representation of its length is not available.<a name="line.76"></a>
+<span class="sourceLineNo">077</span>   *<a name="line.77"></a>
+<span class="sourceLineNo">078</span>   * @exception NullPointerException if {@code sourceByteBuf} is<a name="line.78"></a>
+<span class="sourceLineNo">079</span>   * {@code null}<a name="line.79"></a>
+<span class="sourceLineNo">080</span>   */<a name="line.80"></a>
+<span class="sourceLineNo">081</span>  public ByteBufChunkedInput(final ByteBuf sourceByteBuf, final long lengthToReport) {<a name="line.81"></a>
+<span class="sourceLineNo">082</span>    super(sourceByteBuf, bb -&gt; bb, lengthToReport);<a name="line.82"></a>
+<span class="sourceLineNo">083</span>  }<a name="line.83"></a>
+<span class="sourceLineNo">084</span><a name="line.84"></a>
+<span class="sourceLineNo">085</span>}<a name="line.85"></a>
 
 
 
