@@ -219,7 +219,12 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    */
   @Override
   public final T readChunk(final ByteBufAllocator ignoredByteBufAllocator) {
-    return this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable()) ? null : this.chunkReader.apply(this.byteBuf.readRetainedSlice(Math.min(this.getChunkSize(this.byteBuf), this.byteBuf.readableBytes())).asReadOnly());
+    return
+      this.byteBuf.refCnt() <= 0 ||
+      (this.closed && !this.byteBuf.isReadable()) ?
+      null :
+      this.chunkReader.apply(this.byteBuf.readRetainedSlice(Math.min(this.getChunkSize(this.byteBuf),
+                                                                     this.byteBuf.readableBytes())).asReadOnly());
   }
 
   /**
@@ -239,6 +244,9 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    * the {@link #readChunk(ByteBufAllocator)} method; <strong>behavior
    * is undefined if this value is less than or equal to {@code
    * 0}</strong>
+   *
+   * @exception NullPointerException if for any reason {@code source}
+   * is {@code null}
    *
    * @see #readChunk(ByteBufAllocator)
    */

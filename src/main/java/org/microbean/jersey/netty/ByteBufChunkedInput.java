@@ -54,6 +54,9 @@ public class ByteBufChunkedInput extends FunctionalByteBufChunkedInput<ByteBuf> 
    * {@linkplain #readChunk(ByteBufAllocator) read}; must not be
    * {@code null}
    *
+   * @exception NullPointerException if {@code sourceByteBuf} is
+   * {@code null}
+   *
    * @see #ByteBufChunkedInput(ByteBuf, long)
    */
   public ByteBufChunkedInput(final ByteBuf sourceByteBuf) {

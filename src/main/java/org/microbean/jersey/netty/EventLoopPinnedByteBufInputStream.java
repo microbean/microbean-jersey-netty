@@ -156,12 +156,12 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
   public final int read(final byte[] targetBytes, final int offset, final int length) throws IOException {
     Objects.requireNonNull(targetBytes);
     final int returnValue;
-    if (offset < 0 || length < 0 || length > targetBytes.length - offset) {
+    if (this.closed) {
+      throw new IOException("closed");
+    } else if (offset < 0 || length < 0 || length > targetBytes.length - offset) {
       throw new IndexOutOfBoundsException();
     } else if (length == 0) {
       returnValue = 0;
-    } else if (this.closed) {
-      throw new IOException("closed");
     } else {
       returnValue = this.read(sourceByteBuf -> {
           final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
@@ -214,9 +214,10 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * {@linkplain Function#apply(Object) Applies} the supplied {@link
    * Function} to a {@link ByteBuf}, ensuring that the {@link
    * Function} application takes place on the {@linkplain
-   * EventExecutor#inEventLoop() Netty event loop thread}, and returns
-   * the result of invoking {@link Integer#intValue()} on the {@link
-   * Function}'s return value.
+   * EventExecutor#inEventLoop() Netty event loop thread}, and,
+   * <strong>blocking if necessary</strong>, returns the result of
+   * invoking {@link Integer#intValue()} on the {@link Function}'s
+   * return value.
    *
    * @param function the {@link Function} to apply; must not be {@code
    * null}; must not return {@code null}
@@ -229,7 +230,9 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
    * @exception IOException if the return value of the supplied {@link
    * Function} could not be acquired for some reason, or if this
    * {@link EventLoopPinnedByteBufInputStream} has been {@linkplain
-   * #close() closed}
+   * #close() closed}; if its {@linkplain Throwable#getCause() cause}
+   * is an {@link InterruptedException} then the current thread has
+   * been interrupted
    */
   protected final int read(final Function<? super ByteBuf, ? extends Integer> function) throws IOException {
     Objects.requireNonNull(function);
@@ -275,7 +278,7 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
       }
     }
     if (returnValue == null) {
-      throw new IOException("function.apply() == null");
+      throw new IOException("function.apply() == null", new IllegalStateException("function.apply() == null"));
     }
     return returnValue.intValue();
   }

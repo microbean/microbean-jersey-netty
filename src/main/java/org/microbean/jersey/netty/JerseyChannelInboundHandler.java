@@ -187,7 +187,16 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * HttpRequest} or a {@link HttpContent}&mdash;to process; must not
    * be {@code null}
    *
-   * @exception Exception if an error occurs
+   * @exception IllegalArgumentException if {@code message} is not an
+   * instance of any of the following types: {@link HttpRequest},
+   * {@link Http2HeadersFrame}, {@link HttpContent} or {@link
+   * Http2DataFrame}
+   *
+   * @exception IllegalStateException if any methods of this class
+   * have been overridden incorrectly, or in general if any
+   * preconditions have been violated
+   *
+   * @exception Exception if any other error occurs
    *
    * @see #messageReceived(ChannelHandlerContext, ByteBuf, boolean)
    */
@@ -201,7 +210,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
                            ((ByteBufHolder)message).content(),
                            message instanceof LastHttpContent || (message instanceof Http2DataFrame) && ((Http2DataFrame)message).isEndStream());
     } else {
-      assert false; // for now
+      throw new IllegalArgumentException("Unexpected message type: " + message);
     }
   }
 

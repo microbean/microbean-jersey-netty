@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.8.2-SNAPSHOT</version>
+  <version>0.9.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
@@ -14,7 +14,8 @@
 
   <name>microBean™ Jersey Netty Integration</name>
   <description>${project.name}</description>
-  <url>http://microbean.github.io/${project.artifactId}</url>
+  <url>https://microbean.github.io/${project.artifactId}</url>
+  <inceptionYear>2019</inceptionYear>
 
   <scm>
     <connection>scm:git:git@github.com:microbean/${project.artifactId}.git</connection>
@@ -38,7 +39,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-base-specification</artifactId>
-        <version>0.4.8</version>
+        <version>0.5.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -46,7 +47,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-weld-se-environment</artifactId>
-        <version>0.6.2</version>
+        <version>0.7.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -62,7 +63,7 @@
       <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-bom</artifactId>
-        <version>2.29</version>
+        <version>2.29.1</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -74,10 +75,10 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-development-annotations</artifactId>
-        <version>0.2.3</version>
+        <version>0.2.4</version>
         <type>jar</type>
       </dependency>
-      
+
 
     </dependencies>
   </dependencyManagement>
@@ -128,7 +129,7 @@
 
     <!-- Compile-scoped dependencies. -->
 
-    
+
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-codec-http</artifactId>
@@ -174,12 +175,6 @@
   </dependencies>
 
   <build>
-    <pluginManagement>
-      <plugins>
-
-      </plugins>
-    </pluginManagement>
-
     <plugins>
 
       <plugin>
@@ -202,7 +197,7 @@
 
   <properties>
     <runBlockingTests>false</runBlockingTests>
-    <links>https://netty.io/4.1/api/,https://jersey.github.io/apidocs/2.28/jersey/,https://jax-rs.github.io/apidocs/2.1/</links>
+    <links>https://netty.io/4.1/api/,https://jersey.github.io/apidocs/latest/jersey/,https://jakarta.ee/specifications/restful-ws/2.1/apidocs/</links>
     <stylesheetfile>css/stylesheet.css</stylesheetfile>
   </properties>
 
@@ -210,6 +205,14 @@
     <plugins>
       <plugin>
         <artifactId>maven-javadoc-plugin</artifactId>
+        <reportSets>
+          <reportSet>
+            <reports>
+              <report>javadoc-no-fork</report>
+              <report>test-javadoc-no-fork</report>
+            </reports>
+          </reportSet>
+        </reportSets>
       </plugin>
     </plugins>
   </reporting>

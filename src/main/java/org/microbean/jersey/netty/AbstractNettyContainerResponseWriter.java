@@ -139,6 +139,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * non-Netty-EventLoop-affiliated thread.
    */
   
+  
   @Override
   public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
     Objects.requireNonNull(containerResponse);
@@ -181,6 +182,8 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
       // where the Content-Length is set to a positive integer.
       final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf, contentLength);
       if (chunkedInput == null) {
+        // A user's implementation of createChunkedInput() behaved
+        // badly.  Clean up and bail out.
         this.byteBuf = null;
         byteBuf.release();
         throw new IllegalStateException("createChunkedInput() == null");
