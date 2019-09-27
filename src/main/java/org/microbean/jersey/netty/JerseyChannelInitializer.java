@@ -440,22 +440,26 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                        maxIncomingContentLength);
 
         // Build a CleartextHttp2ServerUpgradeHandler.  This is really
-        // a channel pipeline reconfigurator: it arranges things such
-        // that:
+        // a channel pipeline *reconfigurator*: it arranges things
+        // such that:
         //   * A private internal handler is added first (it will see
-        //     if a prior knowledge situation is occurring)
+        //     if a prior knowledge situation is occurring; see
+        //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L74-L100
+        //     for details)
         //   * The first argument, an HttpServerCodec, is added next
         //     (it will, if the prior knowledge handler doesn't bypass
         //     and remove it, be responsible for interpreting an HTTP
         //     1.1 message that might be destined for an upgrade to
         //     HTTP/2)
-        //   * The second argument, an HttpServerUpgradeHandler, is
-        //     added next (it will read an HttpMessage (an HTTP 1.1
-        //     message) and will see if it represents an upgrade
-        //     request)
+        //   * The second argument, an HttpServerUpgradeHandler,
+        //     created by us above, is added next (it will read an
+        //     HttpMessage (an HTTP 1.1 message) and will see if it
+        //     represents an upgrade request)
         //   * The third argument is held in reserve to be used only
         //     in those cases where the prior knowledge handler kicks
-        //     in
+        //     in; see
+        //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L90-L95
+        //     for details
         // This API is tremendously confusing; it's not just you.
         final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler =
           new CleartextHttp2ServerUpgradeHandler(httpServerCodec,
@@ -497,9 +501,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               // that deals with HTTP 100-class statuses...
               channelPipeline.replace(this, HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
 
-              // ...and then after that add the "real" initializer
-              // that will install a ChunkedWriteHandler followed by
-              // the main Jersey integration.
+              // ...and then after that add the "real" initializer (a
+              // JerseyChannelSubInitializer instance, defined below
+              // in this source file) that will install a
+              // ChunkedWriteHandler followed by the main Jersey
+              // integration.
               channelPipeline.addLast(JerseyChannelSubInitializer.class.getName(), jerseyChannelSubInitializer);
 
               // Forward the event on as we never touched it.
