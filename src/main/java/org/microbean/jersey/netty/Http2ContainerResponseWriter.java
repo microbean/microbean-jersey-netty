@@ -169,13 +169,12 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    */
   @Override
   protected final ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
-    //return new FunctionalByteBufChunkedInput<Http2DataFrame>(source, bb -> new DefaultHttp2DataFrame(bb), contentLength);
     return new FunctionalByteBufChunkedInput<Http2DataFrame>(source, DefaultHttp2DataFrame::new, contentLength);
   }
 
   /**
-   * {@linkplain ChannelHandlerContext#writeAndFlush(Object) Writes
-   * and flushes} {@link
+   * {@linkplain ChannelHandlerContext#write(Object) Writes} and
+   * implicitly flushes {@link
    * DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean) new
    * DefaultHttp2DataFrame(true)} when invoked.
    *
@@ -185,6 +184,10 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    */
   @Override
   protected final void writeLastContentMessage() {
+    // TODO: should this be writeAndFlush()? It is difficult to say.
+    // See
+    // https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java#L333-L343
+    // where this message would seem to trigger a flush automatically.
     this.channelHandlerContext.write(new DefaultHttp2DataFrame(true));
   }
 

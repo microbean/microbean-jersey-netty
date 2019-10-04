@@ -3,8 +3,9 @@
 [![Build Status](https://travis-ci.com/microbean/microbean-jersey-netty.svg?branch=master)](https://travis-ci.com/microbean/microbean-jersey-netty)
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.microbean/microbean-jersey-netty/badge.svg)](https://maven-badges.herokuapp.com/maven-central/org.microbean/microbean-jersey-netty)
 
-The microBean™ Jersey Netty Integration project integrates [Jersey](https://jersey.github.io/) into
-[Netty](https://netty.io) in an idiomatic way.
+The microBean™ Jersey Netty Integration project integrates
+[Jersey](https://jersey.github.io/) into [Netty](https://netty.io) in
+an idiomatic way.
 
 Jersey can be run as a simple handler of sorts in a [Netty
 pipeline](http://tutorials.jenkov.com/netty/netty-channelpipeline.html).
@@ -19,7 +20,19 @@ header](https://svn.tools.ietf.org/svn/wg/httpbis/specs/rfc7230.html#header.upgr
 [ALPN](https://www.rfc-editor.org/rfc/rfc7301#page-2) or [prior
 knowledge](https://http2.github.io/http2-spec/#known-http).
 
-# Usage
+## Installation
+
+Add a dependency on this project in your Netty-based Maven project:
+
+```
+<dependency>
+  <groupId>org.microbean</groupId>
+  <artifactId>microbean-jersey-netty</artifactId>
+  <version>0.9.3</version>
+</dependency>
+```
+
+## Usage
 
 To use, install an instance of
 [`JerseyChannelInitializer`](https://microbean.github.io/microbean-jersey-netty/apidocs/org/microbean/jersey/netty/JerseyChannelInitializer.html)

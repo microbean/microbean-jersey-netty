@@ -33,9 +33,9 @@
     <dependencies>
 
 
-      <!-- Imports. -->
+      <!-- Imports.  In general, order may be significant. -->
 
-
+      
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-base-specification</artifactId>
@@ -59,7 +59,7 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-
+      
       <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-bom</artifactId>

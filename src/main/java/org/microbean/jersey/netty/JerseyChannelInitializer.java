@@ -391,6 +391,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   @Override
   public final void initChannel(final Channel channel) {
     if (channel != null) {
+
+      // There are lots of calls to ChannelPipeline#addLast() below.
+      // A particularly nice, terse explanation of what this means for
+      // ChannelPipeline component composition can be found here:
+      // https://stackoverflow.com/a/42527075/208288
+      
       this.preInitChannel(channel);
 
       final ChannelPipeline channelPipeline = channel.pipeline();
@@ -646,6 +652,18 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
+      // The order, when using addLast(), is: inbound events flow
+      // "down", e.g. through ChunkedWriteHandler first (it's not an
+      // inbound handler so is ignored), and then to
+      // JerseyChannelInboundHandler.  Then outbound events ("writes")
+      // "hit" JerseyChannelInboundHandler first, which is not an
+      // outbound handler, so is ignored, and then
+      // ChunkedWriteHandler.
+      //
+      // Realistically the JerseyChannelInboundHandler initiates
+      // writes, so the ChunkedWriteHandler is the next outbound
+      // recipient.  See https://stackoverflow.com/a/42527075/208288
+      // for a nice explanation.
       channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(), new ChunkedWriteHandler());
       channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(), new JerseyChannelInboundHandler(baseUri, applicationHandler));
     }

@@ -138,19 +138,19 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * ContainerResponseWriter overrides.  Used only by Jersey, and on a
    * non-Netty-EventLoop-affiliated thread.
    */
-  
-  
+
+
   @Override
   public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
     Objects.requireNonNull(containerResponse);
     assert !this.inEventLoop();
 
     this.writeAndFlushStatusAndHeaders(containerResponse, contentLength);
-    
+
     final OutputStream returnValue;
     if (this.needsOutputStream(contentLength)) {
       assert contentLength != 0L;
-      
+
       // We've determined that there is a payload/entity.  Our
       // ultimate responsibility is to return an OutputStream the
       // end user's Jersey resource class will write to.
@@ -167,11 +167,11 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
         byteBuf = this.channelHandlerContext.alloc().ioBuffer();
       }
       assert byteBuf != null;
-      
+
       // We store a reference to it ONLY so that we can release it
       // at #commit() or #failure(Throwable) time.
       this.byteBuf = byteBuf;
-      
+
       // A ChunkedInput despite its name has nothing to do with
       // chunked Transfer-Encoding.  It is usable anywhere you like.
       // So here, because writes are happening on an OutputStream in
@@ -189,11 +189,11 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
         throw new IllegalStateException("createChunkedInput() == null");
       }
       this.chunkedInput = chunkedInput;
-      
+
       // Enqueue a task that will query the ChunkedInput for
       // its chunks via its readChunk() method on the event loop.
       channelHandlerContext.write(this.chunkedInput);
-      
+
       // Then return an OutputStream implementation that writes to
       // the very same ByteBuf, ensuring that writes take place on
       // the event loop.  The net effect is that as this stream
@@ -255,29 +255,33 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
           assert chunkedInput != null;
           assert byteBuf != null;
           assert byteBuf.refCnt() == 1;
-            
+
           // Mark our ChunkedInput as *closed to new input*.  It may
           // still contain contents that need to be read.  (This
           // effectively flips an internal switch in the ChunkedInput
           // that allows for isEndOfInput() to one day return true.)
           chunkedInput.close();
-          
+
           // This will tell the ChunkedWriteHandler outbound from us
-          // to "drain" our ChunkedInput via successive calls
-          // to #readChunk(ByteBufAllocator).  The isEndOfInput()
-          // method will be called as part of this process and will
+          // (see
+          // https://github.com/netty/netty/blob/4.1/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java)
+          // to "drain" our ChunkedInput via successive calls to
+          // #readChunk(ByteBufAllocator).  The isEndOfInput() method
+          // will be called as part of this process and will
           // eventually return true.
           channelHandlerContext.flush();
-          
+
           // Assert that the ChunkedInput is drained and release its
           // wrapped ByteBuf.
           assert chunkedInput.isEndOfInput();
           final boolean released = byteBuf.release();
           assert released;
-          
+
           // Send whatever magic message it is that tells the HTTP
           // machinery to finish up.
-          this.writeLastContentMessage();        
+          this.writeLastContentMessage();
+
+          // We're a Callable that returns Void, so we return null.
           return null;
         });
     }
@@ -382,7 +386,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
         throw throwMe;
       }
     }
-    
+
     // See
     // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/grizzly2-http/src/main/java/org/glassfish/jersey/grizzly2/httpserver/GrizzlyHttpContainer.java#L256-L281,
     // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jdk-http/src/main/java/org/glassfish/jersey/jdkhttp/JdkHttpHandlerContainer.java#L301-L311,
@@ -516,7 +520,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * @see ChannelHandlerContext#write(Object)
    */
   protected abstract void writeLastContentMessage();
-  
+
   /**
    * Called when this {@link AbstractNettyContainerResponseWriter}
    * should {@linkplain ChannelHandlerContext#writeAndFlush(Object)
@@ -594,7 +598,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Utility methods.
    */
 
-  
+
   protected final boolean inEventLoop() {
     return this.channelHandlerContext.executor().inEventLoop();
   }
@@ -603,7 +607,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
                                        final BiConsumer<? super String, ? super List<String>> headersTarget) {
     copyHeaders(headersSource, UnaryOperator.identity(), headersTarget);
   }
-  
+
   public static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
                                        UnaryOperator<String> keyTransformer,
                                        final BiConsumer<? super String, ? super List<String>> headersTarget) {
