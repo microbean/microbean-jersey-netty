@@ -177,38 +177,41 @@
 <span class="sourceLineNo">169</span>   */<a name="line.169"></a>
 <span class="sourceLineNo">170</span>  @Override<a name="line.170"></a>
 <span class="sourceLineNo">171</span>  protected final ChunkedInput&lt;?&gt; createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {<a name="line.171"></a>
-<span class="sourceLineNo">172</span>    //return new FunctionalByteBufChunkedInput&lt;Http2DataFrame&gt;(source, bb -&gt; new DefaultHttp2DataFrame(bb), contentLength);<a name="line.172"></a>
-<span class="sourceLineNo">173</span>    return new FunctionalByteBufChunkedInput&lt;Http2DataFrame&gt;(source, DefaultHttp2DataFrame::new, contentLength);<a name="line.173"></a>
-<span class="sourceLineNo">174</span>  }<a name="line.174"></a>
-<span class="sourceLineNo">175</span><a name="line.175"></a>
-<span class="sourceLineNo">176</span>  /**<a name="line.176"></a>
-<span class="sourceLineNo">177</span>   * {@linkplain ChannelHandlerContext#writeAndFlush(Object) Writes<a name="line.177"></a>
-<span class="sourceLineNo">178</span>   * and flushes} {@link<a name="line.178"></a>
-<span class="sourceLineNo">179</span>   * DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean) new<a name="line.179"></a>
-<span class="sourceLineNo">180</span>   * DefaultHttp2DataFrame(true)} when invoked.<a name="line.180"></a>
-<span class="sourceLineNo">181</span>   *<a name="line.181"></a>
-<span class="sourceLineNo">182</span>   * @see DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean)<a name="line.182"></a>
-<span class="sourceLineNo">183</span>   *<a name="line.183"></a>
-<span class="sourceLineNo">184</span>   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage()<a name="line.184"></a>
-<span class="sourceLineNo">185</span>   */<a name="line.185"></a>
-<span class="sourceLineNo">186</span>  @Override<a name="line.186"></a>
-<span class="sourceLineNo">187</span>  protected final void writeLastContentMessage() {<a name="line.187"></a>
-<span class="sourceLineNo">188</span>    this.channelHandlerContext.write(new DefaultHttp2DataFrame(true));<a name="line.188"></a>
-<span class="sourceLineNo">189</span>  }<a name="line.189"></a>
-<span class="sourceLineNo">190</span><a name="line.190"></a>
-<span class="sourceLineNo">191</span>  /**<a name="line.191"></a>
-<span class="sourceLineNo">192</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} a new<a name="line.192"></a>
-<span class="sourceLineNo">193</span>   * {@link DefaultHttp2Headers} message with a {@linkplain<a name="line.193"></a>
-<span class="sourceLineNo">194</span>   * Http2Headers#status(CharSequence) status} equal to {@code 500}.<a name="line.194"></a>
-<span class="sourceLineNo">195</span>   *<a name="line.195"></a>
-<span class="sourceLineNo">196</span>   * @see AbstractNettyContainerResponseWriter#writeFailureMessage()<a name="line.196"></a>
-<span class="sourceLineNo">197</span>   */<a name="line.197"></a>
-<span class="sourceLineNo">198</span>  @Override<a name="line.198"></a>
-<span class="sourceLineNo">199</span>  protected final void writeFailureMessage() {<a name="line.199"></a>
-<span class="sourceLineNo">200</span>    this.channelHandlerContext.write(new DefaultHttp2Headers().status(HttpResponseStatus.INTERNAL_SERVER_ERROR.codeAsText()));<a name="line.200"></a>
-<span class="sourceLineNo">201</span>  }<a name="line.201"></a>
-<span class="sourceLineNo">202</span><a name="line.202"></a>
-<span class="sourceLineNo">203</span>}<a name="line.203"></a>
+<span class="sourceLineNo">172</span>    return new FunctionalByteBufChunkedInput&lt;Http2DataFrame&gt;(source, DefaultHttp2DataFrame::new, contentLength);<a name="line.172"></a>
+<span class="sourceLineNo">173</span>  }<a name="line.173"></a>
+<span class="sourceLineNo">174</span><a name="line.174"></a>
+<span class="sourceLineNo">175</span>  /**<a name="line.175"></a>
+<span class="sourceLineNo">176</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} and<a name="line.176"></a>
+<span class="sourceLineNo">177</span>   * implicitly flushes {@link<a name="line.177"></a>
+<span class="sourceLineNo">178</span>   * DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean) new<a name="line.178"></a>
+<span class="sourceLineNo">179</span>   * DefaultHttp2DataFrame(true)} when invoked.<a name="line.179"></a>
+<span class="sourceLineNo">180</span>   *<a name="line.180"></a>
+<span class="sourceLineNo">181</span>   * @see DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean)<a name="line.181"></a>
+<span class="sourceLineNo">182</span>   *<a name="line.182"></a>
+<span class="sourceLineNo">183</span>   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage()<a name="line.183"></a>
+<span class="sourceLineNo">184</span>   */<a name="line.184"></a>
+<span class="sourceLineNo">185</span>  @Override<a name="line.185"></a>
+<span class="sourceLineNo">186</span>  protected final void writeLastContentMessage() {<a name="line.186"></a>
+<span class="sourceLineNo">187</span>    // TODO: should this be writeAndFlush()? It is difficult to say.<a name="line.187"></a>
+<span class="sourceLineNo">188</span>    // See<a name="line.188"></a>
+<span class="sourceLineNo">189</span>    // https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java#L333-L343<a name="line.189"></a>
+<span class="sourceLineNo">190</span>    // where this message would seem to trigger a flush automatically.<a name="line.190"></a>
+<span class="sourceLineNo">191</span>    this.channelHandlerContext.write(new DefaultHttp2DataFrame(true));<a name="line.191"></a>
+<span class="sourceLineNo">192</span>  }<a name="line.192"></a>
+<span class="sourceLineNo">193</span><a name="line.193"></a>
+<span class="sourceLineNo">194</span>  /**<a name="line.194"></a>
+<span class="sourceLineNo">195</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} a new<a name="line.195"></a>
+<span class="sourceLineNo">196</span>   * {@link DefaultHttp2Headers} message with a {@linkplain<a name="line.196"></a>
+<span class="sourceLineNo">197</span>   * Http2Headers#status(CharSequence) status} equal to {@code 500}.<a name="line.197"></a>
+<span class="sourceLineNo">198</span>   *<a name="line.198"></a>
+<span class="sourceLineNo">199</span>   * @see AbstractNettyContainerResponseWriter#writeFailureMessage()<a name="line.199"></a>
+<span class="sourceLineNo">200</span>   */<a name="line.200"></a>
+<span class="sourceLineNo">201</span>  @Override<a name="line.201"></a>
+<span class="sourceLineNo">202</span>  protected final void writeFailureMessage() {<a name="line.202"></a>
+<span class="sourceLineNo">203</span>    this.channelHandlerContext.write(new DefaultHttp2Headers().status(HttpResponseStatus.INTERNAL_SERVER_ERROR.codeAsText()));<a name="line.203"></a>
+<span class="sourceLineNo">204</span>  }<a name="line.204"></a>
+<span class="sourceLineNo">205</span><a name="line.205"></a>
+<span class="sourceLineNo">206</span>}<a name="line.206"></a>
 
 
 

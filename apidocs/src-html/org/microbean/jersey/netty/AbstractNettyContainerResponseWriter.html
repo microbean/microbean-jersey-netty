@@ -146,19 +146,19 @@
 <span class="sourceLineNo">138</span>   * ContainerResponseWriter overrides.  Used only by Jersey, and on a<a name="line.138"></a>
 <span class="sourceLineNo">139</span>   * non-Netty-EventLoop-affiliated thread.<a name="line.139"></a>
 <span class="sourceLineNo">140</span>   */<a name="line.140"></a>
-<span class="sourceLineNo">141</span>  <a name="line.141"></a>
-<span class="sourceLineNo">142</span>  <a name="line.142"></a>
+<span class="sourceLineNo">141</span><a name="line.141"></a>
+<span class="sourceLineNo">142</span><a name="line.142"></a>
 <span class="sourceLineNo">143</span>  @Override<a name="line.143"></a>
 <span class="sourceLineNo">144</span>  public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {<a name="line.144"></a>
 <span class="sourceLineNo">145</span>    Objects.requireNonNull(containerResponse);<a name="line.145"></a>
 <span class="sourceLineNo">146</span>    assert !this.inEventLoop();<a name="line.146"></a>
 <span class="sourceLineNo">147</span><a name="line.147"></a>
 <span class="sourceLineNo">148</span>    this.writeAndFlushStatusAndHeaders(containerResponse, contentLength);<a name="line.148"></a>
-<span class="sourceLineNo">149</span>    <a name="line.149"></a>
+<span class="sourceLineNo">149</span><a name="line.149"></a>
 <span class="sourceLineNo">150</span>    final OutputStream returnValue;<a name="line.150"></a>
 <span class="sourceLineNo">151</span>    if (this.needsOutputStream(contentLength)) {<a name="line.151"></a>
 <span class="sourceLineNo">152</span>      assert contentLength != 0L;<a name="line.152"></a>
-<span class="sourceLineNo">153</span>      <a name="line.153"></a>
+<span class="sourceLineNo">153</span><a name="line.153"></a>
 <span class="sourceLineNo">154</span>      // We've determined that there is a payload/entity.  Our<a name="line.154"></a>
 <span class="sourceLineNo">155</span>      // ultimate responsibility is to return an OutputStream the<a name="line.155"></a>
 <span class="sourceLineNo">156</span>      // end user's Jersey resource class will write to.<a name="line.156"></a>
@@ -175,11 +175,11 @@
 <span class="sourceLineNo">167</span>        byteBuf = this.channelHandlerContext.alloc().ioBuffer();<a name="line.167"></a>
 <span class="sourceLineNo">168</span>      }<a name="line.168"></a>
 <span class="sourceLineNo">169</span>      assert byteBuf != null;<a name="line.169"></a>
-<span class="sourceLineNo">170</span>      <a name="line.170"></a>
+<span class="sourceLineNo">170</span><a name="line.170"></a>
 <span class="sourceLineNo">171</span>      // We store a reference to it ONLY so that we can release it<a name="line.171"></a>
 <span class="sourceLineNo">172</span>      // at #commit() or #failure(Throwable) time.<a name="line.172"></a>
 <span class="sourceLineNo">173</span>      this.byteBuf = byteBuf;<a name="line.173"></a>
-<span class="sourceLineNo">174</span>      <a name="line.174"></a>
+<span class="sourceLineNo">174</span><a name="line.174"></a>
 <span class="sourceLineNo">175</span>      // A ChunkedInput despite its name has nothing to do with<a name="line.175"></a>
 <span class="sourceLineNo">176</span>      // chunked Transfer-Encoding.  It is usable anywhere you like.<a name="line.176"></a>
 <span class="sourceLineNo">177</span>      // So here, because writes are happening on an OutputStream in<a name="line.177"></a>
@@ -197,11 +197,11 @@
 <span class="sourceLineNo">189</span>        throw new IllegalStateException("createChunkedInput() == null");<a name="line.189"></a>
 <span class="sourceLineNo">190</span>      }<a name="line.190"></a>
 <span class="sourceLineNo">191</span>      this.chunkedInput = chunkedInput;<a name="line.191"></a>
-<span class="sourceLineNo">192</span>      <a name="line.192"></a>
+<span class="sourceLineNo">192</span><a name="line.192"></a>
 <span class="sourceLineNo">193</span>      // Enqueue a task that will query the ChunkedInput for<a name="line.193"></a>
 <span class="sourceLineNo">194</span>      // its chunks via its readChunk() method on the event loop.<a name="line.194"></a>
 <span class="sourceLineNo">195</span>      channelHandlerContext.write(this.chunkedInput);<a name="line.195"></a>
-<span class="sourceLineNo">196</span>      <a name="line.196"></a>
+<span class="sourceLineNo">196</span><a name="line.196"></a>
 <span class="sourceLineNo">197</span>      // Then return an OutputStream implementation that writes to<a name="line.197"></a>
 <span class="sourceLineNo">198</span>      // the very same ByteBuf, ensuring that writes take place on<a name="line.198"></a>
 <span class="sourceLineNo">199</span>      // the event loop.  The net effect is that as this stream<a name="line.199"></a>
@@ -263,374 +263,378 @@
 <span class="sourceLineNo">255</span>          assert chunkedInput != null;<a name="line.255"></a>
 <span class="sourceLineNo">256</span>          assert byteBuf != null;<a name="line.256"></a>
 <span class="sourceLineNo">257</span>          assert byteBuf.refCnt() == 1;<a name="line.257"></a>
-<span class="sourceLineNo">258</span>            <a name="line.258"></a>
+<span class="sourceLineNo">258</span><a name="line.258"></a>
 <span class="sourceLineNo">259</span>          // Mark our ChunkedInput as *closed to new input*.  It may<a name="line.259"></a>
 <span class="sourceLineNo">260</span>          // still contain contents that need to be read.  (This<a name="line.260"></a>
 <span class="sourceLineNo">261</span>          // effectively flips an internal switch in the ChunkedInput<a name="line.261"></a>
 <span class="sourceLineNo">262</span>          // that allows for isEndOfInput() to one day return true.)<a name="line.262"></a>
 <span class="sourceLineNo">263</span>          chunkedInput.close();<a name="line.263"></a>
-<span class="sourceLineNo">264</span>          <a name="line.264"></a>
+<span class="sourceLineNo">264</span><a name="line.264"></a>
 <span class="sourceLineNo">265</span>          // This will tell the ChunkedWriteHandler outbound from us<a name="line.265"></a>
-<span class="sourceLineNo">266</span>          // to "drain" our ChunkedInput via successive calls<a name="line.266"></a>
-<span class="sourceLineNo">267</span>          // to #readChunk(ByteBufAllocator).  The isEndOfInput()<a name="line.267"></a>
-<span class="sourceLineNo">268</span>          // method will be called as part of this process and will<a name="line.268"></a>
-<span class="sourceLineNo">269</span>          // eventually return true.<a name="line.269"></a>
-<span class="sourceLineNo">270</span>          channelHandlerContext.flush();<a name="line.270"></a>
-<span class="sourceLineNo">271</span>          <a name="line.271"></a>
-<span class="sourceLineNo">272</span>          // Assert that the ChunkedInput is drained and release its<a name="line.272"></a>
-<span class="sourceLineNo">273</span>          // wrapped ByteBuf.<a name="line.273"></a>
-<span class="sourceLineNo">274</span>          assert chunkedInput.isEndOfInput();<a name="line.274"></a>
-<span class="sourceLineNo">275</span>          final boolean released = byteBuf.release();<a name="line.275"></a>
-<span class="sourceLineNo">276</span>          assert released;<a name="line.276"></a>
-<span class="sourceLineNo">277</span>          <a name="line.277"></a>
-<span class="sourceLineNo">278</span>          // Send whatever magic message it is that tells the HTTP<a name="line.278"></a>
-<span class="sourceLineNo">279</span>          // machinery to finish up.<a name="line.279"></a>
-<span class="sourceLineNo">280</span>          this.writeLastContentMessage();        <a name="line.280"></a>
-<span class="sourceLineNo">281</span>          return null;<a name="line.281"></a>
-<span class="sourceLineNo">282</span>        });<a name="line.282"></a>
-<span class="sourceLineNo">283</span>    }<a name="line.283"></a>
-<span class="sourceLineNo">284</span>  }<a name="line.284"></a>
-<span class="sourceLineNo">285</span><a name="line.285"></a>
-<span class="sourceLineNo">286</span>  /**<a name="line.286"></a>
-<span class="sourceLineNo">287</span>   * Invoked on a non-event-loop thread by Jersey when, as far as<a name="line.287"></a>
-<span class="sourceLineNo">288</span>   * Jersey is concerned, all processing has completed unsuccessfully.<a name="line.288"></a>
-<span class="sourceLineNo">289</span>   *<a name="line.289"></a>
-<span class="sourceLineNo">290</span>   * &lt;p&gt;&lt;strong&gt;This method never returns.  It always throws a {@link<a name="line.290"></a>
-<span class="sourceLineNo">291</span>   * RuntimeException} or an {@link Error} of some<a name="line.291"></a>
-<span class="sourceLineNo">292</span>   * variety.&lt;/strong&gt;&lt;/p&gt;<a name="line.292"></a>
+<span class="sourceLineNo">266</span>          // (see<a name="line.266"></a>
+<span class="sourceLineNo">267</span>          // https://github.com/netty/netty/blob/4.1/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java)<a name="line.267"></a>
+<span class="sourceLineNo">268</span>          // to "drain" our ChunkedInput via successive calls to<a name="line.268"></a>
+<span class="sourceLineNo">269</span>          // #readChunk(ByteBufAllocator).  The isEndOfInput() method<a name="line.269"></a>
+<span class="sourceLineNo">270</span>          // will be called as part of this process and will<a name="line.270"></a>
+<span class="sourceLineNo">271</span>          // eventually return true.<a name="line.271"></a>
+<span class="sourceLineNo">272</span>          channelHandlerContext.flush();<a name="line.272"></a>
+<span class="sourceLineNo">273</span><a name="line.273"></a>
+<span class="sourceLineNo">274</span>          // Assert that the ChunkedInput is drained and release its<a name="line.274"></a>
+<span class="sourceLineNo">275</span>          // wrapped ByteBuf.<a name="line.275"></a>
+<span class="sourceLineNo">276</span>          assert chunkedInput.isEndOfInput();<a name="line.276"></a>
+<span class="sourceLineNo">277</span>          final boolean released = byteBuf.release();<a name="line.277"></a>
+<span class="sourceLineNo">278</span>          assert released;<a name="line.278"></a>
+<span class="sourceLineNo">279</span><a name="line.279"></a>
+<span class="sourceLineNo">280</span>          // Send whatever magic message it is that tells the HTTP<a name="line.280"></a>
+<span class="sourceLineNo">281</span>          // machinery to finish up.<a name="line.281"></a>
+<span class="sourceLineNo">282</span>          this.writeLastContentMessage();<a name="line.282"></a>
+<span class="sourceLineNo">283</span><a name="line.283"></a>
+<span class="sourceLineNo">284</span>          // We're a Callable that returns Void, so we return null.<a name="line.284"></a>
+<span class="sourceLineNo">285</span>          return null;<a name="line.285"></a>
+<span class="sourceLineNo">286</span>        });<a name="line.286"></a>
+<span class="sourceLineNo">287</span>    }<a name="line.287"></a>
+<span class="sourceLineNo">288</span>  }<a name="line.288"></a>
+<span class="sourceLineNo">289</span><a name="line.289"></a>
+<span class="sourceLineNo">290</span>  /**<a name="line.290"></a>
+<span class="sourceLineNo">291</span>   * Invoked on a non-event-loop thread by Jersey when, as far as<a name="line.291"></a>
+<span class="sourceLineNo">292</span>   * Jersey is concerned, all processing has completed unsuccessfully.<a name="line.292"></a>
 <span class="sourceLineNo">293</span>   *<a name="line.293"></a>
-<span class="sourceLineNo">294</span>   * &lt;h2&gt;Design Notes&lt;/h2&gt;<a name="line.294"></a>
-<span class="sourceLineNo">295</span>   *<a name="line.295"></a>
-<span class="sourceLineNo">296</span>   * &lt;p&gt;&lt;a<a name="line.296"></a>
-<span class="sourceLineNo">297</span>   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"<a name="line.297"></a>
-<span class="sourceLineNo">298</span>   * target="_parent"&gt;JAX-RS: Java&amp;trade; API for RESTful Web<a name="line.298"></a>
-<span class="sourceLineNo">299</span>   * Services, section 3.3.4&lt;/a&gt; governs this method, but it is<a name="line.299"></a>
-<span class="sourceLineNo">300</span>   * somewhat ambiguous whether this method represents the container<a name="line.300"></a>
-<span class="sourceLineNo">301</span>   * itself.  All Jersey-supplied {@link ContainerResponseWriter}<a name="line.301"></a>
-<span class="sourceLineNo">302</span>   * implementations (except their &lt;a<a name="line.302"></a>
-<span class="sourceLineNo">303</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181"<a name="line.303"></a>
-<span class="sourceLineNo">304</span>   * target="_parent"&gt;Netty container&lt;/a&gt;, which seems to be &lt;a<a name="line.304"></a>
-<span class="sourceLineNo">305</span>   * href="https://github.com/jersey/jersey/pull/3791"<a name="line.305"></a>
-<span class="sourceLineNo">306</span>   * target="_parent"&gt;buggy in this regard&lt;/a&gt;) rethrow the supplied<a name="line.306"></a>
-<span class="sourceLineNo">307</span>   * {@link Throwable} as some kind of {@link RuntimeException} from<a name="line.307"></a>
-<span class="sourceLineNo">308</span>   * their implementations of this method, so we follow suit.&lt;/p&gt;<a name="line.308"></a>
-<span class="sourceLineNo">309</span>   *<a name="line.309"></a>
-<span class="sourceLineNo">310</span>   * @param throwable the {@link Throwable} that caused failure;<a name="line.310"></a>
-<span class="sourceLineNo">311</span>   * strictly speaking may be {@code null}<a name="line.311"></a>
-<span class="sourceLineNo">312</span>   *<a name="line.312"></a>
-<span class="sourceLineNo">313</span>   * @exception ContainerException &lt;strong&gt;thrown whenever this method<a name="line.313"></a>
-<span class="sourceLineNo">314</span>   * completes without further problems, or if the supplied {@link<a name="line.314"></a>
-<span class="sourceLineNo">315</span>   * Throwable} is itself a {@link ContainerException}, in order to<a name="line.315"></a>
-<span class="sourceLineNo">316</span>   * comply with section 3.3.4 of the JAX-RS 2.1<a name="line.316"></a>
-<span class="sourceLineNo">317</span>   * specification&lt;/strong&gt;<a name="line.317"></a>
-<span class="sourceLineNo">318</span>   *<a name="line.318"></a>
-<span class="sourceLineNo">319</span>   * @exception RuntimeException if the supplied {@link Throwable} is<a name="line.319"></a>
-<span class="sourceLineNo">320</span>   * itself a {@link RuntimeException} and this method completes<a name="line.320"></a>
-<span class="sourceLineNo">321</span>   * without further problems, or if an error occurs while processing<a name="line.321"></a>
-<span class="sourceLineNo">322</span>   * the supplied {@link Throwable} in which case the supplied {@link<a name="line.322"></a>
-<span class="sourceLineNo">323</span>   * Throwable} will be {@linkplain Throwable#addSuppressed(Throwable)<a name="line.323"></a>
-<span class="sourceLineNo">324</span>   * added as a suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.324"></a>
-<span class="sourceLineNo">325</span>   *<a name="line.325"></a>
-<span class="sourceLineNo">326</span>   * @exception Error if the supplied {@link Throwable} is itself an<a name="line.326"></a>
-<span class="sourceLineNo">327</span>   * {@link Error} and this method completes without further problems,<a name="line.327"></a>
-<span class="sourceLineNo">328</span>   * or if an error occurs while processing the supplied {@link<a name="line.328"></a>
-<span class="sourceLineNo">329</span>   * Throwable} in which case the supplied {@link Throwable} will be<a name="line.329"></a>
-<span class="sourceLineNo">330</span>   * {@linkplain Throwable#addSuppressed(Throwable) added as a<a name="line.330"></a>
-<span class="sourceLineNo">331</span>   * suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.331"></a>
-<span class="sourceLineNo">332</span>   *<a name="line.332"></a>
-<span class="sourceLineNo">333</span>   * @see ContainerResponseWriter#failure(Throwable)<a name="line.333"></a>
-<span class="sourceLineNo">334</span>   *<a name="line.334"></a>
-<span class="sourceLineNo">335</span>   * @see &lt;a<a name="line.335"></a>
-<span class="sourceLineNo">336</span>   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"<a name="line.336"></a>
-<span class="sourceLineNo">337</span>   * target="_parent"&gt;JAX-RS: Java&amp;trade; API for RESTful Web<a name="line.337"></a>
-<span class="sourceLineNo">338</span>   * Services, section 3.3.4&lt;/a&gt;<a name="line.338"></a>
-<span class="sourceLineNo">339</span>   */<a name="line.339"></a>
-<span class="sourceLineNo">340</span>  @Override<a name="line.340"></a>
-<span class="sourceLineNo">341</span>  public final void failure(final Throwable throwable) {<a name="line.341"></a>
-<span class="sourceLineNo">342</span>    if (!this.inEventLoop()) {<a name="line.342"></a>
-<span class="sourceLineNo">343</span>      final ContainerException throwMe = new ContainerException("!this.inEventLoop()");<a name="line.343"></a>
-<span class="sourceLineNo">344</span>      if (throwable != null) {<a name="line.344"></a>
-<span class="sourceLineNo">345</span>        throwMe.addSuppressed(throwable);<a name="line.345"></a>
-<span class="sourceLineNo">346</span>      }<a name="line.346"></a>
-<span class="sourceLineNo">347</span>      throw throwMe;<a name="line.347"></a>
-<span class="sourceLineNo">348</span>    }<a name="line.348"></a>
-<span class="sourceLineNo">349</span><a name="line.349"></a>
-<span class="sourceLineNo">350</span>    final ChunkedInput&lt;?&gt; chunkedInput = this.chunkedInput;<a name="line.350"></a>
-<span class="sourceLineNo">351</span>    this.chunkedInput = null;<a name="line.351"></a>
-<span class="sourceLineNo">352</span>    final ReferenceCounted byteBuf = this.byteBuf;<a name="line.352"></a>
-<span class="sourceLineNo">353</span>    this.byteBuf = null;<a name="line.353"></a>
-<span class="sourceLineNo">354</span>    if (chunkedInput != null) {<a name="line.354"></a>
-<span class="sourceLineNo">355</span>      try {<a name="line.355"></a>
-<span class="sourceLineNo">356</span>        this.channelHandlerContext.executor().submit(() -&gt; {<a name="line.356"></a>
-<span class="sourceLineNo">357</span>            try {<a name="line.357"></a>
-<span class="sourceLineNo">358</span>              assert inEventLoop();<a name="line.358"></a>
-<span class="sourceLineNo">359</span>              this.writeFailureMessage();<a name="line.359"></a>
-<span class="sourceLineNo">360</span>              assert byteBuf != null;<a name="line.360"></a>
-<span class="sourceLineNo">361</span>              assert byteBuf.refCnt() == 1;<a name="line.361"></a>
-<span class="sourceLineNo">362</span>              final boolean released = byteBuf.release();<a name="line.362"></a>
-<span class="sourceLineNo">363</span>              assert released;<a name="line.363"></a>
-<span class="sourceLineNo">364</span>            } catch (final RuntimeException | Error throwMe) {<a name="line.364"></a>
-<span class="sourceLineNo">365</span>              if (throwable != null) {<a name="line.365"></a>
-<span class="sourceLineNo">366</span>                throwMe.addSuppressed(throwable);<a name="line.366"></a>
-<span class="sourceLineNo">367</span>              }<a name="line.367"></a>
-<span class="sourceLineNo">368</span>              throw throwMe;<a name="line.368"></a>
-<span class="sourceLineNo">369</span>            } finally {<a name="line.369"></a>
-<span class="sourceLineNo">370</span>              channelHandlerContext.flush();<a name="line.370"></a>
-<span class="sourceLineNo">371</span>              channelHandlerContext.close();<a name="line.371"></a>
-<span class="sourceLineNo">372</span>            }<a name="line.372"></a>
-<span class="sourceLineNo">373</span>            return null;<a name="line.373"></a>
-<span class="sourceLineNo">374</span>          });<a name="line.374"></a>
-<span class="sourceLineNo">375</span>      } catch (final RuntimeException | Error throwMe) {<a name="line.375"></a>
-<span class="sourceLineNo">376</span>        // There was a problem submitting the task to the Netty<a name="line.376"></a>
-<span class="sourceLineNo">377</span>        // infrastructure.  Make sure we don't lose the original<a name="line.377"></a>
-<span class="sourceLineNo">378</span>        // Throwable.<a name="line.378"></a>
-<span class="sourceLineNo">379</span>        if (throwable != null) {<a name="line.379"></a>
-<span class="sourceLineNo">380</span>          throwMe.addSuppressed(throwable);<a name="line.380"></a>
-<span class="sourceLineNo">381</span>        }<a name="line.381"></a>
-<span class="sourceLineNo">382</span>        throw throwMe;<a name="line.382"></a>
-<span class="sourceLineNo">383</span>      }<a name="line.383"></a>
-<span class="sourceLineNo">384</span>    }<a name="line.384"></a>
-<span class="sourceLineNo">385</span>    <a name="line.385"></a>
-<span class="sourceLineNo">386</span>    // See<a name="line.386"></a>
-<span class="sourceLineNo">387</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/grizzly2-http/src/main/java/org/glassfish/jersey/grizzly2/httpserver/GrizzlyHttpContainer.java#L256-L281,<a name="line.387"></a>
-<span class="sourceLineNo">388</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jdk-http/src/main/java/org/glassfish/jersey/jdkhttp/JdkHttpHandlerContainer.java#L301-L311,<a name="line.388"></a>
-<span class="sourceLineNo">389</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jetty-http/src/main/java/org/glassfish/jersey/jetty/JettyHttpContainer.java#L332-L357,<a name="line.389"></a>
-<span class="sourceLineNo">390</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/jersey-servlet-core/src/main/java/org/glassfish/jersey/servlet/internal/ResponseWriter.java#L212-L238,<a name="line.390"></a>
-<span class="sourceLineNo">391</span>    // and<a name="line.391"></a>
-<span class="sourceLineNo">392</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/simple-http/src/main/java/org/glassfish/jersey/simple/SimpleContainer.java#L219-L232.<a name="line.392"></a>
-<span class="sourceLineNo">393</span>    //<a name="line.393"></a>
-<span class="sourceLineNo">394</span>    // All these Jersey-supplied containers rethrow the supplied<a name="line.394"></a>
-<span class="sourceLineNo">395</span>    // Throwable. But the Netty one does not:<a name="line.395"></a>
-<span class="sourceLineNo">396</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181.<a name="line.396"></a>
+<span class="sourceLineNo">294</span>   * &lt;p&gt;&lt;strong&gt;This method never returns.  It always throws a {@link<a name="line.294"></a>
+<span class="sourceLineNo">295</span>   * RuntimeException} or an {@link Error} of some<a name="line.295"></a>
+<span class="sourceLineNo">296</span>   * variety.&lt;/strong&gt;&lt;/p&gt;<a name="line.296"></a>
+<span class="sourceLineNo">297</span>   *<a name="line.297"></a>
+<span class="sourceLineNo">298</span>   * &lt;h2&gt;Design Notes&lt;/h2&gt;<a name="line.298"></a>
+<span class="sourceLineNo">299</span>   *<a name="line.299"></a>
+<span class="sourceLineNo">300</span>   * &lt;p&gt;&lt;a<a name="line.300"></a>
+<span class="sourceLineNo">301</span>   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"<a name="line.301"></a>
+<span class="sourceLineNo">302</span>   * target="_parent"&gt;JAX-RS: Java&amp;trade; API for RESTful Web<a name="line.302"></a>
+<span class="sourceLineNo">303</span>   * Services, section 3.3.4&lt;/a&gt; governs this method, but it is<a name="line.303"></a>
+<span class="sourceLineNo">304</span>   * somewhat ambiguous whether this method represents the container<a name="line.304"></a>
+<span class="sourceLineNo">305</span>   * itself.  All Jersey-supplied {@link ContainerResponseWriter}<a name="line.305"></a>
+<span class="sourceLineNo">306</span>   * implementations (except their &lt;a<a name="line.306"></a>
+<span class="sourceLineNo">307</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181"<a name="line.307"></a>
+<span class="sourceLineNo">308</span>   * target="_parent"&gt;Netty container&lt;/a&gt;, which seems to be &lt;a<a name="line.308"></a>
+<span class="sourceLineNo">309</span>   * href="https://github.com/jersey/jersey/pull/3791"<a name="line.309"></a>
+<span class="sourceLineNo">310</span>   * target="_parent"&gt;buggy in this regard&lt;/a&gt;) rethrow the supplied<a name="line.310"></a>
+<span class="sourceLineNo">311</span>   * {@link Throwable} as some kind of {@link RuntimeException} from<a name="line.311"></a>
+<span class="sourceLineNo">312</span>   * their implementations of this method, so we follow suit.&lt;/p&gt;<a name="line.312"></a>
+<span class="sourceLineNo">313</span>   *<a name="line.313"></a>
+<span class="sourceLineNo">314</span>   * @param throwable the {@link Throwable} that caused failure;<a name="line.314"></a>
+<span class="sourceLineNo">315</span>   * strictly speaking may be {@code null}<a name="line.315"></a>
+<span class="sourceLineNo">316</span>   *<a name="line.316"></a>
+<span class="sourceLineNo">317</span>   * @exception ContainerException &lt;strong&gt;thrown whenever this method<a name="line.317"></a>
+<span class="sourceLineNo">318</span>   * completes without further problems, or if the supplied {@link<a name="line.318"></a>
+<span class="sourceLineNo">319</span>   * Throwable} is itself a {@link ContainerException}, in order to<a name="line.319"></a>
+<span class="sourceLineNo">320</span>   * comply with section 3.3.4 of the JAX-RS 2.1<a name="line.320"></a>
+<span class="sourceLineNo">321</span>   * specification&lt;/strong&gt;<a name="line.321"></a>
+<span class="sourceLineNo">322</span>   *<a name="line.322"></a>
+<span class="sourceLineNo">323</span>   * @exception RuntimeException if the supplied {@link Throwable} is<a name="line.323"></a>
+<span class="sourceLineNo">324</span>   * itself a {@link RuntimeException} and this method completes<a name="line.324"></a>
+<span class="sourceLineNo">325</span>   * without further problems, or if an error occurs while processing<a name="line.325"></a>
+<span class="sourceLineNo">326</span>   * the supplied {@link Throwable} in which case the supplied {@link<a name="line.326"></a>
+<span class="sourceLineNo">327</span>   * Throwable} will be {@linkplain Throwable#addSuppressed(Throwable)<a name="line.327"></a>
+<span class="sourceLineNo">328</span>   * added as a suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.328"></a>
+<span class="sourceLineNo">329</span>   *<a name="line.329"></a>
+<span class="sourceLineNo">330</span>   * @exception Error if the supplied {@link Throwable} is itself an<a name="line.330"></a>
+<span class="sourceLineNo">331</span>   * {@link Error} and this method completes without further problems,<a name="line.331"></a>
+<span class="sourceLineNo">332</span>   * or if an error occurs while processing the supplied {@link<a name="line.332"></a>
+<span class="sourceLineNo">333</span>   * Throwable} in which case the supplied {@link Throwable} will be<a name="line.333"></a>
+<span class="sourceLineNo">334</span>   * {@linkplain Throwable#addSuppressed(Throwable) added as a<a name="line.334"></a>
+<span class="sourceLineNo">335</span>   * suppressed &lt;code&gt;Throwable&lt;/code&gt;}<a name="line.335"></a>
+<span class="sourceLineNo">336</span>   *<a name="line.336"></a>
+<span class="sourceLineNo">337</span>   * @see ContainerResponseWriter#failure(Throwable)<a name="line.337"></a>
+<span class="sourceLineNo">338</span>   *<a name="line.338"></a>
+<span class="sourceLineNo">339</span>   * @see &lt;a<a name="line.339"></a>
+<span class="sourceLineNo">340</span>   * href="https://github.com/jax-rs/spec/blob/b4b0d91fc902d58dfa1670b2ee1bc34a640bb6f5/chapters/resources.tex#L143-L144"<a name="line.340"></a>
+<span class="sourceLineNo">341</span>   * target="_parent"&gt;JAX-RS: Java&amp;trade; API for RESTful Web<a name="line.341"></a>
+<span class="sourceLineNo">342</span>   * Services, section 3.3.4&lt;/a&gt;<a name="line.342"></a>
+<span class="sourceLineNo">343</span>   */<a name="line.343"></a>
+<span class="sourceLineNo">344</span>  @Override<a name="line.344"></a>
+<span class="sourceLineNo">345</span>  public final void failure(final Throwable throwable) {<a name="line.345"></a>
+<span class="sourceLineNo">346</span>    if (!this.inEventLoop()) {<a name="line.346"></a>
+<span class="sourceLineNo">347</span>      final ContainerException throwMe = new ContainerException("!this.inEventLoop()");<a name="line.347"></a>
+<span class="sourceLineNo">348</span>      if (throwable != null) {<a name="line.348"></a>
+<span class="sourceLineNo">349</span>        throwMe.addSuppressed(throwable);<a name="line.349"></a>
+<span class="sourceLineNo">350</span>      }<a name="line.350"></a>
+<span class="sourceLineNo">351</span>      throw throwMe;<a name="line.351"></a>
+<span class="sourceLineNo">352</span>    }<a name="line.352"></a>
+<span class="sourceLineNo">353</span><a name="line.353"></a>
+<span class="sourceLineNo">354</span>    final ChunkedInput&lt;?&gt; chunkedInput = this.chunkedInput;<a name="line.354"></a>
+<span class="sourceLineNo">355</span>    this.chunkedInput = null;<a name="line.355"></a>
+<span class="sourceLineNo">356</span>    final ReferenceCounted byteBuf = this.byteBuf;<a name="line.356"></a>
+<span class="sourceLineNo">357</span>    this.byteBuf = null;<a name="line.357"></a>
+<span class="sourceLineNo">358</span>    if (chunkedInput != null) {<a name="line.358"></a>
+<span class="sourceLineNo">359</span>      try {<a name="line.359"></a>
+<span class="sourceLineNo">360</span>        this.channelHandlerContext.executor().submit(() -&gt; {<a name="line.360"></a>
+<span class="sourceLineNo">361</span>            try {<a name="line.361"></a>
+<span class="sourceLineNo">362</span>              assert inEventLoop();<a name="line.362"></a>
+<span class="sourceLineNo">363</span>              this.writeFailureMessage();<a name="line.363"></a>
+<span class="sourceLineNo">364</span>              assert byteBuf != null;<a name="line.364"></a>
+<span class="sourceLineNo">365</span>              assert byteBuf.refCnt() == 1;<a name="line.365"></a>
+<span class="sourceLineNo">366</span>              final boolean released = byteBuf.release();<a name="line.366"></a>
+<span class="sourceLineNo">367</span>              assert released;<a name="line.367"></a>
+<span class="sourceLineNo">368</span>            } catch (final RuntimeException | Error throwMe) {<a name="line.368"></a>
+<span class="sourceLineNo">369</span>              if (throwable != null) {<a name="line.369"></a>
+<span class="sourceLineNo">370</span>                throwMe.addSuppressed(throwable);<a name="line.370"></a>
+<span class="sourceLineNo">371</span>              }<a name="line.371"></a>
+<span class="sourceLineNo">372</span>              throw throwMe;<a name="line.372"></a>
+<span class="sourceLineNo">373</span>            } finally {<a name="line.373"></a>
+<span class="sourceLineNo">374</span>              channelHandlerContext.flush();<a name="line.374"></a>
+<span class="sourceLineNo">375</span>              channelHandlerContext.close();<a name="line.375"></a>
+<span class="sourceLineNo">376</span>            }<a name="line.376"></a>
+<span class="sourceLineNo">377</span>            return null;<a name="line.377"></a>
+<span class="sourceLineNo">378</span>          });<a name="line.378"></a>
+<span class="sourceLineNo">379</span>      } catch (final RuntimeException | Error throwMe) {<a name="line.379"></a>
+<span class="sourceLineNo">380</span>        // There was a problem submitting the task to the Netty<a name="line.380"></a>
+<span class="sourceLineNo">381</span>        // infrastructure.  Make sure we don't lose the original<a name="line.381"></a>
+<span class="sourceLineNo">382</span>        // Throwable.<a name="line.382"></a>
+<span class="sourceLineNo">383</span>        if (throwable != null) {<a name="line.383"></a>
+<span class="sourceLineNo">384</span>          throwMe.addSuppressed(throwable);<a name="line.384"></a>
+<span class="sourceLineNo">385</span>        }<a name="line.385"></a>
+<span class="sourceLineNo">386</span>        throw throwMe;<a name="line.386"></a>
+<span class="sourceLineNo">387</span>      }<a name="line.387"></a>
+<span class="sourceLineNo">388</span>    }<a name="line.388"></a>
+<span class="sourceLineNo">389</span><a name="line.389"></a>
+<span class="sourceLineNo">390</span>    // See<a name="line.390"></a>
+<span class="sourceLineNo">391</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/grizzly2-http/src/main/java/org/glassfish/jersey/grizzly2/httpserver/GrizzlyHttpContainer.java#L256-L281,<a name="line.391"></a>
+<span class="sourceLineNo">392</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jdk-http/src/main/java/org/glassfish/jersey/jdkhttp/JdkHttpHandlerContainer.java#L301-L311,<a name="line.392"></a>
+<span class="sourceLineNo">393</span>    // https://github.com/eclipse-ee4j/jersey/blob/b7fbb3e75b16feb4d61cd6a5526a66962bf3ae83/containers/jetty-http/src/main/java/org/glassfish/jersey/jetty/JettyHttpContainer.java#L332-L357,<a name="line.393"></a>
+<span class="sourceLineNo">394</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/jersey-servlet-core/src/main/java/org/glassfish/jersey/servlet/internal/ResponseWriter.java#L212-L238,<a name="line.394"></a>
+<span class="sourceLineNo">395</span>    // and<a name="line.395"></a>
+<span class="sourceLineNo">396</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/simple-http/src/main/java/org/glassfish/jersey/simple/SimpleContainer.java#L219-L232.<a name="line.396"></a>
 <span class="sourceLineNo">397</span>    //<a name="line.397"></a>
-<span class="sourceLineNo">398</span>    // See also https://github.com/jersey/jersey/pull/3791, where it<a name="line.398"></a>
-<span class="sourceLineNo">399</span>    // is implied that the fact that Jersey's own Netty integration<a name="line.399"></a>
-<span class="sourceLineNo">400</span>    // does NOT rethrow it is a bug.  There is some ambiguity about<a name="line.400"></a>
-<span class="sourceLineNo">401</span>    // whether the failure(Throwable) method (this method) is supposed<a name="line.401"></a>
-<span class="sourceLineNo">402</span>    // to fully handle the supplied Throwable or if it is supposed to<a name="line.402"></a>
-<span class="sourceLineNo">403</span>    // propagate it outwards.  The ambiguity arises because you could<a name="line.403"></a>
-<span class="sourceLineNo">404</span>    // see that this very method is the place where an unhandled<a name="line.404"></a>
-<span class="sourceLineNo">405</span>    // Throwable is propagated--after all, we're in a<a name="line.405"></a>
-<span class="sourceLineNo">406</span>    // ContainerResponseWriter implementation--or you could see that<a name="line.406"></a>
-<span class="sourceLineNo">407</span>    // whatever is housing this class is the container, so the<a name="line.407"></a>
-<span class="sourceLineNo">408</span>    // supplied Throwable should be wrapped and rethrown.  JAX-RS<a name="line.408"></a>
-<span class="sourceLineNo">409</span>    // section 3.3.4 is not very helpful here.  We follow the other<a name="line.409"></a>
-<span class="sourceLineNo">410</span>    // Jersey-supplied containers here.<a name="line.410"></a>
-<span class="sourceLineNo">411</span>    if (throwable instanceof RuntimeException) {<a name="line.411"></a>
-<span class="sourceLineNo">412</span>      throw (RuntimeException)throwable;<a name="line.412"></a>
-<span class="sourceLineNo">413</span>    } else if (throwable instanceof Exception) {<a name="line.413"></a>
-<span class="sourceLineNo">414</span>      throw new ContainerException(throwable.getMessage(), throwable);<a name="line.414"></a>
-<span class="sourceLineNo">415</span>    } else if (throwable instanceof Error) {<a name="line.415"></a>
-<span class="sourceLineNo">416</span>      throw (Error)throwable;<a name="line.416"></a>
-<span class="sourceLineNo">417</span>    } else {<a name="line.417"></a>
-<span class="sourceLineNo">418</span>      throw new InternalError(throwable.getMessage(), throwable);<a name="line.418"></a>
-<span class="sourceLineNo">419</span>    }<a name="line.419"></a>
-<span class="sourceLineNo">420</span>  }<a name="line.420"></a>
-<span class="sourceLineNo">421</span><a name="line.421"></a>
-<span class="sourceLineNo">422</span>  /**<a name="line.422"></a>
-<span class="sourceLineNo">423</span>   * Returns {@code true} when invoked.<a name="line.423"></a>
-<span class="sourceLineNo">424</span>   *<a name="line.424"></a>
-<span class="sourceLineNo">425</span>   * &lt;p&gt;Note that this is a default value.  Response buffering &lt;a<a name="line.425"></a>
-<span class="sourceLineNo">426</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"&gt;can<a name="line.426"></a>
-<span class="sourceLineNo">427</span>   * be configured&lt;/a&gt;.&lt;/p&gt;<a name="line.427"></a>
+<span class="sourceLineNo">398</span>    // All these Jersey-supplied containers rethrow the supplied<a name="line.398"></a>
+<span class="sourceLineNo">399</span>    // Throwable. But the Netty one does not:<a name="line.399"></a>
+<span class="sourceLineNo">400</span>    // https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/NettyResponseWriter.java#L177-L181.<a name="line.400"></a>
+<span class="sourceLineNo">401</span>    //<a name="line.401"></a>
+<span class="sourceLineNo">402</span>    // See also https://github.com/jersey/jersey/pull/3791, where it<a name="line.402"></a>
+<span class="sourceLineNo">403</span>    // is implied that the fact that Jersey's own Netty integration<a name="line.403"></a>
+<span class="sourceLineNo">404</span>    // does NOT rethrow it is a bug.  There is some ambiguity about<a name="line.404"></a>
+<span class="sourceLineNo">405</span>    // whether the failure(Throwable) method (this method) is supposed<a name="line.405"></a>
+<span class="sourceLineNo">406</span>    // to fully handle the supplied Throwable or if it is supposed to<a name="line.406"></a>
+<span class="sourceLineNo">407</span>    // propagate it outwards.  The ambiguity arises because you could<a name="line.407"></a>
+<span class="sourceLineNo">408</span>    // see that this very method is the place where an unhandled<a name="line.408"></a>
+<span class="sourceLineNo">409</span>    // Throwable is propagated--after all, we're in a<a name="line.409"></a>
+<span class="sourceLineNo">410</span>    // ContainerResponseWriter implementation--or you could see that<a name="line.410"></a>
+<span class="sourceLineNo">411</span>    // whatever is housing this class is the container, so the<a name="line.411"></a>
+<span class="sourceLineNo">412</span>    // supplied Throwable should be wrapped and rethrown.  JAX-RS<a name="line.412"></a>
+<span class="sourceLineNo">413</span>    // section 3.3.4 is not very helpful here.  We follow the other<a name="line.413"></a>
+<span class="sourceLineNo">414</span>    // Jersey-supplied containers here.<a name="line.414"></a>
+<span class="sourceLineNo">415</span>    if (throwable instanceof RuntimeException) {<a name="line.415"></a>
+<span class="sourceLineNo">416</span>      throw (RuntimeException)throwable;<a name="line.416"></a>
+<span class="sourceLineNo">417</span>    } else if (throwable instanceof Exception) {<a name="line.417"></a>
+<span class="sourceLineNo">418</span>      throw new ContainerException(throwable.getMessage(), throwable);<a name="line.418"></a>
+<span class="sourceLineNo">419</span>    } else if (throwable instanceof Error) {<a name="line.419"></a>
+<span class="sourceLineNo">420</span>      throw (Error)throwable;<a name="line.420"></a>
+<span class="sourceLineNo">421</span>    } else {<a name="line.421"></a>
+<span class="sourceLineNo">422</span>      throw new InternalError(throwable.getMessage(), throwable);<a name="line.422"></a>
+<span class="sourceLineNo">423</span>    }<a name="line.423"></a>
+<span class="sourceLineNo">424</span>  }<a name="line.424"></a>
+<span class="sourceLineNo">425</span><a name="line.425"></a>
+<span class="sourceLineNo">426</span>  /**<a name="line.426"></a>
+<span class="sourceLineNo">427</span>   * Returns {@code true} when invoked.<a name="line.427"></a>
 <span class="sourceLineNo">428</span>   *<a name="line.428"></a>
-<span class="sourceLineNo">429</span>   * @return {@code true} when invoked<a name="line.429"></a>
-<span class="sourceLineNo">430</span>   *<a name="line.430"></a>
-<span class="sourceLineNo">431</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.431"></a>
+<span class="sourceLineNo">429</span>   * &lt;p&gt;Note that this is a default value.  Response buffering &lt;a<a name="line.429"></a>
+<span class="sourceLineNo">430</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"&gt;can<a name="line.430"></a>
+<span class="sourceLineNo">431</span>   * be configured&lt;/a&gt;.&lt;/p&gt;<a name="line.431"></a>
 <span class="sourceLineNo">432</span>   *<a name="line.432"></a>
-<span class="sourceLineNo">433</span>   * @see &lt;a<a name="line.433"></a>
-<span class="sourceLineNo">434</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.434"></a>
-<span class="sourceLineNo">435</span>   * target="_parent"&gt;&lt;code&gt;ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.435"></a>
+<span class="sourceLineNo">433</span>   * @return {@code true} when invoked<a name="line.433"></a>
+<span class="sourceLineNo">434</span>   *<a name="line.434"></a>
+<span class="sourceLineNo">435</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.435"></a>
 <span class="sourceLineNo">436</span>   *<a name="line.436"></a>
 <span class="sourceLineNo">437</span>   * @see &lt;a<a name="line.437"></a>
-<span class="sourceLineNo">438</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.438"></a>
-<span class="sourceLineNo">439</span>   * target="_parent"&gt;&lt;code&gt;OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.439"></a>
-<span class="sourceLineNo">440</span>   */<a name="line.440"></a>
-<span class="sourceLineNo">441</span>  @Override<a name="line.441"></a>
-<span class="sourceLineNo">442</span>  public boolean enableResponseBuffering() {<a name="line.442"></a>
-<span class="sourceLineNo">443</span>    assert !this.inEventLoop();<a name="line.443"></a>
-<span class="sourceLineNo">444</span><a name="line.444"></a>
-<span class="sourceLineNo">445</span>    return true;<a name="line.445"></a>
-<span class="sourceLineNo">446</span>  }<a name="line.446"></a>
-<span class="sourceLineNo">447</span><a name="line.447"></a>
-<span class="sourceLineNo">448</span>  @Override<a name="line.448"></a>
-<span class="sourceLineNo">449</span>  public final boolean suspend(final long timeout, final TimeUnit timeUnit, final TimeoutHandler timeoutHandler) {<a name="line.449"></a>
-<span class="sourceLineNo">450</span>    assert !this.inEventLoop();<a name="line.450"></a>
+<span class="sourceLineNo">438</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.438"></a>
+<span class="sourceLineNo">439</span>   * target="_parent"&gt;&lt;code&gt;ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.439"></a>
+<span class="sourceLineNo">440</span>   *<a name="line.440"></a>
+<span class="sourceLineNo">441</span>   * @see &lt;a<a name="line.441"></a>
+<span class="sourceLineNo">442</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.442"></a>
+<span class="sourceLineNo">443</span>   * target="_parent"&gt;&lt;code&gt;OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.443"></a>
+<span class="sourceLineNo">444</span>   */<a name="line.444"></a>
+<span class="sourceLineNo">445</span>  @Override<a name="line.445"></a>
+<span class="sourceLineNo">446</span>  public boolean enableResponseBuffering() {<a name="line.446"></a>
+<span class="sourceLineNo">447</span>    assert !this.inEventLoop();<a name="line.447"></a>
+<span class="sourceLineNo">448</span><a name="line.448"></a>
+<span class="sourceLineNo">449</span>    return true;<a name="line.449"></a>
+<span class="sourceLineNo">450</span>  }<a name="line.450"></a>
 <span class="sourceLineNo">451</span><a name="line.451"></a>
-<span class="sourceLineNo">452</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.452"></a>
-<span class="sourceLineNo">453</span>    final boolean returnValue;<a name="line.453"></a>
-<span class="sourceLineNo">454</span>    if (this.suspendTimeoutHandler != null) {<a name="line.454"></a>
-<span class="sourceLineNo">455</span>      returnValue = false;<a name="line.455"></a>
-<span class="sourceLineNo">456</span>    } else {<a name="line.456"></a>
-<span class="sourceLineNo">457</span>      this.suspendTimeoutHandler = () -&gt; {<a name="line.457"></a>
-<span class="sourceLineNo">458</span>        timeoutHandler.onTimeout(this);<a name="line.458"></a>
-<span class="sourceLineNo">459</span>        // TODO: not sure about this<a name="line.459"></a>
-<span class="sourceLineNo">460</span>        this.suspendTimeoutHandler = null;<a name="line.460"></a>
-<span class="sourceLineNo">461</span>      };<a name="line.461"></a>
-<span class="sourceLineNo">462</span>      if (timeout &gt; 0) {<a name="line.462"></a>
-<span class="sourceLineNo">463</span>        this.suspendTimeoutFuture =<a name="line.463"></a>
-<span class="sourceLineNo">464</span>          this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.464"></a>
-<span class="sourceLineNo">465</span>      }<a name="line.465"></a>
-<span class="sourceLineNo">466</span>      returnValue = true;<a name="line.466"></a>
-<span class="sourceLineNo">467</span>    }<a name="line.467"></a>
-<span class="sourceLineNo">468</span>    return returnValue;<a name="line.468"></a>
-<span class="sourceLineNo">469</span>  }<a name="line.469"></a>
-<span class="sourceLineNo">470</span><a name="line.470"></a>
-<span class="sourceLineNo">471</span>  @Override<a name="line.471"></a>
-<span class="sourceLineNo">472</span>  public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {<a name="line.472"></a>
-<span class="sourceLineNo">473</span>    assert !this.inEventLoop();<a name="line.473"></a>
+<span class="sourceLineNo">452</span>  @Override<a name="line.452"></a>
+<span class="sourceLineNo">453</span>  public final boolean suspend(final long timeout, final TimeUnit timeUnit, final TimeoutHandler timeoutHandler) {<a name="line.453"></a>
+<span class="sourceLineNo">454</span>    assert !this.inEventLoop();<a name="line.454"></a>
+<span class="sourceLineNo">455</span><a name="line.455"></a>
+<span class="sourceLineNo">456</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.456"></a>
+<span class="sourceLineNo">457</span>    final boolean returnValue;<a name="line.457"></a>
+<span class="sourceLineNo">458</span>    if (this.suspendTimeoutHandler != null) {<a name="line.458"></a>
+<span class="sourceLineNo">459</span>      returnValue = false;<a name="line.459"></a>
+<span class="sourceLineNo">460</span>    } else {<a name="line.460"></a>
+<span class="sourceLineNo">461</span>      this.suspendTimeoutHandler = () -&gt; {<a name="line.461"></a>
+<span class="sourceLineNo">462</span>        timeoutHandler.onTimeout(this);<a name="line.462"></a>
+<span class="sourceLineNo">463</span>        // TODO: not sure about this<a name="line.463"></a>
+<span class="sourceLineNo">464</span>        this.suspendTimeoutHandler = null;<a name="line.464"></a>
+<span class="sourceLineNo">465</span>      };<a name="line.465"></a>
+<span class="sourceLineNo">466</span>      if (timeout &gt; 0) {<a name="line.466"></a>
+<span class="sourceLineNo">467</span>        this.suspendTimeoutFuture =<a name="line.467"></a>
+<span class="sourceLineNo">468</span>          this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.468"></a>
+<span class="sourceLineNo">469</span>      }<a name="line.469"></a>
+<span class="sourceLineNo">470</span>      returnValue = true;<a name="line.470"></a>
+<span class="sourceLineNo">471</span>    }<a name="line.471"></a>
+<span class="sourceLineNo">472</span>    return returnValue;<a name="line.472"></a>
+<span class="sourceLineNo">473</span>  }<a name="line.473"></a>
 <span class="sourceLineNo">474</span><a name="line.474"></a>
-<span class="sourceLineNo">475</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.475"></a>
-<span class="sourceLineNo">476</span>    if (this.suspendTimeoutHandler == null) {<a name="line.476"></a>
-<span class="sourceLineNo">477</span>      throw new IllegalStateException();<a name="line.477"></a>
-<span class="sourceLineNo">478</span>    }<a name="line.478"></a>
-<span class="sourceLineNo">479</span>    if (this.suspendTimeoutFuture != null) {<a name="line.479"></a>
-<span class="sourceLineNo">480</span>      this.suspendTimeoutFuture.cancel(true);<a name="line.480"></a>
-<span class="sourceLineNo">481</span>    }<a name="line.481"></a>
-<span class="sourceLineNo">482</span>    if (timeout &gt; 0) {<a name="line.482"></a>
-<span class="sourceLineNo">483</span>      this.suspendTimeoutFuture =<a name="line.483"></a>
-<span class="sourceLineNo">484</span>        this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.484"></a>
+<span class="sourceLineNo">475</span>  @Override<a name="line.475"></a>
+<span class="sourceLineNo">476</span>  public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {<a name="line.476"></a>
+<span class="sourceLineNo">477</span>    assert !this.inEventLoop();<a name="line.477"></a>
+<span class="sourceLineNo">478</span><a name="line.478"></a>
+<span class="sourceLineNo">479</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.479"></a>
+<span class="sourceLineNo">480</span>    if (this.suspendTimeoutHandler == null) {<a name="line.480"></a>
+<span class="sourceLineNo">481</span>      throw new IllegalStateException();<a name="line.481"></a>
+<span class="sourceLineNo">482</span>    }<a name="line.482"></a>
+<span class="sourceLineNo">483</span>    if (this.suspendTimeoutFuture != null) {<a name="line.483"></a>
+<span class="sourceLineNo">484</span>      this.suspendTimeoutFuture.cancel(true);<a name="line.484"></a>
 <span class="sourceLineNo">485</span>    }<a name="line.485"></a>
-<span class="sourceLineNo">486</span>  }<a name="line.486"></a>
-<span class="sourceLineNo">487</span><a name="line.487"></a>
-<span class="sourceLineNo">488</span><a name="line.488"></a>
-<span class="sourceLineNo">489</span>  /*<a name="line.489"></a>
-<span class="sourceLineNo">490</span>   * Abstract methods.<a name="line.490"></a>
-<span class="sourceLineNo">491</span>   */<a name="line.491"></a>
+<span class="sourceLineNo">486</span>    if (timeout &gt; 0) {<a name="line.486"></a>
+<span class="sourceLineNo">487</span>      this.suspendTimeoutFuture =<a name="line.487"></a>
+<span class="sourceLineNo">488</span>        this.scheduledExecutorServiceSupplier.get().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.488"></a>
+<span class="sourceLineNo">489</span>    }<a name="line.489"></a>
+<span class="sourceLineNo">490</span>  }<a name="line.490"></a>
+<span class="sourceLineNo">491</span><a name="line.491"></a>
 <span class="sourceLineNo">492</span><a name="line.492"></a>
-<span class="sourceLineNo">493</span><a name="line.493"></a>
-<span class="sourceLineNo">494</span>  /**<a name="line.494"></a>
-<span class="sourceLineNo">495</span>   * Returns {@code true} if the current {@link ContainerResponse}<a name="line.495"></a>
-<span class="sourceLineNo">496</span>   * being written needs an {@link OutputStream}.<a name="line.496"></a>
-<span class="sourceLineNo">497</span>   *<a name="line.497"></a>
-<span class="sourceLineNo">498</span>   * @param contentLength the length of the content in bytes; may be<a name="line.498"></a>
-<span class="sourceLineNo">499</span>   * less than {@code 0} if the content length is unknown<a name="line.499"></a>
-<span class="sourceLineNo">500</span>   *<a name="line.500"></a>
-<span class="sourceLineNo">501</span>   * @return {@code true} if an {@link OutputStream} should be created<a name="line.501"></a>
-<span class="sourceLineNo">502</span>   * and set up; {@code false} otherwise<a name="line.502"></a>
-<span class="sourceLineNo">503</span>   *<a name="line.503"></a>
-<span class="sourceLineNo">504</span>   * @see #writeResponseStatusAndHeaders(long, ContainerResponse)<a name="line.504"></a>
-<span class="sourceLineNo">505</span>   */<a name="line.505"></a>
-<span class="sourceLineNo">506</span>  protected abstract boolean needsOutputStream(final long contentLength);<a name="line.506"></a>
-<span class="sourceLineNo">507</span><a name="line.507"></a>
-<span class="sourceLineNo">508</span>  /**<a name="line.508"></a>
-<span class="sourceLineNo">509</span>   * Called to allow this {@link AbstractNettyContainerResponseWriter}<a name="line.509"></a>
-<span class="sourceLineNo">510</span>   * implementation to {@linkplain ChannelHandlerContext#write(Object)<a name="line.510"></a>
-<span class="sourceLineNo">511</span>   * write} a message that indicates that there is not going to be any<a name="line.511"></a>
-<span class="sourceLineNo">512</span>   * further content sent back to the client.<a name="line.512"></a>
-<span class="sourceLineNo">513</span>   *<a name="line.513"></a>
-<span class="sourceLineNo">514</span>   * @see #channelHandlerContext<a name="line.514"></a>
-<span class="sourceLineNo">515</span>   *<a name="line.515"></a>
-<span class="sourceLineNo">516</span>   * @see ChannelHandlerContext#write(Object)<a name="line.516"></a>
-<span class="sourceLineNo">517</span>   */<a name="line.517"></a>
-<span class="sourceLineNo">518</span>  protected abstract void writeLastContentMessage();<a name="line.518"></a>
-<span class="sourceLineNo">519</span>  <a name="line.519"></a>
-<span class="sourceLineNo">520</span>  /**<a name="line.520"></a>
-<span class="sourceLineNo">521</span>   * Called when this {@link AbstractNettyContainerResponseWriter}<a name="line.521"></a>
-<span class="sourceLineNo">522</span>   * should {@linkplain ChannelHandlerContext#writeAndFlush(Object)<a name="line.522"></a>
-<span class="sourceLineNo">523</span>   * write and flush} a message containing relevant headers and the<a name="line.523"></a>
-<span class="sourceLineNo">524</span>   * HTTP status of the response being processed.<a name="line.524"></a>
-<span class="sourceLineNo">525</span>   *<a name="line.525"></a>
-<span class="sourceLineNo">526</span>   * @param containerResponse the {@link ContainerResponse} being<a name="line.526"></a>
-<span class="sourceLineNo">527</span>   * processed; must not be {@code null}<a name="line.527"></a>
-<span class="sourceLineNo">528</span>   *<a name="line.528"></a>
-<span class="sourceLineNo">529</span>   * @param contentLength the length of the content in bytes; may be<a name="line.529"></a>
-<span class="sourceLineNo">530</span>   * less than {@code 0} if the content length is unknown<a name="line.530"></a>
-<span class="sourceLineNo">531</span>   */<a name="line.531"></a>
-<span class="sourceLineNo">532</span>  protected abstract void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,<a name="line.532"></a>
-<span class="sourceLineNo">533</span>                                                        final long contentLength);<a name="line.533"></a>
-<span class="sourceLineNo">534</span><a name="line.534"></a>
-<span class="sourceLineNo">535</span>  /**<a name="line.535"></a>
-<span class="sourceLineNo">536</span>   * Called to create a {@link ChunkedInput} that will be used as part<a name="line.536"></a>
-<span class="sourceLineNo">537</span>   * of setting up an {@link OutputStream} for the {@link<a name="line.537"></a>
-<span class="sourceLineNo">538</span>   * ContainerResponse} being processed.<a name="line.538"></a>
-<span class="sourceLineNo">539</span>   *<a name="line.539"></a>
-<span class="sourceLineNo">540</span>   * &lt;p&gt;Implementations of this method must not return {@code<a name="line.540"></a>
-<span class="sourceLineNo">541</span>   * null}.&lt;/p&gt;<a name="line.541"></a>
-<span class="sourceLineNo">542</span>   *<a name="line.542"></a>
-<span class="sourceLineNo">543</span>   * &lt;p&gt;Implementations of this method will be called only after<a name="line.543"></a>
-<span class="sourceLineNo">544</span>   * {@link #needsOutputStream(long)} has returned {@code true}.&lt;/p&gt;<a name="line.544"></a>
-<span class="sourceLineNo">545</span>   *<a name="line.545"></a>
-<span class="sourceLineNo">546</span>   * &lt;p&gt;Implementations of this method will always be called on a<a name="line.546"></a>
-<span class="sourceLineNo">547</span>   * {@link Thread} that is &lt;strong&gt;not&lt;/strong&gt; the {@linkplain<a name="line.547"></a>
-<span class="sourceLineNo">548</span>   * #inEventLoop() Netty event loop}.&lt;/p&gt;<a name="line.548"></a>
+<span class="sourceLineNo">493</span>  /*<a name="line.493"></a>
+<span class="sourceLineNo">494</span>   * Abstract methods.<a name="line.494"></a>
+<span class="sourceLineNo">495</span>   */<a name="line.495"></a>
+<span class="sourceLineNo">496</span><a name="line.496"></a>
+<span class="sourceLineNo">497</span><a name="line.497"></a>
+<span class="sourceLineNo">498</span>  /**<a name="line.498"></a>
+<span class="sourceLineNo">499</span>   * Returns {@code true} if the current {@link ContainerResponse}<a name="line.499"></a>
+<span class="sourceLineNo">500</span>   * being written needs an {@link OutputStream}.<a name="line.500"></a>
+<span class="sourceLineNo">501</span>   *<a name="line.501"></a>
+<span class="sourceLineNo">502</span>   * @param contentLength the length of the content in bytes; may be<a name="line.502"></a>
+<span class="sourceLineNo">503</span>   * less than {@code 0} if the content length is unknown<a name="line.503"></a>
+<span class="sourceLineNo">504</span>   *<a name="line.504"></a>
+<span class="sourceLineNo">505</span>   * @return {@code true} if an {@link OutputStream} should be created<a name="line.505"></a>
+<span class="sourceLineNo">506</span>   * and set up; {@code false} otherwise<a name="line.506"></a>
+<span class="sourceLineNo">507</span>   *<a name="line.507"></a>
+<span class="sourceLineNo">508</span>   * @see #writeResponseStatusAndHeaders(long, ContainerResponse)<a name="line.508"></a>
+<span class="sourceLineNo">509</span>   */<a name="line.509"></a>
+<span class="sourceLineNo">510</span>  protected abstract boolean needsOutputStream(final long contentLength);<a name="line.510"></a>
+<span class="sourceLineNo">511</span><a name="line.511"></a>
+<span class="sourceLineNo">512</span>  /**<a name="line.512"></a>
+<span class="sourceLineNo">513</span>   * Called to allow this {@link AbstractNettyContainerResponseWriter}<a name="line.513"></a>
+<span class="sourceLineNo">514</span>   * implementation to {@linkplain ChannelHandlerContext#write(Object)<a name="line.514"></a>
+<span class="sourceLineNo">515</span>   * write} a message that indicates that there is not going to be any<a name="line.515"></a>
+<span class="sourceLineNo">516</span>   * further content sent back to the client.<a name="line.516"></a>
+<span class="sourceLineNo">517</span>   *<a name="line.517"></a>
+<span class="sourceLineNo">518</span>   * @see #channelHandlerContext<a name="line.518"></a>
+<span class="sourceLineNo">519</span>   *<a name="line.519"></a>
+<span class="sourceLineNo">520</span>   * @see ChannelHandlerContext#write(Object)<a name="line.520"></a>
+<span class="sourceLineNo">521</span>   */<a name="line.521"></a>
+<span class="sourceLineNo">522</span>  protected abstract void writeLastContentMessage();<a name="line.522"></a>
+<span class="sourceLineNo">523</span><a name="line.523"></a>
+<span class="sourceLineNo">524</span>  /**<a name="line.524"></a>
+<span class="sourceLineNo">525</span>   * Called when this {@link AbstractNettyContainerResponseWriter}<a name="line.525"></a>
+<span class="sourceLineNo">526</span>   * should {@linkplain ChannelHandlerContext#writeAndFlush(Object)<a name="line.526"></a>
+<span class="sourceLineNo">527</span>   * write and flush} a message containing relevant headers and the<a name="line.527"></a>
+<span class="sourceLineNo">528</span>   * HTTP status of the response being processed.<a name="line.528"></a>
+<span class="sourceLineNo">529</span>   *<a name="line.529"></a>
+<span class="sourceLineNo">530</span>   * @param containerResponse the {@link ContainerResponse} being<a name="line.530"></a>
+<span class="sourceLineNo">531</span>   * processed; must not be {@code null}<a name="line.531"></a>
+<span class="sourceLineNo">532</span>   *<a name="line.532"></a>
+<span class="sourceLineNo">533</span>   * @param contentLength the length of the content in bytes; may be<a name="line.533"></a>
+<span class="sourceLineNo">534</span>   * less than {@code 0} if the content length is unknown<a name="line.534"></a>
+<span class="sourceLineNo">535</span>   */<a name="line.535"></a>
+<span class="sourceLineNo">536</span>  protected abstract void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,<a name="line.536"></a>
+<span class="sourceLineNo">537</span>                                                        final long contentLength);<a name="line.537"></a>
+<span class="sourceLineNo">538</span><a name="line.538"></a>
+<span class="sourceLineNo">539</span>  /**<a name="line.539"></a>
+<span class="sourceLineNo">540</span>   * Called to create a {@link ChunkedInput} that will be used as part<a name="line.540"></a>
+<span class="sourceLineNo">541</span>   * of setting up an {@link OutputStream} for the {@link<a name="line.541"></a>
+<span class="sourceLineNo">542</span>   * ContainerResponse} being processed.<a name="line.542"></a>
+<span class="sourceLineNo">543</span>   *<a name="line.543"></a>
+<span class="sourceLineNo">544</span>   * &lt;p&gt;Implementations of this method must not return {@code<a name="line.544"></a>
+<span class="sourceLineNo">545</span>   * null}.&lt;/p&gt;<a name="line.545"></a>
+<span class="sourceLineNo">546</span>   *<a name="line.546"></a>
+<span class="sourceLineNo">547</span>   * &lt;p&gt;Implementations of this method will be called only after<a name="line.547"></a>
+<span class="sourceLineNo">548</span>   * {@link #needsOutputStream(long)} has returned {@code true}.&lt;/p&gt;<a name="line.548"></a>
 <span class="sourceLineNo">549</span>   *<a name="line.549"></a>
-<span class="sourceLineNo">550</span>   * &lt;p&gt;Implementations of this method must arrange to read from the<a name="line.550"></a>
-<span class="sourceLineNo">551</span>   * supplied {@link ByteBuf}.  Undefined behavior will result if this<a name="line.551"></a>
-<span class="sourceLineNo">552</span>   * is not the case.&lt;/p&gt;<a name="line.552"></a>
+<span class="sourceLineNo">550</span>   * &lt;p&gt;Implementations of this method will always be called on a<a name="line.550"></a>
+<span class="sourceLineNo">551</span>   * {@link Thread} that is &lt;strong&gt;not&lt;/strong&gt; the {@linkplain<a name="line.551"></a>
+<span class="sourceLineNo">552</span>   * #inEventLoop() Netty event loop}.&lt;/p&gt;<a name="line.552"></a>
 <span class="sourceLineNo">553</span>   *<a name="line.553"></a>
-<span class="sourceLineNo">554</span>   * @param eventExecutor an {@link EventExecutor} supplied for<a name="line.554"></a>
-<span class="sourceLineNo">555</span>   * convenience in case any operations need to be performed on the<a name="line.555"></a>
-<span class="sourceLineNo">556</span>   * supplied {@link ByteBuf} or on the Netty event loop in general;<a name="line.556"></a>
-<span class="sourceLineNo">557</span>   * must not be {@code null}<a name="line.557"></a>
-<span class="sourceLineNo">558</span>   *<a name="line.558"></a>
-<span class="sourceLineNo">559</span>   * @param source the {@link ByteBuf} serving as the source of data;<a name="line.559"></a>
-<span class="sourceLineNo">560</span>   * must not be {@code null}; must only be read from, not written to<a name="line.560"></a>
-<span class="sourceLineNo">561</span>   *<a name="line.561"></a>
-<span class="sourceLineNo">562</span>   * @param contentLength the overall length of the content, in bytes,<a name="line.562"></a>
-<span class="sourceLineNo">563</span>   * for which a {@link ChunkedInput} is being created; must not be<a name="line.563"></a>
-<span class="sourceLineNo">564</span>   * {@code 0}; may be less than {@code 0} if the content length is<a name="line.564"></a>
-<span class="sourceLineNo">565</span>   * unknown<a name="line.565"></a>
-<span class="sourceLineNo">566</span>   *<a name="line.566"></a>
-<span class="sourceLineNo">567</span>   * @return a non-{@code null} {@link ChunkedInput} implementation<a name="line.567"></a>
-<span class="sourceLineNo">568</span>   * that will treat the supplied {@code ByteBuf} as its source in<a name="line.568"></a>
-<span class="sourceLineNo">569</span>   * some manner<a name="line.569"></a>
+<span class="sourceLineNo">554</span>   * &lt;p&gt;Implementations of this method must arrange to read from the<a name="line.554"></a>
+<span class="sourceLineNo">555</span>   * supplied {@link ByteBuf}.  Undefined behavior will result if this<a name="line.555"></a>
+<span class="sourceLineNo">556</span>   * is not the case.&lt;/p&gt;<a name="line.556"></a>
+<span class="sourceLineNo">557</span>   *<a name="line.557"></a>
+<span class="sourceLineNo">558</span>   * @param eventExecutor an {@link EventExecutor} supplied for<a name="line.558"></a>
+<span class="sourceLineNo">559</span>   * convenience in case any operations need to be performed on the<a name="line.559"></a>
+<span class="sourceLineNo">560</span>   * supplied {@link ByteBuf} or on the Netty event loop in general;<a name="line.560"></a>
+<span class="sourceLineNo">561</span>   * must not be {@code null}<a name="line.561"></a>
+<span class="sourceLineNo">562</span>   *<a name="line.562"></a>
+<span class="sourceLineNo">563</span>   * @param source the {@link ByteBuf} serving as the source of data;<a name="line.563"></a>
+<span class="sourceLineNo">564</span>   * must not be {@code null}; must only be read from, not written to<a name="line.564"></a>
+<span class="sourceLineNo">565</span>   *<a name="line.565"></a>
+<span class="sourceLineNo">566</span>   * @param contentLength the overall length of the content, in bytes,<a name="line.566"></a>
+<span class="sourceLineNo">567</span>   * for which a {@link ChunkedInput} is being created; must not be<a name="line.567"></a>
+<span class="sourceLineNo">568</span>   * {@code 0}; may be less than {@code 0} if the content length is<a name="line.568"></a>
+<span class="sourceLineNo">569</span>   * unknown<a name="line.569"></a>
 <span class="sourceLineNo">570</span>   *<a name="line.570"></a>
-<span class="sourceLineNo">571</span>   * @see ChunkedInput<a name="line.571"></a>
-<span class="sourceLineNo">572</span>   */<a name="line.572"></a>
-<span class="sourceLineNo">573</span>  protected abstract ChunkedInput&lt;?&gt; createChunkedInput(final EventExecutor eventExecutor,<a name="line.573"></a>
-<span class="sourceLineNo">574</span>                                                        final ByteBuf source,<a name="line.574"></a>
-<span class="sourceLineNo">575</span>                                                        final long contentLength);<a name="line.575"></a>
-<span class="sourceLineNo">576</span><a name="line.576"></a>
-<span class="sourceLineNo">577</span>  /**<a name="line.577"></a>
-<span class="sourceLineNo">578</span>   * Called to {@linkplain ChannelHandlerContext#write(Object) write a<a name="line.578"></a>
-<span class="sourceLineNo">579</span>   * message} indicating a general unspecified server failure.<a name="line.579"></a>
-<span class="sourceLineNo">580</span>   *<a name="line.580"></a>
-<span class="sourceLineNo">581</span>   * &lt;p&gt;Implementations of this method are called from the {@link<a name="line.581"></a>
-<span class="sourceLineNo">582</span>   * #failure(Throwable)} method.&lt;/p&gt;<a name="line.582"></a>
-<span class="sourceLineNo">583</span>   *<a name="line.583"></a>
-<span class="sourceLineNo">584</span>   * &lt;p&gt;Implementations of this method will always be called on a<a name="line.584"></a>
-<span class="sourceLineNo">585</span>   * {@link Thread} that is &lt;strong&gt;not&lt;/strong&gt; the {@linkplain<a name="line.585"></a>
-<span class="sourceLineNo">586</span>   * #inEventLoop() Netty event loop}.&lt;/p&gt;<a name="line.586"></a>
+<span class="sourceLineNo">571</span>   * @return a non-{@code null} {@link ChunkedInput} implementation<a name="line.571"></a>
+<span class="sourceLineNo">572</span>   * that will treat the supplied {@code ByteBuf} as its source in<a name="line.572"></a>
+<span class="sourceLineNo">573</span>   * some manner<a name="line.573"></a>
+<span class="sourceLineNo">574</span>   *<a name="line.574"></a>
+<span class="sourceLineNo">575</span>   * @see ChunkedInput<a name="line.575"></a>
+<span class="sourceLineNo">576</span>   */<a name="line.576"></a>
+<span class="sourceLineNo">577</span>  protected abstract ChunkedInput&lt;?&gt; createChunkedInput(final EventExecutor eventExecutor,<a name="line.577"></a>
+<span class="sourceLineNo">578</span>                                                        final ByteBuf source,<a name="line.578"></a>
+<span class="sourceLineNo">579</span>                                                        final long contentLength);<a name="line.579"></a>
+<span class="sourceLineNo">580</span><a name="line.580"></a>
+<span class="sourceLineNo">581</span>  /**<a name="line.581"></a>
+<span class="sourceLineNo">582</span>   * Called to {@linkplain ChannelHandlerContext#write(Object) write a<a name="line.582"></a>
+<span class="sourceLineNo">583</span>   * message} indicating a general unspecified server failure.<a name="line.583"></a>
+<span class="sourceLineNo">584</span>   *<a name="line.584"></a>
+<span class="sourceLineNo">585</span>   * &lt;p&gt;Implementations of this method are called from the {@link<a name="line.585"></a>
+<span class="sourceLineNo">586</span>   * #failure(Throwable)} method.&lt;/p&gt;<a name="line.586"></a>
 <span class="sourceLineNo">587</span>   *<a name="line.587"></a>
-<span class="sourceLineNo">588</span>   * @see #failure(Throwable)<a name="line.588"></a>
-<span class="sourceLineNo">589</span>   */<a name="line.589"></a>
-<span class="sourceLineNo">590</span>  protected abstract void writeFailureMessage();<a name="line.590"></a>
-<span class="sourceLineNo">591</span><a name="line.591"></a>
-<span class="sourceLineNo">592</span><a name="line.592"></a>
-<span class="sourceLineNo">593</span>  /*<a name="line.593"></a>
-<span class="sourceLineNo">594</span>   * Utility methods.<a name="line.594"></a>
-<span class="sourceLineNo">595</span>   */<a name="line.595"></a>
+<span class="sourceLineNo">588</span>   * &lt;p&gt;Implementations of this method will always be called on a<a name="line.588"></a>
+<span class="sourceLineNo">589</span>   * {@link Thread} that is &lt;strong&gt;not&lt;/strong&gt; the {@linkplain<a name="line.589"></a>
+<span class="sourceLineNo">590</span>   * #inEventLoop() Netty event loop}.&lt;/p&gt;<a name="line.590"></a>
+<span class="sourceLineNo">591</span>   *<a name="line.591"></a>
+<span class="sourceLineNo">592</span>   * @see #failure(Throwable)<a name="line.592"></a>
+<span class="sourceLineNo">593</span>   */<a name="line.593"></a>
+<span class="sourceLineNo">594</span>  protected abstract void writeFailureMessage();<a name="line.594"></a>
+<span class="sourceLineNo">595</span><a name="line.595"></a>
 <span class="sourceLineNo">596</span><a name="line.596"></a>
-<span class="sourceLineNo">597</span>  <a name="line.597"></a>
-<span class="sourceLineNo">598</span>  protected final boolean inEventLoop() {<a name="line.598"></a>
-<span class="sourceLineNo">599</span>    return this.channelHandlerContext.executor().inEventLoop();<a name="line.599"></a>
-<span class="sourceLineNo">600</span>  }<a name="line.600"></a>
+<span class="sourceLineNo">597</span>  /*<a name="line.597"></a>
+<span class="sourceLineNo">598</span>   * Utility methods.<a name="line.598"></a>
+<span class="sourceLineNo">599</span>   */<a name="line.599"></a>
+<span class="sourceLineNo">600</span><a name="line.600"></a>
 <span class="sourceLineNo">601</span><a name="line.601"></a>
-<span class="sourceLineNo">602</span>  public static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.602"></a>
-<span class="sourceLineNo">603</span>                                       final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.603"></a>
-<span class="sourceLineNo">604</span>    copyHeaders(headersSource, UnaryOperator.identity(), headersTarget);<a name="line.604"></a>
-<span class="sourceLineNo">605</span>  }<a name="line.605"></a>
-<span class="sourceLineNo">606</span>  <a name="line.606"></a>
-<span class="sourceLineNo">607</span>  public static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.607"></a>
-<span class="sourceLineNo">608</span>                                       UnaryOperator&lt;String&gt; keyTransformer,<a name="line.608"></a>
-<span class="sourceLineNo">609</span>                                       final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.609"></a>
-<span class="sourceLineNo">610</span>    if (headersTarget != null &amp;&amp; headersSource != null &amp;&amp; !headersSource.isEmpty()) {<a name="line.610"></a>
-<span class="sourceLineNo">611</span>      final Collection&lt;? extends Entry&lt;? extends String, ? extends List&lt;String&gt;&gt;&gt; entrySet = headersSource.entrySet();<a name="line.611"></a>
-<span class="sourceLineNo">612</span>      if (entrySet != null &amp;&amp; !entrySet.isEmpty()) {<a name="line.612"></a>
-<span class="sourceLineNo">613</span>        if (keyTransformer == null) {<a name="line.613"></a>
-<span class="sourceLineNo">614</span>          keyTransformer = UnaryOperator.identity();<a name="line.614"></a>
-<span class="sourceLineNo">615</span>        }<a name="line.615"></a>
-<span class="sourceLineNo">616</span>        for (final Entry&lt;? extends String, ? extends List&lt;String&gt;&gt; entry : entrySet) {<a name="line.616"></a>
-<span class="sourceLineNo">617</span>          if (entry != null) {<a name="line.617"></a>
-<span class="sourceLineNo">618</span>            headersTarget.accept(keyTransformer.apply(entry.getKey()), entry.getValue());<a name="line.618"></a>
-<span class="sourceLineNo">619</span>          }<a name="line.619"></a>
-<span class="sourceLineNo">620</span>        }<a name="line.620"></a>
-<span class="sourceLineNo">621</span>      }<a name="line.621"></a>
-<span class="sourceLineNo">622</span>    }<a name="line.622"></a>
-<span class="sourceLineNo">623</span>  }<a name="line.623"></a>
-<span class="sourceLineNo">624</span><a name="line.624"></a>
-<span class="sourceLineNo">625</span>}<a name="line.625"></a>
+<span class="sourceLineNo">602</span>  protected final boolean inEventLoop() {<a name="line.602"></a>
+<span class="sourceLineNo">603</span>    return this.channelHandlerContext.executor().inEventLoop();<a name="line.603"></a>
+<span class="sourceLineNo">604</span>  }<a name="line.604"></a>
+<span class="sourceLineNo">605</span><a name="line.605"></a>
+<span class="sourceLineNo">606</span>  public static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.606"></a>
+<span class="sourceLineNo">607</span>                                       final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.607"></a>
+<span class="sourceLineNo">608</span>    copyHeaders(headersSource, UnaryOperator.identity(), headersTarget);<a name="line.608"></a>
+<span class="sourceLineNo">609</span>  }<a name="line.609"></a>
+<span class="sourceLineNo">610</span><a name="line.610"></a>
+<span class="sourceLineNo">611</span>  public static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.611"></a>
+<span class="sourceLineNo">612</span>                                       UnaryOperator&lt;String&gt; keyTransformer,<a name="line.612"></a>
+<span class="sourceLineNo">613</span>                                       final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.613"></a>
+<span class="sourceLineNo">614</span>    if (headersTarget != null &amp;&amp; headersSource != null &amp;&amp; !headersSource.isEmpty()) {<a name="line.614"></a>
+<span class="sourceLineNo">615</span>      final Collection&lt;? extends Entry&lt;? extends String, ? extends List&lt;String&gt;&gt;&gt; entrySet = headersSource.entrySet();<a name="line.615"></a>
+<span class="sourceLineNo">616</span>      if (entrySet != null &amp;&amp; !entrySet.isEmpty()) {<a name="line.616"></a>
+<span class="sourceLineNo">617</span>        if (keyTransformer == null) {<a name="line.617"></a>
+<span class="sourceLineNo">618</span>          keyTransformer = UnaryOperator.identity();<a name="line.618"></a>
+<span class="sourceLineNo">619</span>        }<a name="line.619"></a>
+<span class="sourceLineNo">620</span>        for (final Entry&lt;? extends String, ? extends List&lt;String&gt;&gt; entry : entrySet) {<a name="line.620"></a>
+<span class="sourceLineNo">621</span>          if (entry != null) {<a name="line.621"></a>
+<span class="sourceLineNo">622</span>            headersTarget.accept(keyTransformer.apply(entry.getKey()), entry.getValue());<a name="line.622"></a>
+<span class="sourceLineNo">623</span>          }<a name="line.623"></a>
+<span class="sourceLineNo">624</span>        }<a name="line.624"></a>
+<span class="sourceLineNo">625</span>      }<a name="line.625"></a>
+<span class="sourceLineNo">626</span>    }<a name="line.626"></a>
+<span class="sourceLineNo">627</span>  }<a name="line.627"></a>
+<span class="sourceLineNo">628</span><a name="line.628"></a>
+<span class="sourceLineNo">629</span>}<a name="line.629"></a>
 
 
 
