@@ -28,280 +28,443 @@
 <span class="sourceLineNo">020</span><a name="line.20"></a>
 <span class="sourceLineNo">021</span>import java.util.function.Function;<a name="line.21"></a>
 <span class="sourceLineNo">022</span><a name="line.22"></a>
-<span class="sourceLineNo">023</span>import io.netty.buffer.ByteBuf;<a name="line.23"></a>
-<span class="sourceLineNo">024</span>import io.netty.buffer.ByteBufAllocator;<a name="line.24"></a>
+<span class="sourceLineNo">023</span>import java.util.logging.Level;<a name="line.23"></a>
+<span class="sourceLineNo">024</span>import java.util.logging.Logger;<a name="line.24"></a>
 <span class="sourceLineNo">025</span><a name="line.25"></a>
-<span class="sourceLineNo">026</span>import io.netty.channel.ChannelHandlerContext;<a name="line.26"></a>
-<span class="sourceLineNo">027</span><a name="line.27"></a>
-<span class="sourceLineNo">028</span>import io.netty.handler.stream.ChunkedInput;<a name="line.28"></a>
-<span class="sourceLineNo">029</span><a name="line.29"></a>
-<span class="sourceLineNo">030</span>/**<a name="line.30"></a>
-<span class="sourceLineNo">031</span> * A {@link ChunkedInput} implementation that uses a {@link Function}<a name="line.31"></a>
-<span class="sourceLineNo">032</span> * to read from a {@link ByteBuf} and return a relevant chunk of its<a name="line.32"></a>
-<span class="sourceLineNo">033</span> * data.<a name="line.33"></a>
-<span class="sourceLineNo">034</span> *<a name="line.34"></a>
-<span class="sourceLineNo">035</span> * @author &lt;a href="https://about.me/lairdnelson"<a name="line.35"></a>
-<span class="sourceLineNo">036</span> * target="_parent"&gt;Laird Nelson&lt;/a&gt;<a name="line.36"></a>
+<span class="sourceLineNo">026</span>import io.netty.buffer.ByteBuf;<a name="line.26"></a>
+<span class="sourceLineNo">027</span>import io.netty.buffer.ByteBufAllocator;<a name="line.27"></a>
+<span class="sourceLineNo">028</span><a name="line.28"></a>
+<span class="sourceLineNo">029</span>import io.netty.channel.ChannelHandlerContext;<a name="line.29"></a>
+<span class="sourceLineNo">030</span><a name="line.30"></a>
+<span class="sourceLineNo">031</span>import io.netty.handler.stream.ChunkedInput;<a name="line.31"></a>
+<span class="sourceLineNo">032</span><a name="line.32"></a>
+<span class="sourceLineNo">033</span>/**<a name="line.33"></a>
+<span class="sourceLineNo">034</span> * A {@link ChunkedInput} implementation that uses a {@link Function}<a name="line.34"></a>
+<span class="sourceLineNo">035</span> * to read from a {@link ByteBuf} and return a relevant chunk of its<a name="line.35"></a>
+<span class="sourceLineNo">036</span> * data.<a name="line.36"></a>
 <span class="sourceLineNo">037</span> *<a name="line.37"></a>
-<span class="sourceLineNo">038</span> * @see #readChunk(ByteBufAllocator)<a name="line.38"></a>
-<span class="sourceLineNo">039</span> */<a name="line.39"></a>
-<span class="sourceLineNo">040</span>public class FunctionalByteBufChunkedInput&lt;T&gt; implements ChunkedInput&lt;T&gt; {<a name="line.40"></a>
-<span class="sourceLineNo">041</span><a name="line.41"></a>
-<span class="sourceLineNo">042</span><a name="line.42"></a>
-<span class="sourceLineNo">043</span>  /*<a name="line.43"></a>
-<span class="sourceLineNo">044</span>   * Instance fields.<a name="line.44"></a>
-<span class="sourceLineNo">045</span>   */<a name="line.45"></a>
-<span class="sourceLineNo">046</span><a name="line.46"></a>
-<span class="sourceLineNo">047</span><a name="line.47"></a>
-<span class="sourceLineNo">048</span>  /**<a name="line.48"></a>
-<span class="sourceLineNo">049</span>   * The {@link ByteBuf} from which to read.<a name="line.49"></a>
-<span class="sourceLineNo">050</span>   *<a name="line.50"></a>
-<span class="sourceLineNo">051</span>   * &lt;p&gt;This field is never {@code null}.&lt;/p&gt;<a name="line.51"></a>
-<span class="sourceLineNo">052</span>   */<a name="line.52"></a>
-<span class="sourceLineNo">053</span>  private final ByteBuf byteBuf;<a name="line.53"></a>
-<span class="sourceLineNo">054</span><a name="line.54"></a>
-<span class="sourceLineNo">055</span>  /**<a name="line.55"></a>
-<span class="sourceLineNo">056</span>   * A {@link Function} that will be supplied with<a name="line.56"></a>
-<span class="sourceLineNo">057</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.57"></a>
-<span class="sourceLineNo">058</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.58"></a>
-<span class="sourceLineNo">059</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method.<a name="line.59"></a>
-<span class="sourceLineNo">060</span>   *<a name="line.60"></a>
-<span class="sourceLineNo">061</span>   * &lt;p&gt;This field is never {@code null}.&lt;/p&gt;<a name="line.61"></a>
-<span class="sourceLineNo">062</span>   *<a name="line.62"></a>
-<span class="sourceLineNo">063</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.63"></a>
-<span class="sourceLineNo">064</span>   */<a name="line.64"></a>
-<span class="sourceLineNo">065</span>  private final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader;<a name="line.65"></a>
-<span class="sourceLineNo">066</span><a name="line.66"></a>
-<span class="sourceLineNo">067</span>  /**<a name="line.67"></a>
-<span class="sourceLineNo">068</span>   * The value to return from the default implementation of the {@link<a name="line.68"></a>
-<span class="sourceLineNo">069</span>   * #length()} method.<a name="line.69"></a>
-<span class="sourceLineNo">070</span>   *<a name="line.70"></a>
-<span class="sourceLineNo">071</span>   * &lt;p&gt;This field is never less than {@code -1L}.<a name="line.71"></a>
-<span class="sourceLineNo">072</span>   *<a name="line.72"></a>
-<span class="sourceLineNo">073</span>   * @see #length()<a name="line.73"></a>
-<span class="sourceLineNo">074</span>   */<a name="line.74"></a>
-<span class="sourceLineNo">075</span>  private final long lengthToReport;<a name="line.75"></a>
-<span class="sourceLineNo">076</span><a name="line.76"></a>
-<span class="sourceLineNo">077</span>  /**<a name="line.77"></a>
-<span class="sourceLineNo">078</span>   * Indicates that no more input is forthcoming, so assuming other<a name="line.78"></a>
-<span class="sourceLineNo">079</span>   * conditions are true the {@link #isEndOfInput()} method may return<a name="line.79"></a>
-<span class="sourceLineNo">080</span>   * {@code true}.<a name="line.80"></a>
-<span class="sourceLineNo">081</span>   *<a name="line.81"></a>
-<span class="sourceLineNo">082</span>   * @see #isEndOfInput()<a name="line.82"></a>
+<span class="sourceLineNo">038</span> * @author &lt;a href="https://about.me/lairdnelson"<a name="line.38"></a>
+<span class="sourceLineNo">039</span> * target="_parent"&gt;Laird Nelson&lt;/a&gt;<a name="line.39"></a>
+<span class="sourceLineNo">040</span> *<a name="line.40"></a>
+<span class="sourceLineNo">041</span> * @see #readChunk(ByteBufAllocator)<a name="line.41"></a>
+<span class="sourceLineNo">042</span> */<a name="line.42"></a>
+<span class="sourceLineNo">043</span>public class FunctionalByteBufChunkedInput&lt;T&gt; implements BoundedChunkedInput&lt;T&gt; {<a name="line.43"></a>
+<span class="sourceLineNo">044</span><a name="line.44"></a>
+<span class="sourceLineNo">045</span><a name="line.45"></a>
+<span class="sourceLineNo">046</span>  /*<a name="line.46"></a>
+<span class="sourceLineNo">047</span>   * Static fields.<a name="line.47"></a>
+<span class="sourceLineNo">048</span>   */<a name="line.48"></a>
+<span class="sourceLineNo">049</span><a name="line.49"></a>
+<span class="sourceLineNo">050</span><a name="line.50"></a>
+<span class="sourceLineNo">051</span>  private static final String cn = FunctionalByteBufChunkedInput.class.getName();<a name="line.51"></a>
+<span class="sourceLineNo">052</span><a name="line.52"></a>
+<span class="sourceLineNo">053</span>  private static final Logger logger = Logger.getLogger(cn);<a name="line.53"></a>
+<span class="sourceLineNo">054</span>  <a name="line.54"></a>
+<span class="sourceLineNo">055</span><a name="line.55"></a>
+<span class="sourceLineNo">056</span>  /*<a name="line.56"></a>
+<span class="sourceLineNo">057</span>   * Instance fields.<a name="line.57"></a>
+<span class="sourceLineNo">058</span>   */<a name="line.58"></a>
+<span class="sourceLineNo">059</span><a name="line.59"></a>
+<span class="sourceLineNo">060</span><a name="line.60"></a>
+<span class="sourceLineNo">061</span>  /**<a name="line.61"></a>
+<span class="sourceLineNo">062</span>   * The {@link ByteBuf} from which to read.<a name="line.62"></a>
+<span class="sourceLineNo">063</span>   *<a name="line.63"></a>
+<span class="sourceLineNo">064</span>   * &lt;p&gt;This field may be {@code null}.&lt;/p&gt;<a name="line.64"></a>
+<span class="sourceLineNo">065</span>   */<a name="line.65"></a>
+<span class="sourceLineNo">066</span>  private volatile ByteBuf byteBuf;<a name="line.66"></a>
+<span class="sourceLineNo">067</span><a name="line.67"></a>
+<span class="sourceLineNo">068</span>  /**<a name="line.68"></a>
+<span class="sourceLineNo">069</span>   * A {@link Function} that will be supplied with<a name="line.69"></a>
+<span class="sourceLineNo">070</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.70"></a>
+<span class="sourceLineNo">071</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.71"></a>
+<span class="sourceLineNo">072</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method.<a name="line.72"></a>
+<span class="sourceLineNo">073</span>   *<a name="line.73"></a>
+<span class="sourceLineNo">074</span>   * &lt;p&gt;This field is never {@code null}.&lt;/p&gt;<a name="line.74"></a>
+<span class="sourceLineNo">075</span>   *<a name="line.75"></a>
+<span class="sourceLineNo">076</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.76"></a>
+<span class="sourceLineNo">077</span>   */<a name="line.77"></a>
+<span class="sourceLineNo">078</span>  private final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader;<a name="line.78"></a>
+<span class="sourceLineNo">079</span><a name="line.79"></a>
+<span class="sourceLineNo">080</span>  /**<a name="line.80"></a>
+<span class="sourceLineNo">081</span>   * The value to return from the default implementation of the {@link<a name="line.81"></a>
+<span class="sourceLineNo">082</span>   * #length()} method.<a name="line.82"></a>
 <span class="sourceLineNo">083</span>   *<a name="line.83"></a>
-<span class="sourceLineNo">084</span>   * @see #close()<a name="line.84"></a>
-<span class="sourceLineNo">085</span>   */<a name="line.85"></a>
-<span class="sourceLineNo">086</span>  private volatile boolean closed;<a name="line.86"></a>
-<span class="sourceLineNo">087</span><a name="line.87"></a>
-<span class="sourceLineNo">088</span><a name="line.88"></a>
-<span class="sourceLineNo">089</span>  /*<a name="line.89"></a>
-<span class="sourceLineNo">090</span>   * Constructors.<a name="line.90"></a>
-<span class="sourceLineNo">091</span>   */<a name="line.91"></a>
-<span class="sourceLineNo">092</span><a name="line.92"></a>
-<span class="sourceLineNo">093</span><a name="line.93"></a>
-<span class="sourceLineNo">094</span>  /**<a name="line.94"></a>
-<span class="sourceLineNo">095</span>   * Creates a new {@link FunctionalByteBufChunkedInput} whose {@link #length()}<a name="line.95"></a>
-<span class="sourceLineNo">096</span>   * method will return {@code -1L}.<a name="line.96"></a>
-<span class="sourceLineNo">097</span>   *<a name="line.97"></a>
-<span class="sourceLineNo">098</span>   * @param byteBuf the {@link ByteBuf} from which chunks will be<a name="line.98"></a>
-<span class="sourceLineNo">099</span>   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.99"></a>
-<span class="sourceLineNo">100</span>   * {@code null}<a name="line.100"></a>
-<span class="sourceLineNo">101</span>   *<a name="line.101"></a>
-<span class="sourceLineNo">102</span>   * @param chunkReader a {@link Function} that will be supplied with<a name="line.102"></a>
-<span class="sourceLineNo">103</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.103"></a>
-<span class="sourceLineNo">104</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.104"></a>
-<span class="sourceLineNo">105</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method; must<a name="line.105"></a>
-<span class="sourceLineNo">106</span>   * not be {@code null}<a name="line.106"></a>
-<span class="sourceLineNo">107</span>   *<a name="line.107"></a>
-<span class="sourceLineNo">108</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.108"></a>
-<span class="sourceLineNo">109</span>   */<a name="line.109"></a>
-<span class="sourceLineNo">110</span>  public FunctionalByteBufChunkedInput(final ByteBuf byteBuf,<a name="line.110"></a>
-<span class="sourceLineNo">111</span>                                       final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader) {<a name="line.111"></a>
-<span class="sourceLineNo">112</span>    this(byteBuf, chunkReader, -1L);<a name="line.112"></a>
-<span class="sourceLineNo">113</span>  }<a name="line.113"></a>
-<span class="sourceLineNo">114</span><a name="line.114"></a>
-<span class="sourceLineNo">115</span>  /**<a name="line.115"></a>
-<span class="sourceLineNo">116</span>   * Creates a new {@link FunctionalByteBufChunkedInput}.<a name="line.116"></a>
-<span class="sourceLineNo">117</span>   *<a name="line.117"></a>
-<span class="sourceLineNo">118</span>   * @param byteBuf the {@link ByteBuf} from which chunks will be<a name="line.118"></a>
-<span class="sourceLineNo">119</span>   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.119"></a>
-<span class="sourceLineNo">120</span>   * {@code null}<a name="line.120"></a>
-<span class="sourceLineNo">121</span>   *<a name="line.121"></a>
-<span class="sourceLineNo">122</span>   * @param chunkReader a {@link Function} that will be supplied with<a name="line.122"></a>
-<span class="sourceLineNo">123</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.123"></a>
-<span class="sourceLineNo">124</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.124"></a>
-<span class="sourceLineNo">125</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method; must<a name="line.125"></a>
-<span class="sourceLineNo">126</span>   * not be {@code null}<a name="line.126"></a>
-<span class="sourceLineNo">127</span>   *<a name="line.127"></a>
-<span class="sourceLineNo">128</span>   * @param lengthToReport the length of this {@link ChunkedInput}<a name="line.128"></a>
-<span class="sourceLineNo">129</span>   * implementation in bytes to be reported by the {@link #length()}<a name="line.129"></a>
-<span class="sourceLineNo">130</span>   * method; may be {@code -1L} (and very often is) if a<a name="line.130"></a>
-<span class="sourceLineNo">131</span>   * representation of its length is not available.<a name="line.131"></a>
+<span class="sourceLineNo">084</span>   * &lt;p&gt;This field is never less than {@code -1L}.<a name="line.84"></a>
+<span class="sourceLineNo">085</span>   *<a name="line.85"></a>
+<span class="sourceLineNo">086</span>   * @see #length()<a name="line.86"></a>
+<span class="sourceLineNo">087</span>   */<a name="line.87"></a>
+<span class="sourceLineNo">088</span>  private final long lengthToReport;<a name="line.88"></a>
+<span class="sourceLineNo">089</span><a name="line.89"></a>
+<span class="sourceLineNo">090</span>  private volatile boolean noMoreInput;<a name="line.90"></a>
+<span class="sourceLineNo">091</span>  <a name="line.91"></a>
+<span class="sourceLineNo">092</span>  /**<a name="line.92"></a>
+<span class="sourceLineNo">093</span>   * Indicates that no more input is forthcoming, so assuming other<a name="line.93"></a>
+<span class="sourceLineNo">094</span>   * conditions are true the {@link #isEndOfInput()} method may return<a name="line.94"></a>
+<span class="sourceLineNo">095</span>   * {@code true}.<a name="line.95"></a>
+<span class="sourceLineNo">096</span>   *<a name="line.96"></a>
+<span class="sourceLineNo">097</span>   * @see #isEndOfInput()<a name="line.97"></a>
+<span class="sourceLineNo">098</span>   *<a name="line.98"></a>
+<span class="sourceLineNo">099</span>   * @see #close()<a name="line.99"></a>
+<span class="sourceLineNo">100</span>   */<a name="line.100"></a>
+<span class="sourceLineNo">101</span>  private volatile boolean closed;<a name="line.101"></a>
+<span class="sourceLineNo">102</span><a name="line.102"></a>
+<span class="sourceLineNo">103</span><a name="line.103"></a>
+<span class="sourceLineNo">104</span>  /*<a name="line.104"></a>
+<span class="sourceLineNo">105</span>   * Constructors.<a name="line.105"></a>
+<span class="sourceLineNo">106</span>   */<a name="line.106"></a>
+<span class="sourceLineNo">107</span><a name="line.107"></a>
+<span class="sourceLineNo">108</span><a name="line.108"></a>
+<span class="sourceLineNo">109</span>  /**<a name="line.109"></a>
+<span class="sourceLineNo">110</span>   * Creates a new {@link FunctionalByteBufChunkedInput} whose {@link #length()}<a name="line.110"></a>
+<span class="sourceLineNo">111</span>   * method will return {@code -1L}.<a name="line.111"></a>
+<span class="sourceLineNo">112</span>   *<a name="line.112"></a>
+<span class="sourceLineNo">113</span>   * @param byteBuf the {@link ByteBuf} from which chunks will be<a name="line.113"></a>
+<span class="sourceLineNo">114</span>   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.114"></a>
+<span class="sourceLineNo">115</span>   * {@code null}<a name="line.115"></a>
+<span class="sourceLineNo">116</span>   *<a name="line.116"></a>
+<span class="sourceLineNo">117</span>   * @param chunkReader a {@link Function} that will be supplied with<a name="line.117"></a>
+<span class="sourceLineNo">118</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.118"></a>
+<span class="sourceLineNo">119</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.119"></a>
+<span class="sourceLineNo">120</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method; must<a name="line.120"></a>
+<span class="sourceLineNo">121</span>   * not be {@code null}<a name="line.121"></a>
+<span class="sourceLineNo">122</span>   *<a name="line.122"></a>
+<span class="sourceLineNo">123</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.123"></a>
+<span class="sourceLineNo">124</span>   */<a name="line.124"></a>
+<span class="sourceLineNo">125</span>  public FunctionalByteBufChunkedInput(final ByteBuf byteBuf,<a name="line.125"></a>
+<span class="sourceLineNo">126</span>                                       final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader) {<a name="line.126"></a>
+<span class="sourceLineNo">127</span>    this(byteBuf, chunkReader, -1L);<a name="line.127"></a>
+<span class="sourceLineNo">128</span>  }<a name="line.128"></a>
+<span class="sourceLineNo">129</span><a name="line.129"></a>
+<span class="sourceLineNo">130</span>  /**<a name="line.130"></a>
+<span class="sourceLineNo">131</span>   * Creates a new {@link FunctionalByteBufChunkedInput}.<a name="line.131"></a>
 <span class="sourceLineNo">132</span>   *<a name="line.132"></a>
-<span class="sourceLineNo">133</span>   * @exception NullPointerException if either {@code byteBuf} or<a name="line.133"></a>
-<span class="sourceLineNo">134</span>   * {@code chunkReader} is {@code null}<a name="line.134"></a>
-<span class="sourceLineNo">135</span>   */<a name="line.135"></a>
-<span class="sourceLineNo">136</span>  public FunctionalByteBufChunkedInput(final ByteBuf byteBuf,<a name="line.136"></a>
-<span class="sourceLineNo">137</span>                                       final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader,<a name="line.137"></a>
-<span class="sourceLineNo">138</span>                                       final long lengthToReport) {<a name="line.138"></a>
-<span class="sourceLineNo">139</span>    super();<a name="line.139"></a>
-<span class="sourceLineNo">140</span>    this.byteBuf = Objects.requireNonNull(byteBuf);<a name="line.140"></a>
-<span class="sourceLineNo">141</span>    this.chunkReader = Objects.requireNonNull(chunkReader);<a name="line.141"></a>
-<span class="sourceLineNo">142</span>    this.lengthToReport = Math.max(-1L, lengthToReport);<a name="line.142"></a>
-<span class="sourceLineNo">143</span>  }<a name="line.143"></a>
-<span class="sourceLineNo">144</span><a name="line.144"></a>
-<span class="sourceLineNo">145</span><a name="line.145"></a>
-<span class="sourceLineNo">146</span>  /*<a name="line.146"></a>
-<span class="sourceLineNo">147</span>   * Instance methods.<a name="line.147"></a>
-<span class="sourceLineNo">148</span>   */<a name="line.148"></a>
-<span class="sourceLineNo">149</span><a name="line.149"></a>
-<span class="sourceLineNo">150</span><a name="line.150"></a>
-<span class="sourceLineNo">151</span>  /**<a name="line.151"></a>
-<span class="sourceLineNo">152</span>   * Returns {@code true} if the end of the input has been reached and<a name="line.152"></a>
-<span class="sourceLineNo">153</span>   * subsequent invocations of the {@link<a name="line.153"></a>
-<span class="sourceLineNo">154</span>   * #readChunk(ByteBufAllocator)} method will return {@code<a name="line.154"></a>
-<span class="sourceLineNo">155</span>   * null}.<a name="line.155"></a>
-<span class="sourceLineNo">156</span>   *<a name="line.156"></a>
-<span class="sourceLineNo">157</span>   * @return {@code true} if the end of the input has been reached and<a name="line.157"></a>
-<span class="sourceLineNo">158</span>   * subsequent invocations of the {@link<a name="line.158"></a>
-<span class="sourceLineNo">159</span>   * #readChunk(ByteBufAllocator)} method will return {@code<a name="line.159"></a>
-<span class="sourceLineNo">160</span>   * null}.<a name="line.160"></a>
-<span class="sourceLineNo">161</span>   */<a name="line.161"></a>
-<span class="sourceLineNo">162</span>  @Override<a name="line.162"></a>
-<span class="sourceLineNo">163</span>  public final boolean isEndOfInput() {<a name="line.163"></a>
-<span class="sourceLineNo">164</span>    return this.byteBuf.refCnt() &lt;= 0 || (this.closed &amp;&amp; !this.byteBuf.isReadable());<a name="line.164"></a>
-<span class="sourceLineNo">165</span>  }<a name="line.165"></a>
-<span class="sourceLineNo">166</span><a name="line.166"></a>
-<span class="sourceLineNo">167</span>  /**<a name="line.167"></a>
-<span class="sourceLineNo">168</span>   * Calls the {@link #readChunk(ByteBufAllocator)} method and returns<a name="line.168"></a>
-<span class="sourceLineNo">169</span>   * its result.<a name="line.169"></a>
-<span class="sourceLineNo">170</span>   *<a name="line.170"></a>
-<span class="sourceLineNo">171</span>   * &lt;p&gt;This method may and often does return {@code null}.&lt;/p&gt;<a name="line.171"></a>
-<span class="sourceLineNo">172</span>   *<a name="line.172"></a>
-<span class="sourceLineNo">173</span>   * @param channelHandlerContext a {@link ChannelHandlerContext}<a name="line.173"></a>
-<span class="sourceLineNo">174</span>   * whose {@link ChannelHandlerContext#alloc()} method is invoked to<a name="line.174"></a>
-<span class="sourceLineNo">175</span>   * acquire a {@link ByteBufAllocator}; may be {@code null}<a name="line.175"></a>
-<span class="sourceLineNo">176</span>   *<a name="line.176"></a>
-<span class="sourceLineNo">177</span>   * @return a chunk of the overall data, or {@code null}<a name="line.177"></a>
-<span class="sourceLineNo">178</span>   *<a name="line.178"></a>
-<span class="sourceLineNo">179</span>   * @see #readChunk(ByteBufAllocator)<a name="line.179"></a>
-<span class="sourceLineNo">180</span>   *<a name="line.180"></a>
-<span class="sourceLineNo">181</span>   * @deprecated Please use the {@link #readChunk(ByteBufAllocator)}<a name="line.181"></a>
-<span class="sourceLineNo">182</span>   * method instead.<a name="line.182"></a>
-<span class="sourceLineNo">183</span>   */<a name="line.183"></a>
-<span class="sourceLineNo">184</span>  @Deprecated<a name="line.184"></a>
-<span class="sourceLineNo">185</span>  @Override<a name="line.185"></a>
-<span class="sourceLineNo">186</span>  public final T readChunk(final ChannelHandlerContext channelHandlerContext) {<a name="line.186"></a>
-<span class="sourceLineNo">187</span>    return this.readChunk(channelHandlerContext == null ? (ByteBufAllocator)null : channelHandlerContext.alloc());<a name="line.187"></a>
-<span class="sourceLineNo">188</span>  }<a name="line.188"></a>
-<span class="sourceLineNo">189</span><a name="line.189"></a>
-<span class="sourceLineNo">190</span>  /**<a name="line.190"></a>
-<span class="sourceLineNo">191</span>   * Returns a chunk of this {@link FunctionalByteBufChunkedInput}'s<a name="line.191"></a>
-<span class="sourceLineNo">192</span>   * overall input as represented by the {@link ByteBuf} and using the<a name="line.192"></a>
-<span class="sourceLineNo">193</span>   * {@link Function} supplied to it {@linkplain<a name="line.193"></a>
-<span class="sourceLineNo">194</span>   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at<a name="line.194"></a>
-<span class="sourceLineNo">195</span>   * construction time}.<a name="line.195"></a>
-<span class="sourceLineNo">196</span>   *<a name="line.196"></a>
-<span class="sourceLineNo">197</span>   * &lt;p&gt;This method may, and often does, return {@code null}.&lt;/p&gt;<a name="line.197"></a>
-<span class="sourceLineNo">198</span>   *<a name="line.198"></a>
-<span class="sourceLineNo">199</span>   * &lt;p&gt;The chunk that is returned by this method will be, if<a name="line.199"></a>
-<span class="sourceLineNo">200</span>   * non-{@code null}, synthesized from a {@linkplain<a name="line.200"></a>
-<span class="sourceLineNo">201</span>   * ByteBuf#readRetainedSlice(int) retained slice} of the {@link<a name="line.201"></a>
-<span class="sourceLineNo">202</span>   * ByteBuf} supplied to this {@link ByteBufChunkedInput} {@linkplain<a name="line.202"></a>
-<span class="sourceLineNo">203</span>   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at<a name="line.203"></a>
-<span class="sourceLineNo">204</span>   * construction time} whose size is given by the return value of the<a name="line.204"></a>
-<span class="sourceLineNo">205</span>   * {@link #getChunkSize(ByteBuf)} method.&lt;/p&gt;<a name="line.205"></a>
-<span class="sourceLineNo">206</span>   *<a name="line.206"></a>
-<span class="sourceLineNo">207</span>   * @param ignoredByteBufAllocator a {@link ByteBufAllocator} that an<a name="line.207"></a>
-<span class="sourceLineNo">208</span>   * implementation may use if it wishes but normally should have no<a name="line.208"></a>
-<span class="sourceLineNo">209</span>   * use for; may be {@code null}<a name="line.209"></a>
-<span class="sourceLineNo">210</span>   *<a name="line.210"></a>
-<span class="sourceLineNo">211</span>   * @return a chunk of this {@link ByteBufChunkedInput}'s overall<a name="line.211"></a>
-<span class="sourceLineNo">212</span>   * input as represented by the {@link ByteBuf} supplied to it<a name="line.212"></a>
-<span class="sourceLineNo">213</span>   * {@linkplain #FunctionalByteBufChunkedInput(ByteBuf, Function,<a name="line.213"></a>
-<span class="sourceLineNo">214</span>   * long) at construction time}, or {@code null}<a name="line.214"></a>
-<span class="sourceLineNo">215</span>   *<a name="line.215"></a>
-<span class="sourceLineNo">216</span>   * @see #getChunkSize(ByteBuf)<a name="line.216"></a>
-<span class="sourceLineNo">217</span>   *<a name="line.217"></a>
-<span class="sourceLineNo">218</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.218"></a>
-<span class="sourceLineNo">219</span>   */<a name="line.219"></a>
-<span class="sourceLineNo">220</span>  @Override<a name="line.220"></a>
-<span class="sourceLineNo">221</span>  public final T readChunk(final ByteBufAllocator ignoredByteBufAllocator) {<a name="line.221"></a>
-<span class="sourceLineNo">222</span>    return<a name="line.222"></a>
-<span class="sourceLineNo">223</span>      this.byteBuf.refCnt() &lt;= 0 ||<a name="line.223"></a>
-<span class="sourceLineNo">224</span>      (this.closed &amp;&amp; !this.byteBuf.isReadable()) ?<a name="line.224"></a>
-<span class="sourceLineNo">225</span>      null :<a name="line.225"></a>
-<span class="sourceLineNo">226</span>      this.chunkReader.apply(this.byteBuf.readRetainedSlice(Math.min(this.getChunkSize(this.byteBuf),<a name="line.226"></a>
-<span class="sourceLineNo">227</span>                                                                     this.byteBuf.readableBytes())).asReadOnly());<a name="line.227"></a>
-<span class="sourceLineNo">228</span>  }<a name="line.228"></a>
-<span class="sourceLineNo">229</span><a name="line.229"></a>
-<span class="sourceLineNo">230</span>  /**<a name="line.230"></a>
-<span class="sourceLineNo">231</span>   * Returns the size of the chunk, in bytes, that will be read and<a name="line.231"></a>
-<span class="sourceLineNo">232</span>   * synthesized into the return value the {@link<a name="line.232"></a>
-<span class="sourceLineNo">233</span>   * #readChunk(ByteBufAllocator)} method.<a name="line.233"></a>
-<span class="sourceLineNo">234</span>   *<a name="line.234"></a>
-<span class="sourceLineNo">235</span>   * &lt;p&gt;This implementation returns the result of invoking {@code<a name="line.235"></a>
-<span class="sourceLineNo">236</span>   * source.}{@link ByteBuf#readableBytes() readableBytes()} on the<a name="line.236"></a>
-<span class="sourceLineNo">237</span>   * supplied {@code source}.&lt;/p&gt;<a name="line.237"></a>
+<span class="sourceLineNo">133</span>   * @param byteBuf the {@link ByteBuf} from which chunks will be<a name="line.133"></a>
+<span class="sourceLineNo">134</span>   * {@linkplain #readChunk(ByteBufAllocator) read}; must not be<a name="line.134"></a>
+<span class="sourceLineNo">135</span>   * {@code null}<a name="line.135"></a>
+<span class="sourceLineNo">136</span>   *<a name="line.136"></a>
+<span class="sourceLineNo">137</span>   * @param chunkReader a {@link Function} that will be supplied with<a name="line.137"></a>
+<span class="sourceLineNo">138</span>   * a {@link ByteBuf} whose {@linkplain ByteBuf#readableBytes()<a name="line.138"></a>
+<span class="sourceLineNo">139</span>   * readable bytes} will be used to synthesize a chunk that will be<a name="line.139"></a>
+<span class="sourceLineNo">140</span>   * returned by the {@link #readChunk(ByteBufAllocator)} method; must<a name="line.140"></a>
+<span class="sourceLineNo">141</span>   * not be {@code null}<a name="line.141"></a>
+<span class="sourceLineNo">142</span>   *<a name="line.142"></a>
+<span class="sourceLineNo">143</span>   * @param lengthToReport the length of this {@link ChunkedInput}<a name="line.143"></a>
+<span class="sourceLineNo">144</span>   * implementation in bytes to be reported by the {@link #length()}<a name="line.144"></a>
+<span class="sourceLineNo">145</span>   * method; may be {@code -1L} (and very often is) if a<a name="line.145"></a>
+<span class="sourceLineNo">146</span>   * representation of its length is not available.<a name="line.146"></a>
+<span class="sourceLineNo">147</span>   *<a name="line.147"></a>
+<span class="sourceLineNo">148</span>   * @exception NullPointerException if either {@code byteBuf} or<a name="line.148"></a>
+<span class="sourceLineNo">149</span>   * {@code chunkReader} is {@code null}<a name="line.149"></a>
+<span class="sourceLineNo">150</span>   */<a name="line.150"></a>
+<span class="sourceLineNo">151</span>  public FunctionalByteBufChunkedInput(final ByteBuf byteBuf,<a name="line.151"></a>
+<span class="sourceLineNo">152</span>                                       final Function&lt;? super ByteBuf, ? extends T&gt; chunkReader,<a name="line.152"></a>
+<span class="sourceLineNo">153</span>                                       final long lengthToReport) {<a name="line.153"></a>
+<span class="sourceLineNo">154</span>    super();<a name="line.154"></a>
+<span class="sourceLineNo">155</span>    this.byteBuf = Objects.requireNonNull(byteBuf);<a name="line.155"></a>
+<span class="sourceLineNo">156</span>    this.chunkReader = Objects.requireNonNull(chunkReader);<a name="line.156"></a>
+<span class="sourceLineNo">157</span>    this.lengthToReport = Math.max(-1L, lengthToReport);<a name="line.157"></a>
+<span class="sourceLineNo">158</span>  }<a name="line.158"></a>
+<span class="sourceLineNo">159</span><a name="line.159"></a>
+<span class="sourceLineNo">160</span><a name="line.160"></a>
+<span class="sourceLineNo">161</span>  /*<a name="line.161"></a>
+<span class="sourceLineNo">162</span>   * Instance methods.<a name="line.162"></a>
+<span class="sourceLineNo">163</span>   */<a name="line.163"></a>
+<span class="sourceLineNo">164</span><a name="line.164"></a>
+<span class="sourceLineNo">165</span><a name="line.165"></a>
+<span class="sourceLineNo">166</span>  /**<a name="line.166"></a>
+<span class="sourceLineNo">167</span>   * Returns {@code true} if the end of the input has been reached and<a name="line.167"></a>
+<span class="sourceLineNo">168</span>   * subsequent invocations of the {@link<a name="line.168"></a>
+<span class="sourceLineNo">169</span>   * #readChunk(ByteBufAllocator)} method will return {@code<a name="line.169"></a>
+<span class="sourceLineNo">170</span>   * null}.<a name="line.170"></a>
+<span class="sourceLineNo">171</span>   *<a name="line.171"></a>
+<span class="sourceLineNo">172</span>   * @return {@code true} if the end of the input has been reached and<a name="line.172"></a>
+<span class="sourceLineNo">173</span>   * subsequent invocations of the {@link<a name="line.173"></a>
+<span class="sourceLineNo">174</span>   * #readChunk(ByteBufAllocator)} method will return {@code<a name="line.174"></a>
+<span class="sourceLineNo">175</span>   * null}.<a name="line.175"></a>
+<span class="sourceLineNo">176</span>   */<a name="line.176"></a>
+<span class="sourceLineNo">177</span>  @Override<a name="line.177"></a>
+<span class="sourceLineNo">178</span>  public final boolean isEndOfInput() {<a name="line.178"></a>
+<span class="sourceLineNo">179</span>    final String mn = "isEndOfInput";<a name="line.179"></a>
+<span class="sourceLineNo">180</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.180"></a>
+<span class="sourceLineNo">181</span>      logger.entering(cn, mn);<a name="line.181"></a>
+<span class="sourceLineNo">182</span>    }<a name="line.182"></a>
+<span class="sourceLineNo">183</span><a name="line.183"></a>
+<span class="sourceLineNo">184</span>    // (Don't check this.closed and throw an IllegalStateException<a name="line.184"></a>
+<span class="sourceLineNo">185</span>    // because close() calls this method after setting this.closed to<a name="line.185"></a>
+<span class="sourceLineNo">186</span>    // true.  That ordering is important to prevent<a name="line.186"></a>
+<span class="sourceLineNo">187</span>    // setByteBuf(ByteBuf) from interfering during all this.)<a name="line.187"></a>
+<span class="sourceLineNo">188</span>    <a name="line.188"></a>
+<span class="sourceLineNo">189</span>    final boolean returnValue;<a name="line.189"></a>
+<span class="sourceLineNo">190</span>    if (this.noMoreInput) {<a name="line.190"></a>
+<span class="sourceLineNo">191</span>      ByteBuf byteBuf = this.byteBuf;<a name="line.191"></a>
+<span class="sourceLineNo">192</span>      if (byteBuf == null) {<a name="line.192"></a>
+<span class="sourceLineNo">193</span>        returnValue = true;<a name="line.193"></a>
+<span class="sourceLineNo">194</span>      } else if (byteBuf.refCnt() &lt;= 0) {<a name="line.194"></a>
+<span class="sourceLineNo">195</span>        if (logger.isLoggable(Level.WARNING)) {<a name="line.195"></a>
+<span class="sourceLineNo">196</span>          logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());<a name="line.196"></a>
+<span class="sourceLineNo">197</span>        }<a name="line.197"></a>
+<span class="sourceLineNo">198</span>        returnValue = true;<a name="line.198"></a>
+<span class="sourceLineNo">199</span>      } else {<a name="line.199"></a>
+<span class="sourceLineNo">200</span>        returnValue = !byteBuf.isReadable();<a name="line.200"></a>
+<span class="sourceLineNo">201</span>        // Ensure that nothing more CAN be written to the byteBuf.<a name="line.201"></a>
+<span class="sourceLineNo">202</span>        byteBuf = byteBuf.asReadOnly();<a name="line.202"></a>
+<span class="sourceLineNo">203</span>        assert byteBuf != null;<a name="line.203"></a>
+<span class="sourceLineNo">204</span>        assert byteBuf.isReadOnly();<a name="line.204"></a>
+<span class="sourceLineNo">205</span>        this.byteBuf = byteBuf;<a name="line.205"></a>
+<span class="sourceLineNo">206</span>      }<a name="line.206"></a>
+<span class="sourceLineNo">207</span>    } else {<a name="line.207"></a>
+<span class="sourceLineNo">208</span>      returnValue = false;<a name="line.208"></a>
+<span class="sourceLineNo">209</span>    }<a name="line.209"></a>
+<span class="sourceLineNo">210</span><a name="line.210"></a>
+<span class="sourceLineNo">211</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.211"></a>
+<span class="sourceLineNo">212</span>      logger.exiting(cn, mn, Boolean.valueOf(returnValue));<a name="line.212"></a>
+<span class="sourceLineNo">213</span>    }<a name="line.213"></a>
+<span class="sourceLineNo">214</span>    return returnValue;<a name="line.214"></a>
+<span class="sourceLineNo">215</span>  }<a name="line.215"></a>
+<span class="sourceLineNo">216</span><a name="line.216"></a>
+<span class="sourceLineNo">217</span>  /**<a name="line.217"></a>
+<span class="sourceLineNo">218</span>   * Irrevocably closes this {@link FunctionalByteBufChunkedInput} to<a name="line.218"></a>
+<span class="sourceLineNo">219</span>   * new input.<a name="line.219"></a>
+<span class="sourceLineNo">220</span>   */<a name="line.220"></a>
+<span class="sourceLineNo">221</span>  @Override<a name="line.221"></a>
+<span class="sourceLineNo">222</span>  public final void setEndOfInput() {<a name="line.222"></a>
+<span class="sourceLineNo">223</span>    final String mn = "setEndOfInput";<a name="line.223"></a>
+<span class="sourceLineNo">224</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.224"></a>
+<span class="sourceLineNo">225</span>      logger.entering(cn, mn);<a name="line.225"></a>
+<span class="sourceLineNo">226</span>    }<a name="line.226"></a>
+<span class="sourceLineNo">227</span>    this.noMoreInput = true;<a name="line.227"></a>
+<span class="sourceLineNo">228</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.228"></a>
+<span class="sourceLineNo">229</span>      logger.exiting(cn, mn);<a name="line.229"></a>
+<span class="sourceLineNo">230</span>    }<a name="line.230"></a>
+<span class="sourceLineNo">231</span>  }<a name="line.231"></a>
+<span class="sourceLineNo">232</span><a name="line.232"></a>
+<span class="sourceLineNo">233</span>  /**<a name="line.233"></a>
+<span class="sourceLineNo">234</span>   * Calls the {@link #readChunk(ByteBufAllocator)} method and returns<a name="line.234"></a>
+<span class="sourceLineNo">235</span>   * its result.<a name="line.235"></a>
+<span class="sourceLineNo">236</span>   *<a name="line.236"></a>
+<span class="sourceLineNo">237</span>   * &lt;p&gt;This method may and often does return {@code null}.&lt;/p&gt;<a name="line.237"></a>
 <span class="sourceLineNo">238</span>   *<a name="line.238"></a>
-<span class="sourceLineNo">239</span>   * @param source the {@link ByteBuf} that was {@linkplain<a name="line.239"></a>
-<span class="sourceLineNo">240</span>   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) supplied<a name="line.240"></a>
-<span class="sourceLineNo">241</span>   * at construction time}; will not be {@code null}<a name="line.241"></a>
+<span class="sourceLineNo">239</span>   * @param channelHandlerContext a {@link ChannelHandlerContext}<a name="line.239"></a>
+<span class="sourceLineNo">240</span>   * whose {@link ChannelHandlerContext#alloc()} method is invoked to<a name="line.240"></a>
+<span class="sourceLineNo">241</span>   * acquire a {@link ByteBufAllocator}; may be {@code null}<a name="line.241"></a>
 <span class="sourceLineNo">242</span>   *<a name="line.242"></a>
-<span class="sourceLineNo">243</span>   * @return the size of the chunk, in bytes, that will be returned by<a name="line.243"></a>
-<span class="sourceLineNo">244</span>   * the {@link #readChunk(ByteBufAllocator)} method; &lt;strong&gt;behavior<a name="line.244"></a>
-<span class="sourceLineNo">245</span>   * is undefined if this value is less than or equal to {@code<a name="line.245"></a>
-<span class="sourceLineNo">246</span>   * 0}&lt;/strong&gt;<a name="line.246"></a>
-<span class="sourceLineNo">247</span>   *<a name="line.247"></a>
-<span class="sourceLineNo">248</span>   * @exception NullPointerException if for any reason {@code source}<a name="line.248"></a>
-<span class="sourceLineNo">249</span>   * is {@code null}<a name="line.249"></a>
-<span class="sourceLineNo">250</span>   *<a name="line.250"></a>
-<span class="sourceLineNo">251</span>   * @see #readChunk(ByteBufAllocator)<a name="line.251"></a>
-<span class="sourceLineNo">252</span>   */<a name="line.252"></a>
-<span class="sourceLineNo">253</span>  protected int getChunkSize(final ByteBuf source) {<a name="line.253"></a>
-<span class="sourceLineNo">254</span>    return source.readableBytes();<a name="line.254"></a>
-<span class="sourceLineNo">255</span>  }<a name="line.255"></a>
-<span class="sourceLineNo">256</span><a name="line.256"></a>
-<span class="sourceLineNo">257</span>  /**<a name="line.257"></a>
-<span class="sourceLineNo">258</span>   * Returns the length of this {@link ChunkedInput} implementation in bytes,<a name="line.258"></a>
-<span class="sourceLineNo">259</span>   * or {@code -1L} if a representation of its length is not<a name="line.259"></a>
-<span class="sourceLineNo">260</span>   * available.<a name="line.260"></a>
-<span class="sourceLineNo">261</span>   *<a name="line.261"></a>
-<span class="sourceLineNo">262</span>   * @return the length of this {@link ChunkedInput} implementation in<a name="line.262"></a>
-<span class="sourceLineNo">263</span>   * bytes, or {@code -1L}<a name="line.263"></a>
-<span class="sourceLineNo">264</span>   */<a name="line.264"></a>
-<span class="sourceLineNo">265</span>  @Override<a name="line.265"></a>
-<span class="sourceLineNo">266</span>  public final long length() {<a name="line.266"></a>
-<span class="sourceLineNo">267</span>    return this.lengthToReport;<a name="line.267"></a>
-<span class="sourceLineNo">268</span>  }<a name="line.268"></a>
-<span class="sourceLineNo">269</span><a name="line.269"></a>
-<span class="sourceLineNo">270</span>  /**<a name="line.270"></a>
-<span class="sourceLineNo">271</span>   * Returns the number of bytes read from this input.<a name="line.271"></a>
+<span class="sourceLineNo">243</span>   * @return a chunk of the overall data, or {@code null}<a name="line.243"></a>
+<span class="sourceLineNo">244</span>   *<a name="line.244"></a>
+<span class="sourceLineNo">245</span>   * @see #readChunk(ByteBufAllocator)<a name="line.245"></a>
+<span class="sourceLineNo">246</span>   *<a name="line.246"></a>
+<span class="sourceLineNo">247</span>   * @deprecated Please use the {@link #readChunk(ByteBufAllocator)}<a name="line.247"></a>
+<span class="sourceLineNo">248</span>   * method instead.<a name="line.248"></a>
+<span class="sourceLineNo">249</span>   */<a name="line.249"></a>
+<span class="sourceLineNo">250</span>  @Deprecated<a name="line.250"></a>
+<span class="sourceLineNo">251</span>  @Override<a name="line.251"></a>
+<span class="sourceLineNo">252</span>  public final T readChunk(final ChannelHandlerContext channelHandlerContext) {<a name="line.252"></a>
+<span class="sourceLineNo">253</span>    return this.readChunk(channelHandlerContext == null ? (ByteBufAllocator)null : channelHandlerContext.alloc());<a name="line.253"></a>
+<span class="sourceLineNo">254</span>  }<a name="line.254"></a>
+<span class="sourceLineNo">255</span><a name="line.255"></a>
+<span class="sourceLineNo">256</span>  /**<a name="line.256"></a>
+<span class="sourceLineNo">257</span>   * Returns a chunk of this {@link FunctionalByteBufChunkedInput}'s<a name="line.257"></a>
+<span class="sourceLineNo">258</span>   * overall input as represented by the {@link ByteBuf} and using the<a name="line.258"></a>
+<span class="sourceLineNo">259</span>   * {@link Function} supplied to it {@linkplain<a name="line.259"></a>
+<span class="sourceLineNo">260</span>   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at<a name="line.260"></a>
+<span class="sourceLineNo">261</span>   * construction time}.<a name="line.261"></a>
+<span class="sourceLineNo">262</span>   *<a name="line.262"></a>
+<span class="sourceLineNo">263</span>   * &lt;p&gt;This method may, and often does, return {@code null}.&lt;/p&gt;<a name="line.263"></a>
+<span class="sourceLineNo">264</span>   *<a name="line.264"></a>
+<span class="sourceLineNo">265</span>   * &lt;p&gt;The chunk that is returned by this method will be, if<a name="line.265"></a>
+<span class="sourceLineNo">266</span>   * non-{@code null}, synthesized from a {@linkplain<a name="line.266"></a>
+<span class="sourceLineNo">267</span>   * ByteBuf#readRetainedSlice(int) retained slice} of the {@link<a name="line.267"></a>
+<span class="sourceLineNo">268</span>   * ByteBuf} {@linkplain #FunctionalByteBufChunkedInput(ByteBuf,<a name="line.268"></a>
+<span class="sourceLineNo">269</span>   * Function, long) supplied at construction time} whose size is<a name="line.269"></a>
+<span class="sourceLineNo">270</span>   * given by the return value of the {@link #getChunkSize(ByteBuf)}<a name="line.270"></a>
+<span class="sourceLineNo">271</span>   * method.&lt;/p&gt;<a name="line.271"></a>
 <span class="sourceLineNo">272</span>   *<a name="line.272"></a>
-<span class="sourceLineNo">273</span>   * @return the number of bytes read from this input<a name="line.273"></a>
-<span class="sourceLineNo">274</span>   */<a name="line.274"></a>
-<span class="sourceLineNo">275</span>  @Override<a name="line.275"></a>
-<span class="sourceLineNo">276</span>  public final long progress() {<a name="line.276"></a>
-<span class="sourceLineNo">277</span>    // e.g. we've read &lt;progress&gt; of &lt;length&gt; bytes.  Other<a name="line.277"></a>
-<span class="sourceLineNo">278</span>    // ChunkedInput implementations return a valid number here even<a name="line.278"></a>
-<span class="sourceLineNo">279</span>    // when length() returns -1, so we do too.<a name="line.279"></a>
-<span class="sourceLineNo">280</span>    return this.byteBuf.readerIndex();<a name="line.280"></a>
-<span class="sourceLineNo">281</span>  }<a name="line.281"></a>
-<span class="sourceLineNo">282</span><a name="line.282"></a>
-<span class="sourceLineNo">283</span>  /**<a name="line.283"></a>
-<span class="sourceLineNo">284</span>   * Marks this {@link FunctionalByteBufChunkedInput} as being closed.<a name="line.284"></a>
-<span class="sourceLineNo">285</span>   *<a name="line.285"></a>
-<span class="sourceLineNo">286</span>   * &lt;p&gt;As a result the {@link #readChunk(ByteBufAllocator)} method<a name="line.286"></a>
-<span class="sourceLineNo">287</span>   * may return {@code null} in the future.&lt;/p&gt;<a name="line.287"></a>
+<span class="sourceLineNo">273</span>   * @param ignoredByteBufAllocator a {@link ByteBufAllocator} that an<a name="line.273"></a>
+<span class="sourceLineNo">274</span>   * implementation may use if it wishes but normally should have no<a name="line.274"></a>
+<span class="sourceLineNo">275</span>   * use for; may be {@code null}<a name="line.275"></a>
+<span class="sourceLineNo">276</span>   *<a name="line.276"></a>
+<span class="sourceLineNo">277</span>   * @return a chunk of this {@link ByteBufChunkedInput}'s overall<a name="line.277"></a>
+<span class="sourceLineNo">278</span>   * input, or {@code null}<a name="line.278"></a>
+<span class="sourceLineNo">279</span>   *<a name="line.279"></a>
+<span class="sourceLineNo">280</span>   * @exception IllegalStateException if {@link #close()} has been<a name="line.280"></a>
+<span class="sourceLineNo">281</span>   * called<a name="line.281"></a>
+<span class="sourceLineNo">282</span>   *<a name="line.282"></a>
+<span class="sourceLineNo">283</span>   * @see #getChunkSize(ByteBuf)<a name="line.283"></a>
+<span class="sourceLineNo">284</span>   *<a name="line.284"></a>
+<span class="sourceLineNo">285</span>   * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)<a name="line.285"></a>
+<span class="sourceLineNo">286</span>   *<a name="line.286"></a>
+<span class="sourceLineNo">287</span>   * @see #isEndOfInput()<a name="line.287"></a>
 <span class="sourceLineNo">288</span>   *<a name="line.288"></a>
-<span class="sourceLineNo">289</span>   * @see #readChunk(ByteBufAllocator)<a name="line.289"></a>
-<span class="sourceLineNo">290</span>   */<a name="line.290"></a>
-<span class="sourceLineNo">291</span>  @Override<a name="line.291"></a>
-<span class="sourceLineNo">292</span>  public final void close() {<a name="line.292"></a>
-<span class="sourceLineNo">293</span>    this.closed = true;<a name="line.293"></a>
-<span class="sourceLineNo">294</span>  }<a name="line.294"></a>
-<span class="sourceLineNo">295</span><a name="line.295"></a>
-<span class="sourceLineNo">296</span>}<a name="line.296"></a>
+<span class="sourceLineNo">289</span>   * @see #setEndOfInput()<a name="line.289"></a>
+<span class="sourceLineNo">290</span>   *<a name="line.290"></a>
+<span class="sourceLineNo">291</span>   * @see #close()<a name="line.291"></a>
+<span class="sourceLineNo">292</span>   */<a name="line.292"></a>
+<span class="sourceLineNo">293</span>  @Override<a name="line.293"></a>
+<span class="sourceLineNo">294</span>  public final T readChunk(final ByteBufAllocator ignoredByteBufAllocator) {<a name="line.294"></a>
+<span class="sourceLineNo">295</span>    final String mn = "readChunk";<a name="line.295"></a>
+<span class="sourceLineNo">296</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.296"></a>
+<span class="sourceLineNo">297</span>      logger.entering(cn, mn, ignoredByteBufAllocator);<a name="line.297"></a>
+<span class="sourceLineNo">298</span>    }<a name="line.298"></a>
+<span class="sourceLineNo">299</span>    if (this.closed) {<a name="line.299"></a>
+<span class="sourceLineNo">300</span>      throw new IllegalStateException("closed");<a name="line.300"></a>
+<span class="sourceLineNo">301</span>    }<a name="line.301"></a>
+<span class="sourceLineNo">302</span><a name="line.302"></a>
+<span class="sourceLineNo">303</span>    final T returnValue;<a name="line.303"></a>
+<span class="sourceLineNo">304</span>    final ByteBuf byteBuf = this.byteBuf;<a name="line.304"></a>
+<span class="sourceLineNo">305</span>    if (byteBuf == null) {<a name="line.305"></a>
+<span class="sourceLineNo">306</span>      returnValue = null;<a name="line.306"></a>
+<span class="sourceLineNo">307</span>    } else if (byteBuf.refCnt() &lt;= 0) {<a name="line.307"></a>
+<span class="sourceLineNo">308</span>      if (logger.isLoggable(Level.WARNING)) {<a name="line.308"></a>
+<span class="sourceLineNo">309</span>        logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());<a name="line.309"></a>
+<span class="sourceLineNo">310</span>      }<a name="line.310"></a>
+<span class="sourceLineNo">311</span>      returnValue = null;<a name="line.311"></a>
+<span class="sourceLineNo">312</span>    } else if (!byteBuf.isReadable()) {<a name="line.312"></a>
+<span class="sourceLineNo">313</span>      returnValue = null;<a name="line.313"></a>
+<span class="sourceLineNo">314</span>    } else {<a name="line.314"></a>
+<span class="sourceLineNo">315</span>      final int readableBytes = byteBuf.readableBytes();<a name="line.315"></a>
+<span class="sourceLineNo">316</span>      assert readableBytes &gt; 0; // ...because we already checked isReadable()<a name="line.316"></a>
+<span class="sourceLineNo">317</span>      final int numberOfBytesToRead;<a name="line.317"></a>
+<span class="sourceLineNo">318</span>      final int chunkSize = this.getChunkSize(byteBuf);<a name="line.318"></a>
+<span class="sourceLineNo">319</span>      if (readableBytes &lt; chunkSize) {<a name="line.319"></a>
+<span class="sourceLineNo">320</span>        numberOfBytesToRead = readableBytes;<a name="line.320"></a>
+<span class="sourceLineNo">321</span>      } else {<a name="line.321"></a>
+<span class="sourceLineNo">322</span>        numberOfBytesToRead = chunkSize;<a name="line.322"></a>
+<span class="sourceLineNo">323</span>      }<a name="line.323"></a>
+<span class="sourceLineNo">324</span>      // TODO: look REALLY hard at whether this slice should be retained or not.<a name="line.324"></a>
+<span class="sourceLineNo">325</span>      final ByteBuf retainedSlice = byteBuf.readRetainedSlice(numberOfBytesToRead);<a name="line.325"></a>
+<span class="sourceLineNo">326</span>      assert retainedSlice != null;<a name="line.326"></a>
+<span class="sourceLineNo">327</span>      returnValue = this.chunkReader.apply(retainedSlice.asReadOnly());<a name="line.327"></a>
+<span class="sourceLineNo">328</span>    }<a name="line.328"></a>
+<span class="sourceLineNo">329</span><a name="line.329"></a>
+<span class="sourceLineNo">330</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.330"></a>
+<span class="sourceLineNo">331</span>      logger.exiting(cn, mn, returnValue);<a name="line.331"></a>
+<span class="sourceLineNo">332</span>    }<a name="line.332"></a>
+<span class="sourceLineNo">333</span>    return returnValue;<a name="line.333"></a>
+<span class="sourceLineNo">334</span>  }<a name="line.334"></a>
+<span class="sourceLineNo">335</span><a name="line.335"></a>
+<span class="sourceLineNo">336</span>  /**<a name="line.336"></a>
+<span class="sourceLineNo">337</span>   * Returns the size of the chunk, in bytes, that will be read and<a name="line.337"></a>
+<span class="sourceLineNo">338</span>   * synthesized into the return value the {@link<a name="line.338"></a>
+<span class="sourceLineNo">339</span>   * #readChunk(ByteBufAllocator)} method.<a name="line.339"></a>
+<span class="sourceLineNo">340</span>   *<a name="line.340"></a>
+<span class="sourceLineNo">341</span>   * &lt;p&gt;This implementation returns the result of invoking {@code<a name="line.341"></a>
+<span class="sourceLineNo">342</span>   * source.}{@link ByteBuf#readableBytes() readableBytes()} on the<a name="line.342"></a>
+<span class="sourceLineNo">343</span>   * supplied {@code source}.&lt;/p&gt;<a name="line.343"></a>
+<span class="sourceLineNo">344</span>   *<a name="line.344"></a>
+<span class="sourceLineNo">345</span>   * @param source the {@link ByteBuf} that was {@linkplain<a name="line.345"></a>
+<span class="sourceLineNo">346</span>   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) supplied<a name="line.346"></a>
+<span class="sourceLineNo">347</span>   * at construction time}; may be {@code null} in which case {@code<a name="line.347"></a>
+<span class="sourceLineNo">348</span>   * 0} will be returned<a name="line.348"></a>
+<span class="sourceLineNo">349</span>   *<a name="line.349"></a>
+<span class="sourceLineNo">350</span>   * @return the size of the chunk, in bytes, that will be returned by<a name="line.350"></a>
+<span class="sourceLineNo">351</span>   * the {@link #readChunk(ByteBufAllocator)} method; &lt;strong&gt;behavior<a name="line.351"></a>
+<span class="sourceLineNo">352</span>   * is undefined if this value is less than or equal to {@code<a name="line.352"></a>
+<span class="sourceLineNo">353</span>   * 0}&lt;/strong&gt;<a name="line.353"></a>
+<span class="sourceLineNo">354</span>   *<a name="line.354"></a>
+<span class="sourceLineNo">355</span>   * @exception NullPointerException if for any reason {@code source}<a name="line.355"></a>
+<span class="sourceLineNo">356</span>   * is {@code null}<a name="line.356"></a>
+<span class="sourceLineNo">357</span>   *<a name="line.357"></a>
+<span class="sourceLineNo">358</span>   * @see #readChunk(ByteBufAllocator)<a name="line.358"></a>
+<span class="sourceLineNo">359</span>   */<a name="line.359"></a>
+<span class="sourceLineNo">360</span>  protected int getChunkSize(final ByteBuf source) {<a name="line.360"></a>
+<span class="sourceLineNo">361</span>    return source == null ? 0 : source.readableBytes();<a name="line.361"></a>
+<span class="sourceLineNo">362</span>  }<a name="line.362"></a>
+<span class="sourceLineNo">363</span><a name="line.363"></a>
+<span class="sourceLineNo">364</span>  /**<a name="line.364"></a>
+<span class="sourceLineNo">365</span>   * Returns the length of this {@link ChunkedInput} implementation in bytes,<a name="line.365"></a>
+<span class="sourceLineNo">366</span>   * or {@code -1L} if a representation of its length is not<a name="line.366"></a>
+<span class="sourceLineNo">367</span>   * available.<a name="line.367"></a>
+<span class="sourceLineNo">368</span>   *<a name="line.368"></a>
+<span class="sourceLineNo">369</span>   * @return the length of this {@link ChunkedInput} implementation in<a name="line.369"></a>
+<span class="sourceLineNo">370</span>   * bytes, or {@code -1L}<a name="line.370"></a>
+<span class="sourceLineNo">371</span>   *<a name="line.371"></a>
+<span class="sourceLineNo">372</span>   * @exception IllegalStateException if {@link #close()} has been<a name="line.372"></a>
+<span class="sourceLineNo">373</span>   * called<a name="line.373"></a>
+<span class="sourceLineNo">374</span>   */<a name="line.374"></a>
+<span class="sourceLineNo">375</span>  @Override<a name="line.375"></a>
+<span class="sourceLineNo">376</span>  public final long length() {<a name="line.376"></a>
+<span class="sourceLineNo">377</span>    if (this.closed) {<a name="line.377"></a>
+<span class="sourceLineNo">378</span>      throw new IllegalStateException("closed");<a name="line.378"></a>
+<span class="sourceLineNo">379</span>    }<a name="line.379"></a>
+<span class="sourceLineNo">380</span>    return this.lengthToReport;<a name="line.380"></a>
+<span class="sourceLineNo">381</span>  }<a name="line.381"></a>
+<span class="sourceLineNo">382</span><a name="line.382"></a>
+<span class="sourceLineNo">383</span>  /**<a name="line.383"></a>
+<span class="sourceLineNo">384</span>   * Returns the number of bytes read from this input.<a name="line.384"></a>
+<span class="sourceLineNo">385</span>   *<a name="line.385"></a>
+<span class="sourceLineNo">386</span>   * &lt;p&gt;If the return value of an invocation of the {@link #length()}<a name="line.386"></a>
+<span class="sourceLineNo">387</span>   * method returns zero or a positive integer, then the value<a name="line.387"></a>
+<span class="sourceLineNo">388</span>   * returned by an invocation of this method will be less than or<a name="line.388"></a>
+<span class="sourceLineNo">389</span>   * equal to that value.&lt;/p&gt;<a name="line.389"></a>
+<span class="sourceLineNo">390</span>   *<a name="line.390"></a>
+<span class="sourceLineNo">391</span>   * @return the number of bytes read from this input<a name="line.391"></a>
+<span class="sourceLineNo">392</span>   *<a name="line.392"></a>
+<span class="sourceLineNo">393</span>   * @exception IllegalStateException if {@link #close()} has been<a name="line.393"></a>
+<span class="sourceLineNo">394</span>   * called<a name="line.394"></a>
+<span class="sourceLineNo">395</span>   *<a name="line.395"></a>
+<span class="sourceLineNo">396</span>   * @see #length()<a name="line.396"></a>
+<span class="sourceLineNo">397</span>   */<a name="line.397"></a>
+<span class="sourceLineNo">398</span>  @Override<a name="line.398"></a>
+<span class="sourceLineNo">399</span>  public final long progress() {<a name="line.399"></a>
+<span class="sourceLineNo">400</span>    if (this.closed) {<a name="line.400"></a>
+<span class="sourceLineNo">401</span>      throw new IllegalStateException("closed");<a name="line.401"></a>
+<span class="sourceLineNo">402</span>    }<a name="line.402"></a>
+<span class="sourceLineNo">403</span>    // e.g. we've read &lt;progress&gt; of &lt;length&gt; bytes.  Other<a name="line.403"></a>
+<span class="sourceLineNo">404</span>    // ChunkedInput implementations return a valid number here even<a name="line.404"></a>
+<span class="sourceLineNo">405</span>    // when length() returns -1L, so we do too.<a name="line.405"></a>
+<span class="sourceLineNo">406</span>    final long returnValue;<a name="line.406"></a>
+<span class="sourceLineNo">407</span>    final ByteBuf byteBuf = this.byteBuf;<a name="line.407"></a>
+<span class="sourceLineNo">408</span>    if (byteBuf == null) {<a name="line.408"></a>
+<span class="sourceLineNo">409</span>      returnValue = 0L;<a name="line.409"></a>
+<span class="sourceLineNo">410</span>    } else if (byteBuf.refCnt() &lt;= 0) {<a name="line.410"></a>
+<span class="sourceLineNo">411</span>      if (logger.isLoggable(Level.WARNING)) {<a name="line.411"></a>
+<span class="sourceLineNo">412</span>        logger.logp(Level.WARNING, cn, "progress", "Unexpected refCnt: {0}", byteBuf.refCnt());<a name="line.412"></a>
+<span class="sourceLineNo">413</span>      }<a name="line.413"></a>
+<span class="sourceLineNo">414</span>      returnValue = 0L;<a name="line.414"></a>
+<span class="sourceLineNo">415</span>    } else {<a name="line.415"></a>
+<span class="sourceLineNo">416</span>      returnValue = byteBuf.readerIndex();<a name="line.416"></a>
+<span class="sourceLineNo">417</span>    }<a name="line.417"></a>
+<span class="sourceLineNo">418</span>    return returnValue;<a name="line.418"></a>
+<span class="sourceLineNo">419</span>  }<a name="line.419"></a>
+<span class="sourceLineNo">420</span><a name="line.420"></a>
+<span class="sourceLineNo">421</span>  /**<a name="line.421"></a>
+<span class="sourceLineNo">422</span>   * Marks this {@link FunctionalByteBufChunkedInput} as being closed.<a name="line.422"></a>
+<span class="sourceLineNo">423</span>   *<a name="line.423"></a>
+<span class="sourceLineNo">424</span>   * &lt;p&gt;As a result the {@link #readChunk(ByteBufAllocator)} method<a name="line.424"></a>
+<span class="sourceLineNo">425</span>   * may return {@code null} in the future.&lt;/p&gt;<a name="line.425"></a>
+<span class="sourceLineNo">426</span>   *<a name="line.426"></a>
+<span class="sourceLineNo">427</span>   * @see #readChunk(ByteBufAllocator)<a name="line.427"></a>
+<span class="sourceLineNo">428</span>   */<a name="line.428"></a>
+<span class="sourceLineNo">429</span>  @Override<a name="line.429"></a>
+<span class="sourceLineNo">430</span>  public final void close() {<a name="line.430"></a>
+<span class="sourceLineNo">431</span>    final String mn = "close";<a name="line.431"></a>
+<span class="sourceLineNo">432</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.432"></a>
+<span class="sourceLineNo">433</span>      logger.entering(cn, mn);<a name="line.433"></a>
+<span class="sourceLineNo">434</span>    }<a name="line.434"></a>
+<span class="sourceLineNo">435</span>    if (this.closed) {<a name="line.435"></a>
+<span class="sourceLineNo">436</span>      throw new IllegalStateException("closed");<a name="line.436"></a>
+<span class="sourceLineNo">437</span>    }<a name="line.437"></a>
+<span class="sourceLineNo">438</span>    <a name="line.438"></a>
+<span class="sourceLineNo">439</span>    this.closed = true;<a name="line.439"></a>
+<span class="sourceLineNo">440</span>    this.setEndOfInput();<a name="line.440"></a>
+<span class="sourceLineNo">441</span>    final ByteBuf byteBuf = this.byteBuf;<a name="line.441"></a>
+<span class="sourceLineNo">442</span>    if (byteBuf != null) {<a name="line.442"></a>
+<span class="sourceLineNo">443</span>      if (byteBuf.refCnt() &lt;= 0) {<a name="line.443"></a>
+<span class="sourceLineNo">444</span>        if (logger.isLoggable(Level.WARNING)) {<a name="line.444"></a>
+<span class="sourceLineNo">445</span>          logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());<a name="line.445"></a>
+<span class="sourceLineNo">446</span>        }<a name="line.446"></a>
+<span class="sourceLineNo">447</span>      } else {<a name="line.447"></a>
+<span class="sourceLineNo">448</span>        assert byteBuf.isReadOnly();<a name="line.448"></a>
+<span class="sourceLineNo">449</span>        byteBuf.release();<a name="line.449"></a>
+<span class="sourceLineNo">450</span>      }<a name="line.450"></a>
+<span class="sourceLineNo">451</span>    }<a name="line.451"></a>
+<span class="sourceLineNo">452</span>    this.byteBuf = null;<a name="line.452"></a>
+<span class="sourceLineNo">453</span><a name="line.453"></a>
+<span class="sourceLineNo">454</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.454"></a>
+<span class="sourceLineNo">455</span>      logger.exiting(cn, mn);<a name="line.455"></a>
+<span class="sourceLineNo">456</span>    }<a name="line.456"></a>
+<span class="sourceLineNo">457</span>  }<a name="line.457"></a>
+<span class="sourceLineNo">458</span><a name="line.458"></a>
+<span class="sourceLineNo">459</span>}<a name="line.459"></a>
 
 
 
