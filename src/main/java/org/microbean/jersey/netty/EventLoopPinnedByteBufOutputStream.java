@@ -73,6 +73,9 @@ public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
    * when a <code>Future</code> representing a <code>ByteBuf</code>
    * write operation completes on the Netty event loop}; may be {@code
    * null}
+   *
+   * @exception NullPointerException if {@code eventExecutor} or
+   * {@code target} is {@code null}
    */
   public EventLoopPinnedByteBufOutputStream(final EventExecutor eventExecutor,
                                             final ByteBuf target,

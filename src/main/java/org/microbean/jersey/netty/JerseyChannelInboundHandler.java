@@ -22,10 +22,15 @@ import java.net.URI;
 
 import java.util.Objects;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.ws.rs.core.SecurityContext;
 
@@ -61,7 +66,8 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
 
 /**
  * A {@link SimpleChannelInboundHandler} that adapts <a
- * href="https://jersey.github.io/">Jersey</a> to Netty.
+ * href="https://jersey.github.io/" target="_parent">Jersey</a> to <a
+ * href="https://netty.io/" target="_parent">Netty</a>.
  *
  * <h2>Thread Safety</h2>
  *
@@ -71,9 +77,21 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
+ *
+ * @see JerseyChannelInitializer
  */
 public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Object> {
 
+
+  /*
+   * Static fields.
+   */
+
+  
+  private static final String cn = JerseyChannelInboundHandler.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
+  
 
   /*
    * Instance fields.
@@ -97,6 +115,46 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * @see #JerseyChannelInboundHandler(URI, ApplicationHandler)
    */
   private final ApplicationHandler applicationHandler;
+
+  /**
+   * An {@link Executor} that will offload Jersey-related work from
+   * the Netty event loop, often as provided by {@link
+   * ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}.
+   *
+   * <p>The value of this field is frequently an instance of <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/core-server/src/main/java/org/glassfish/jersey/server/ServerExecutorProvidersConfigurator.java#L86"
+   * target="_parent">{@code DefaultManagedAsyncExecutorProvider}</a>,
+   * which is a subclass of {@link
+   * org.glassfish.jersey.spi.ThreadPoolExecutorProvider}.</p>
+   *
+   * <p>This field is never {@code null}.</p>
+   *
+   * <p>The value of this field is used to {@linkplain
+   * ApplicationHandler#handle(ContainerRequest) perform Jersey
+   * application handling} so that it occurs on a thread that is
+   * guaranteed not to be the Netty event loop.</p>
+   *
+   * @see ApplicationHandler#getInjectionManager()
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   */
+  private final Executor jerseyExecutor;
+
+  /**
+   * A {@link Supplier} of a {@link ScheduledExecutorService} whose
+   * {@linkplain Supplier#get() return value} may be used by {@link
+   * ContainerResponseWriter} implementations.
+   *
+   * <p>This field is never {@code null}.</p>
+   *
+   * @see #createContainerResponseWriter(HttpRequest,
+   * ChannelHandlerContext, Supplier)
+   *
+   * @see #createContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)
+   */
+  private final Supplier<? extends ScheduledExecutorService> jerseyScheduledExecutorServiceSupplier;
 
   /**
    * A {@link ByteBufQueue} that is installed by the {@link
@@ -135,18 +193,111 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * null} in which case a {@linkplain
    * ApplicationHandler#ApplicationHandler() new} {@link
    * ApplicationHandler} will be used instead
+   *
+   * @exception IllegalStateException if {@link
+   * ApplicationHandler#getInjectionManager()
+   * applicationHandler.getInjectionManager()} returns {@code null}
+   *
+   * @exception NullPointerException if {@link
+   * ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}
+   * returns {@code null}
+   *
+   * @see ApplicationHandler#getInjectionManager()
+   *
+   * @see #createContainerResponseWriter(HttpRequest,
+   * ChannelHandlerContext, Supplier)
+   *
+   * @see #createContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)
    */
   public JerseyChannelInboundHandler(final URI baseUri,
                                      final ApplicationHandler applicationHandler) {
+    this(baseUri, applicationHandler, null, null);
+  }
+
+  /**
+   * Creates a new {@link JerseyChannelInboundHandler}.
+   *
+   * @param baseUri the base {@link URI} for the Jersey application;
+   * may be {@code null} in which case the return value resulting from
+   * invoking {@link URI#create(String) URI.create("/")} will be used
+   * instead
+   *
+   * @param applicationHandler the Jersey {@link ApplicationHandler}
+   * that will actually run the Jersey application; may be {@code
+   * null} in which case a {@linkplain
+   * ApplicationHandler#ApplicationHandler() new} {@link
+   * ApplicationHandler} will be used instead
+   *
+   * @param jerseyExecutor the {@link Executor} that will be used to
+   * {@linkplain Executor#execute(Runnable) execute} a Jersey
+   * application; may be {@code null} in which case the return value
+   * of {@link ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}
+   * will be used instead
+   *
+   * @param jerseyScheduledExecutorServiceSupplier a {@link Supplier}
+   * of {@link ScheduledExecutorService} instances that may be used by
+   * {@link ContainerResponseWriter} instances involved in this {@link
+   * JerseyChannelInboundHandler}; may be {@code null} in which case
+   * the return value of {@linkplain
+   * ScheduledExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ScheduledExecutorServiceProvider.class).getExecutorService()}
+   * will be used instead
+   *
+   * @exception IllegalStateException if either {@code jerseyExecutor}
+   * or {@code jerseyScheduledExecutorServiceSupplier} is {@code null}
+   * and {@link ApplicationHandler#getInjectionManager()
+   * applicationHandler.getInjectionManager()} returns {@code null}
+   *
+   * @exception NullPointerException if {@link
+   * ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}
+   * returns {@code null}
+   *
+   * @see ApplicationHandler#getInjectionManager()
+   *
+   * @see #createContainerResponseWriter(HttpRequest,
+   * ChannelHandlerContext, Supplier)
+   *
+   * @see #createContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)
+   */
+  public JerseyChannelInboundHandler(final URI baseUri,
+                                     final ApplicationHandler applicationHandler,
+                                     Executor jerseyExecutor,
+                                     Supplier<? extends ScheduledExecutorService> jerseyScheduledExecutorServiceSupplier) {
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
+    InjectionManager injectionManager = null;
+    if (jerseyExecutor == null) {
+      injectionManager = this.applicationHandler.getInjectionManager();
+      if (injectionManager == null) {
+        throw new IllegalStateException("applicationHandler.getInjectionManager() == null");
+      }
+      jerseyExecutor = Objects.requireNonNull(injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService());
+    }
+    this.jerseyExecutor = jerseyExecutor;
+    if (jerseyScheduledExecutorServiceSupplier == null) {
+      if (injectionManager == null) {
+        injectionManager = this.applicationHandler.getInjectionManager();
+        if (injectionManager == null) {
+          throw new IllegalStateException("applicationHandler.getInjectionManager() == null");
+        }
+      }
+      final ScheduledExecutorServiceProvider provider = Objects.requireNonNull(injectionManager.getInstance(ScheduledExecutorServiceProvider.class));
+      jerseyScheduledExecutorServiceSupplier = () -> provider.getExecutorService();
+    }
+    this.jerseyScheduledExecutorServiceSupplier = jerseyScheduledExecutorServiceSupplier;
   }
 
 
   /*
    * Instance methods.
    */
+
 
   /**
    * Returns {@code true} if and only if the supplied {@code message}
@@ -196,12 +347,15 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * have been overridden incorrectly, or in general if any
    * preconditions have been violated
    *
-   * @exception Exception if any other error occurs
-   *
    * @see #messageReceived(ChannelHandlerContext, ByteBuf, boolean)
    */
   @Override
-  protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final Object message) throws Exception {
+  protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final Object message) {
+    final String mn = "channelRead0";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { channelHandlerContext, message });
+    }
+    
     Objects.requireNonNull(channelHandlerContext);
     if (message instanceof HttpRequest || message instanceof Http2HeadersFrame) {
       this.messageReceived(channelHandlerContext, message);
@@ -212,20 +366,22 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     } else {
       throw new IllegalArgumentException("Unexpected message type: " + message);
     }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
-  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final Object requestObject) throws Exception {
+  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final Object requestObject) {
+    final String mn = "messageReceived";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { channelHandlerContext, requestObject });
+    }
+    
     Objects.requireNonNull(channelHandlerContext);
     assert channelHandlerContext.executor().inEventLoop();
     assert this.byteBufQueue == null;
 
-    final InjectionManager injectionManager = this.applicationHandler.getInjectionManager();
-    if (injectionManager == null) {
-      throw new IllegalStateException("applicationHandler.getInjectionManager() == null");
-    }
-    
-    final Supplier<? extends ScheduledExecutorService> supplier =
-      () -> injectionManager.getInstance(ScheduledExecutorServiceProvider.class).getExecutorService();
     final ContainerRequest containerRequest;
     final ContainerResponseWriter writer;
     if (requestObject instanceof HttpRequest) {
@@ -233,14 +389,14 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       containerRequest = this.createContainerRequest(channelHandlerContext, httpRequest);
       writer = this.createContainerResponseWriter(httpRequest,
                                                   channelHandlerContext,
-                                                  supplier);
+                                                  this.jerseyScheduledExecutorServiceSupplier);
     } else {
       assert requestObject instanceof Http2HeadersFrame;
       final Http2HeadersFrame http2HeadersFrame = (Http2HeadersFrame)requestObject;
       containerRequest = this.createContainerRequest(channelHandlerContext, http2HeadersFrame);
       writer = this.createContainerResponseWriter(http2HeadersFrame,
                                                   channelHandlerContext,
-                                                  supplier);
+                                                  this.jerseyScheduledExecutorServiceSupplier);
     }
     if (containerRequest == null) {
       throw new IllegalStateException("createContainerRequest() == null");
@@ -250,9 +406,25 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     }
     containerRequest.setWriter(writer);
 
-    injectionManager.getInstance(ExecutorServiceProvider.class).getExecutorService().execute(() -> {
-        this.applicationHandler.handle(containerRequest);
+    this.jerseyExecutor.execute(() -> {
+        try {
+          this.applicationHandler.handle(containerRequest);
+        } catch (final RuntimeException | Error problem) {
+          // If Jersey is well-behaved, this will never happen,
+          // because the containerResponseWriter's failure(Throwable)
+          // method will be called.
+          if (logger.isLoggable(Level.SEVERE)) {
+            logger.logp(Level.SEVERE, cn, mn, problem.getMessage(), problem);
+          }
+          // With ordinary ExecutorService implementations, this goes
+          // to /dev/null effectively.
+          throw problem;
+        }
       });
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
   /**
@@ -279,11 +451,14 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * @param lastOne {@code true} if {@code content} is known to be the
    * last such content chunk; {@code false} in all other cases
    *
-   * @exception Exception if an error occurs
-   *
    * @see #channelRead0(ChannelHandlerContext, Object)
    */
-  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final ByteBuf content, final boolean lastOne) throws Exception {
+  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final ByteBuf content, final boolean lastOne) {
+    final String mn = "messageReceived";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { channelHandlerContext, content, Boolean.valueOf(lastOne) });
+    }
+        
     Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(content);
     // TODO: in HTTP/2 incoming-payload scenarios this (commented out)
@@ -304,8 +479,12 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     if (lastOne && byteBufQueue != null) {
       this.byteBufQueue = null;
     }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
-    
+
   /**
    * Creates a {@link ContainerRequest} representing the supplied
    * {@link HttpRequest} and returns it.
@@ -377,6 +556,11 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
   }
 
   private final ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final Object requestObject) {
+    final String mn = "createContainerRequest";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { channelHandlerContext, requestObject });
+    }
+    
     Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(requestObject);
     assert channelHandlerContext.executor().inEventLoop();
@@ -384,7 +568,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     final String method;
     final String uriString;
     final Iterable<? extends CharSequence> nettyHeaderNames;
-   if (requestObject instanceof HttpRequest) {
+    if (requestObject instanceof HttpRequest) {
       final HttpRequest httpRequest = (HttpRequest)requestObject;
       final HttpHeaders httpHeaders = httpRequest.headers();
       assert httpHeaders != null;
@@ -403,7 +587,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     assert uriString != null;
 
     final SecurityContext securityContext = this.createSecurityContext(channelHandlerContext, requestObject);
-    
+
     final ContainerRequest returnValue =
       new ContainerRequest(this.baseUri,
                            baseUri.resolve(ContainerUtils.encodeUnsafeCharacters(uriString.startsWith("/") && uriString.length() > 1 ? uriString.substring(1) : uriString)),
@@ -418,7 +602,6 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       assert requestObject instanceof Http2HeadersFrame;
       headersInstaller = (containerRequest, name) -> containerRequest.headers(name.toString(), (Iterable<CharSequence>)() -> ((Http2HeadersFrame)requestObject).headers().valueIterator(name));
     }
-    
     copyHeaders(nettyHeaderNames, returnValue, headersInstaller);
 
     if (needsInputStream(requestObject)) {
@@ -432,6 +615,9 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       returnValue.setEntityStream(UnreadableInputStream.instance);
     }
 
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, returnValue);
+    }
     return returnValue;
   }
 
@@ -452,7 +638,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
   private final SecurityContext createSecurityContext(final ChannelHandlerContext channelHandlerContext, final Object httpRequest) {
     return new SecurityContextAdapter();
   }
-  
+
   /**
    * Creates and returns a new {@link ContainerResponseWriter} when
    * invoked.
@@ -549,8 +735,8 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
   /*
    * Static utility methods.
    */
-  
-  
+
+
   private static final boolean needsInputStream(final Object requestObject) {
     final boolean returnValue;
     if (requestObject instanceof HttpRequest) {

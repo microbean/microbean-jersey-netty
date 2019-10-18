@@ -37,7 +37,10 @@ import io.netty.buffer.ByteBufAllocator; // for javadoc only
  * target="_parent">Laird Nelson</a>
  *
  * @see FunctionalByteBufChunkedInput
+ *
+ * @deprecated Redundant; use {@link FunctionalByteBufChunkedInput} instead.
  */
+@Deprecated
 public class ByteBufChunkedInput extends FunctionalByteBufChunkedInput<ByteBuf> {
 
 

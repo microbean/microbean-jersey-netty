@@ -20,6 +20,9 @@ import java.util.Objects;
 
 import java.util.function.Function;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 
@@ -37,8 +40,18 @@ import io.netty.handler.stream.ChunkedInput;
  *
  * @see #readChunk(ByteBufAllocator)
  */
-public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
+public class FunctionalByteBufChunkedInput<T> implements BoundedChunkedInput<T> {
 
+
+  /*
+   * Static fields.
+   */
+
+
+  private static final String cn = FunctionalByteBufChunkedInput.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
+  
 
   /*
    * Instance fields.
@@ -48,9 +61,9 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
   /**
    * The {@link ByteBuf} from which to read.
    *
-   * <p>This field is never {@code null}.</p>
+   * <p>This field may be {@code null}.</p>
    */
-  private final ByteBuf byteBuf;
+  private volatile ByteBuf byteBuf;
 
   /**
    * A {@link Function} that will be supplied with
@@ -74,6 +87,8 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    */
   private final long lengthToReport;
 
+  private volatile boolean noMoreInput;
+  
   /**
    * Indicates that no more input is forthcoming, so assuming other
    * conditions are true the {@link #isEndOfInput()} method may return
@@ -161,7 +176,58 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    */
   @Override
   public final boolean isEndOfInput() {
-    return this.byteBuf.refCnt() <= 0 || (this.closed && !this.byteBuf.isReadable());
+    final String mn = "isEndOfInput";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn);
+    }
+
+    // (Don't check this.closed and throw an IllegalStateException
+    // because close() calls this method after setting this.closed to
+    // true.  That ordering is important to prevent
+    // setByteBuf(ByteBuf) from interfering during all this.)
+    
+    final boolean returnValue;
+    if (this.noMoreInput) {
+      ByteBuf byteBuf = this.byteBuf;
+      if (byteBuf == null) {
+        returnValue = true;
+      } else if (byteBuf.refCnt() <= 0) {
+        if (logger.isLoggable(Level.WARNING)) {
+          logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());
+        }
+        returnValue = true;
+      } else {
+        returnValue = !byteBuf.isReadable();
+        // Ensure that nothing more CAN be written to the byteBuf.
+        byteBuf = byteBuf.asReadOnly();
+        assert byteBuf != null;
+        assert byteBuf.isReadOnly();
+        this.byteBuf = byteBuf;
+      }
+    } else {
+      returnValue = false;
+    }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, Boolean.valueOf(returnValue));
+    }
+    return returnValue;
+  }
+
+  /**
+   * Irrevocably closes this {@link FunctionalByteBufChunkedInput} to
+   * new input.
+   */
+  @Override
+  public final void setEndOfInput() {
+    final String mn = "setEndOfInput";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn);
+    }
+    this.noMoreInput = true;
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
   /**
@@ -199,32 +265,72 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    * <p>The chunk that is returned by this method will be, if
    * non-{@code null}, synthesized from a {@linkplain
    * ByteBuf#readRetainedSlice(int) retained slice} of the {@link
-   * ByteBuf} supplied to this {@link ByteBufChunkedInput} {@linkplain
-   * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) at
-   * construction time} whose size is given by the return value of the
-   * {@link #getChunkSize(ByteBuf)} method.</p>
+   * ByteBuf} {@linkplain #FunctionalByteBufChunkedInput(ByteBuf,
+   * Function, long) supplied at construction time} whose size is
+   * given by the return value of the {@link #getChunkSize(ByteBuf)}
+   * method.</p>
    *
    * @param ignoredByteBufAllocator a {@link ByteBufAllocator} that an
    * implementation may use if it wishes but normally should have no
    * use for; may be {@code null}
    *
    * @return a chunk of this {@link ByteBufChunkedInput}'s overall
-   * input as represented by the {@link ByteBuf} supplied to it
-   * {@linkplain #FunctionalByteBufChunkedInput(ByteBuf, Function,
-   * long) at construction time}, or {@code null}
+   * input, or {@code null}
+   *
+   * @exception IllegalStateException if {@link #close()} has been
+   * called
    *
    * @see #getChunkSize(ByteBuf)
    *
    * @see #FunctionalByteBufChunkedInput(ByteBuf, Function, long)
+   *
+   * @see #isEndOfInput()
+   *
+   * @see #setEndOfInput()
+   *
+   * @see #close()
    */
   @Override
   public final T readChunk(final ByteBufAllocator ignoredByteBufAllocator) {
-    return
-      this.byteBuf.refCnt() <= 0 ||
-      (this.closed && !this.byteBuf.isReadable()) ?
-      null :
-      this.chunkReader.apply(this.byteBuf.readRetainedSlice(Math.min(this.getChunkSize(this.byteBuf),
-                                                                     this.byteBuf.readableBytes())).asReadOnly());
+    final String mn = "readChunk";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, ignoredByteBufAllocator);
+    }
+    if (this.closed) {
+      throw new IllegalStateException("closed");
+    }
+
+    final T returnValue;
+    final ByteBuf byteBuf = this.byteBuf;
+    if (byteBuf == null) {
+      returnValue = null;
+    } else if (byteBuf.refCnt() <= 0) {
+      if (logger.isLoggable(Level.WARNING)) {
+        logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());
+      }
+      returnValue = null;
+    } else if (!byteBuf.isReadable()) {
+      returnValue = null;
+    } else {
+      final int readableBytes = byteBuf.readableBytes();
+      assert readableBytes > 0; // ...because we already checked isReadable()
+      final int numberOfBytesToRead;
+      final int chunkSize = this.getChunkSize(byteBuf);
+      if (readableBytes < chunkSize) {
+        numberOfBytesToRead = readableBytes;
+      } else {
+        numberOfBytesToRead = chunkSize;
+      }
+      // TODO: look REALLY hard at whether this slice should be retained or not.
+      final ByteBuf retainedSlice = byteBuf.readRetainedSlice(numberOfBytesToRead);
+      assert retainedSlice != null;
+      returnValue = this.chunkReader.apply(retainedSlice.asReadOnly());
+    }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, returnValue);
+    }
+    return returnValue;
   }
 
   /**
@@ -238,7 +344,8 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    *
    * @param source the {@link ByteBuf} that was {@linkplain
    * #FunctionalByteBufChunkedInput(ByteBuf, Function, long) supplied
-   * at construction time}; will not be {@code null}
+   * at construction time}; may be {@code null} in which case {@code
+   * 0} will be returned
    *
    * @return the size of the chunk, in bytes, that will be returned by
    * the {@link #readChunk(ByteBufAllocator)} method; <strong>behavior
@@ -251,7 +358,7 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    * @see #readChunk(ByteBufAllocator)
    */
   protected int getChunkSize(final ByteBuf source) {
-    return source.readableBytes();
+    return source == null ? 0 : source.readableBytes();
   }
 
   /**
@@ -261,23 +368,54 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    *
    * @return the length of this {@link ChunkedInput} implementation in
    * bytes, or {@code -1L}
+   *
+   * @exception IllegalStateException if {@link #close()} has been
+   * called
    */
   @Override
   public final long length() {
+    if (this.closed) {
+      throw new IllegalStateException("closed");
+    }
     return this.lengthToReport;
   }
 
   /**
    * Returns the number of bytes read from this input.
    *
+   * <p>If the return value of an invocation of the {@link #length()}
+   * method returns zero or a positive integer, then the value
+   * returned by an invocation of this method will be less than or
+   * equal to that value.</p>
+   *
    * @return the number of bytes read from this input
+   *
+   * @exception IllegalStateException if {@link #close()} has been
+   * called
+   *
+   * @see #length()
    */
   @Override
   public final long progress() {
+    if (this.closed) {
+      throw new IllegalStateException("closed");
+    }
     // e.g. we've read <progress> of <length> bytes.  Other
     // ChunkedInput implementations return a valid number here even
-    // when length() returns -1, so we do too.
-    return this.byteBuf.readerIndex();
+    // when length() returns -1L, so we do too.
+    final long returnValue;
+    final ByteBuf byteBuf = this.byteBuf;
+    if (byteBuf == null) {
+      returnValue = 0L;
+    } else if (byteBuf.refCnt() <= 0) {
+      if (logger.isLoggable(Level.WARNING)) {
+        logger.logp(Level.WARNING, cn, "progress", "Unexpected refCnt: {0}", byteBuf.refCnt());
+      }
+      returnValue = 0L;
+    } else {
+      returnValue = byteBuf.readerIndex();
+    }
+    return returnValue;
   }
 
   /**
@@ -290,7 +428,32 @@ public class FunctionalByteBufChunkedInput<T> implements ChunkedInput<T> {
    */
   @Override
   public final void close() {
+    final String mn = "close";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn);
+    }
+    if (this.closed) {
+      throw new IllegalStateException("closed");
+    }
+    
     this.closed = true;
+    this.setEndOfInput();
+    final ByteBuf byteBuf = this.byteBuf;
+    if (byteBuf != null) {
+      if (byteBuf.refCnt() <= 0) {
+        if (logger.isLoggable(Level.WARNING)) {
+          logger.logp(Level.WARNING, cn, mn, "Unexpected refCnt: {0}", byteBuf.refCnt());
+        }
+      } else {
+        assert byteBuf.isReadOnly();
+        byteBuf.release();
+      }
+    }
+    this.byteBuf = null;
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
 }

@@ -22,9 +22,13 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import java.util.function.Supplier;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import io.netty.buffer.ByteBuf;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
@@ -56,6 +60,16 @@ import org.glassfish.jersey.server.ContainerResponse;
  * @see HttpContainerResponseWriter
  */
 public class Http2ContainerResponseWriter extends AbstractNettyContainerResponseWriter<Http2HeadersFrame> {
+
+
+  /*
+   * Static fields.
+   */
+
+
+  private static final String cn = Http2ContainerResponseWriter.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
 
 
   /*
@@ -95,7 +109,7 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
   /**
    * Implements the {@link
    * AbstractNettyContainerResponseWriter#writeAndFlushStatusAndHeaders(ContainerResponse,
-   * long)} method by {@linkplain
+   * long, ChannelPromise)} method by {@linkplain
    * ChannelHandlerContext#writeAndFlush(Object) writing and flushing}
    * an {@link DefaultHttp2HeadersFrame} object.
    *
@@ -105,13 +119,19 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    * @param contentLength the length of the content in bytes; will be
    * less than {@code 0} if the content length is unknown
    *
-   * @exception NullPointerException if {@code containerResponse} is
-   * {@code null}
+   * @exception NullPointerException if {@code containerResponse} or
+   * {@code channelPromise} is {@code null}
    */
   @Override
   protected final void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
-                                                     final long contentLength) {
+                                                     final long contentLength,
+                                                     final ChannelPromise channelPromise) {
+    final String mn = "writeAndFlushStatusAndHeaders";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { containerResponse, Long.valueOf(contentLength) });
+    }
     Objects.requireNonNull(containerResponse);
+    Objects.requireNonNull(channelPromise);
 
     final Http2Headers nettyHeaders = new DefaultHttp2Headers();
     nettyHeaders.status(Integer.toString(containerResponse.getStatus()));
@@ -121,7 +141,11 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
       // lowercase so we aren't inconsistent.
       nettyHeaders.set(HttpHeaderNames.CONTENT_LENGTH, Long.toString(contentLength));
     }
-    this.channelHandlerContext.writeAndFlush(new DefaultHttp2HeadersFrame(nettyHeaders, contentLength == 0L));
+    this.channelHandlerContext.writeAndFlush(new DefaultHttp2HeadersFrame(nettyHeaders, contentLength == 0L), channelPromise);
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
   /**
@@ -168,8 +192,16 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    * @see ChunkedInput#readChunk(ByteBufAllocator)
    */
   @Override
-  protected final ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
-    return new FunctionalByteBufChunkedInput<Http2DataFrame>(source, DefaultHttp2DataFrame::new, contentLength);
+  protected final BoundedChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
+    final String mn = "createChunkedInput";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { eventExecutor, source, Long.valueOf(contentLength) });
+    }
+    final BoundedChunkedInput<?> returnValue =  new FunctionalByteBufChunkedInput<Http2DataFrame>(source, DefaultHttp2DataFrame::new, contentLength);
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, returnValue);
+    }
+    return returnValue;
   }
 
   /**
@@ -178,17 +210,21 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    * DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean) new
    * DefaultHttp2DataFrame(true)} when invoked.
    *
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
+   *
    * @see DefaultHttp2DataFrame#DefaultHttp2DataFrame(boolean)
    *
-   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage()
+   * @see
+   * AbstractNettyContainerResponseWriter#writeLastContentMessage(ChannelPromise)
    */
   @Override
-  protected final void writeLastContentMessage() {
-    // TODO: should this be writeAndFlush()? It is difficult to say.
-    // See
-    // https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java#L333-L343
-    // where this message would seem to trigger a flush automatically.
-    this.channelHandlerContext.write(new DefaultHttp2DataFrame(true));
+  protected final void writeLastContentMessage(final ChannelPromise channelPromise) {
+    Objects.requireNonNull(channelPromise);
+    this.channelHandlerContext.write(new DefaultHttp2DataFrame(true), channelPromise);
   }
 
   /**
@@ -196,11 +232,20 @@ public class Http2ContainerResponseWriter extends AbstractNettyContainerResponse
    * {@link DefaultHttp2Headers} message with a {@linkplain
    * Http2Headers#status(CharSequence) status} equal to {@code 500}.
    *
-   * @see AbstractNettyContainerResponseWriter#writeFailureMessage()
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
+   *
+   * @see
+   * AbstractNettyContainerResponseWriter#writeFailureMessage(ChannelPromise)
    */
   @Override
-  protected final void writeFailureMessage() {
-    this.channelHandlerContext.write(new DefaultHttp2Headers().status(HttpResponseStatus.INTERNAL_SERVER_ERROR.codeAsText()));
+  protected final void writeFailureMessage(final ChannelPromise channelPromise) {
+    Objects.requireNonNull(channelPromise);
+    this.channelHandlerContext.write(new DefaultHttp2Headers().status(HttpResponseStatus.INTERNAL_SERVER_ERROR.codeAsText()),
+                                     channelPromise);
   }
 
 }

@@ -24,24 +24,31 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 
-import java.util.function.BiConsumer;
-import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
-
 import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import io.netty.buffer.ByteBuf;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 
 import io.netty.handler.stream.ChunkedInput;
+import io.netty.handler.stream.ChunkedWriteHandler; // for javadoc only
 
 import io.netty.util.ReferenceCounted;
 
 import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 import org.glassfish.jersey.server.ContainerException;
 import org.glassfish.jersey.server.ContainerResponse;
@@ -66,6 +73,22 @@ import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
  * @see #failure(Throwable)
  */
 public abstract class AbstractNettyContainerResponseWriter<T> implements ContainerResponseWriter {
+
+
+  /*
+   * Static fields.
+   */
+
+  private static final String cn = AbstractNettyContainerResponseWriter.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
+
+  private static final GenericFutureListener<? extends Future<? super Void>> listener = f -> {
+    final Throwable cause = f.cause();
+    if (cause != null && logger.isLoggable(Level.SEVERE)) {
+      logger.log(Level.SEVERE, cause.getMessage(), cause);
+    }    
+  };
 
 
   /*
@@ -95,7 +118,7 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
 
   private volatile Runnable suspendTimeoutHandler;
 
-  private volatile ChunkedInput<?> chunkedInput;
+  private volatile BoundedChunkedInput<?> chunkedInput;
 
   private volatile ReferenceCounted byteBuf;
 
@@ -135,17 +158,71 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
 
 
   /*
+   * Instance methods.
+   */
+
+
+  /*
    * ContainerResponseWriter overrides.  Used only by Jersey, and on a
    * non-Netty-EventLoop-affiliated thread.
    */
 
-
+  /**
+   * Implements the {@link
+   * ContainerResponseWriter#writeResponseStatusAndHeaders(long,
+   * ContainerResponse)} method by calling the {@link
+   * #writeAndFlushStatusAndHeaders(ContainerResponse, long,
+   * ChannelPromise)} method, then {@linkplain
+   * #needsOutputStream(long) determining whether an
+   * <code>OutputStream</code> is needed}, and allocating and
+   * returning a {@link EventLoopPinnedByteBufOutputStream} that works
+   * properly with the Netty machinery if so.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @param contentLength the length in bytes that will be written to
+   * the {@link OutputStream} that will be returned; may be {@code
+   * -1L} to indicate an unknown content length but otherwise must be
+   * zero or a positive {@code long}
+   *
+   * @param containerResponse the {@link ContainerResponse} for which
+   * a write is to take place; must not be {@code null}
+   *
+   * @return an {@link OutputStream}, or {@code null}
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   *
+   * @exception IllegalStateException if a subclass has overridden
+   * {@link #createChunkedInput(EventExecutor, ByteBuf, long)} to
+   * return {@code null}
+   *
+   * @exception ContainerException if an error occurs
+   *
+   * @see #writeAndFlushStatusAndHeaders(ContainerResponse, long,
+   * ChannelPromise)
+   *
+   * @see #needsOutputStream(long)
+   *
+   * @see #createChunkedInput(EventExecutor, ByteBuf, long)
+   *
+   * @see EventLoopPinnedByteBufOutputStream
+   */
   @Override
-  public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) throws ContainerException {
+  public final OutputStream writeResponseStatusAndHeaders(final long contentLength, final ContainerResponse containerResponse) {
+    final String mn = "writeResponseStatusAndHeaders";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { Long.valueOf(contentLength), containerResponse });
+    }
+
     Objects.requireNonNull(containerResponse);
     assert !this.inEventLoop();
 
-    this.writeAndFlushStatusAndHeaders(containerResponse, contentLength);
+    final ChannelPromise statusAndHeadersPromise = this.channelHandlerContext.newPromise();
+    assert statusAndHeadersPromise != null;
+    statusAndHeadersPromise.addListener(listener);
+
+    this.writeAndFlushStatusAndHeaders(containerResponse, contentLength, statusAndHeadersPromise);
 
     final OutputStream returnValue;
     if (this.needsOutputStream(contentLength)) {
@@ -168,10 +245,6 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
       }
       assert byteBuf != null;
 
-      // We store a reference to it ONLY so that we can release it
-      // at #commit() or #failure(Throwable) time.
-      this.byteBuf = byteBuf;
-
       // A ChunkedInput despite its name has nothing to do with
       // chunked Transfer-Encoding.  It is usable anywhere you like.
       // So here, because writes are happening on an OutputStream in
@@ -180,19 +253,28 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
       // wait for the OutputStream to close, we wouldn't know when
       // to do the write.  So we use ChunkedInput even in cases
       // where the Content-Length is set to a positive integer.
-      final ChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf, contentLength);
+      final BoundedChunkedInput<?> chunkedInput = this.createChunkedInput(this.channelHandlerContext.executor(), byteBuf, contentLength);
       if (chunkedInput == null) {
         // A user's implementation of createChunkedInput() behaved
         // badly.  Clean up and bail out.
-        this.byteBuf = null;
         byteBuf.release();
         throw new IllegalStateException("createChunkedInput() == null");
       }
       this.chunkedInput = chunkedInput;
 
+      // We store a reference to the allocated ByteBuf ONLY so that we
+      // can release it at #failure(Throwable) time or if
+      // createChunkedInput() returns null incorrectly.  Otherwise the
+      // BoundedChunkedInput's close() method is responsible for
+      // releasing it properly.
+      this.byteBuf = byteBuf;
+
       // Enqueue a task that will query the ChunkedInput for
       // its chunks via its readChunk() method on the event loop.
-      channelHandlerContext.write(this.chunkedInput);
+      final ChannelPromise chunkedInputWritePromise = this.channelHandlerContext.newPromise();
+      assert chunkedInputWritePromise != null;
+      chunkedInputWritePromise.addListener(listener);
+      channelHandlerContext.write(chunkedInput, chunkedInputWritePromise);
 
       // Then return an OutputStream implementation that writes to
       // the very same ByteBuf, ensuring that writes take place on
@@ -201,17 +283,16 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
       // the ChunkedInput by way of its readChunk() method, also on
       // the event loop, will stream the results as they are made
       // available.
-      //
-      // TODO: replace the null third parameter with a
-      // GenericFutureListener that will Do The Right Thing™ with
-      // any exceptions.  **Remember that this listener will be
-      // invoked on the event loop.**
       returnValue =
         new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(),
                                                byteBuf,
-                                               null);
+                                               listener);
     } else {
       returnValue = null;
+    }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, returnValue);
     }
     return returnValue;
   }
@@ -220,70 +301,57 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Invoked on a non-event-loop thread by Jersey when, as far as
    * Jersey is concerned, all processing has completed successfully.
    *
-   * <p>This implementation ensures that {@link ChunkedInput#close()}
-   * is called on the Netty event loop on the {@link ChunkedInput}
-   * returned by the {@link #createChunkedInput(EventExecutor,
-   * ByteBuf, long)} method, and that a {@linkplain
-   * #writeLastContentMessage() final content message is written
-   * immediately afterwards}, and that the {@link
-   * ChannelHandlerContext} is {@linkplain
-   * ChannelHandlerContext#flush() flushed}.  All of these invocations
-   * occur on the event loop.</p>
+   * <p>This implementation ensures that {@link
+   * BoundedChunkedInput#setEndOfInput()} is called on the Netty event
+   * loop on the {@link BoundedChunkedInput} returned by the {@link
+   * #createChunkedInput(EventExecutor, ByteBuf, long)} method, and
+   * that a {@linkplain #writeLastContentMessage(ChannelPromise) final
+   * content message is written immediately afterwards}, and that the
+   * {@link ChannelHandlerContext} is {@linkplain
+   * ChannelHandlerContext#flush() flushed}.  This will result in a
+   * downstream {@link ChunkedWriteHandler} writing the underlying
+   * data and calling {@link ChunkedInput#close()} at the proper time.
+   * All of these invocations occur on the event loop.</p>
    *
    * @see ChunkedInput#close()
    *
    * @see #createChunkedInput(EventExecutor, ByteBuf, long)
    *
-   * @see #writeLastContentMessage()
+   * @see #writeLastContentMessage(ChannelPromise)
    *
    * @see ChannelHandlerContext#write(Object)
    *
    * @see ChannelHandlerContext#flush()
    *
    * @see ContainerResponseWriter#commit()
+   *
+   * @see ChunkedWriteHandler
    */
   @Override
   public final void commit() {
+    final String mn = "commit";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn);
+    }
+
     assert !this.inEventLoop();
-    final ChunkedInput<?> chunkedInput = this.chunkedInput;
+    final BoundedChunkedInput<?> chunkedInput = this.chunkedInput;
     this.chunkedInput = null;
-    final ReferenceCounted byteBuf = this.byteBuf;
-    this.byteBuf = null;
     if (chunkedInput != null) {
+      final ChannelPromise promise = this.channelHandlerContext.newPromise();
+      assert promise != null;
+      promise.addListener(listener);
       this.channelHandlerContext.executor().submit((Callable<Void>)() -> {
           assert inEventLoop();
-          assert chunkedInput != null;
-          assert byteBuf != null;
-          assert byteBuf.refCnt() == 1;
-
-          // Mark our ChunkedInput as *closed to new input*.  It may
-          // still contain contents that need to be read.  (This
-          // effectively flips an internal switch in the ChunkedInput
-          // that allows for isEndOfInput() to one day return true.)
-          chunkedInput.close();
-
-          // This will tell the ChunkedWriteHandler outbound from us
-          // (see
-          // https://github.com/netty/netty/blob/4.1/handler/src/main/java/io/netty/handler/stream/ChunkedWriteHandler.java)
-          // to "drain" our ChunkedInput via successive calls to
-          // #readChunk(ByteBufAllocator).  The isEndOfInput() method
-          // will be called as part of this process and will
-          // eventually return true.
+          chunkedInput.setEndOfInput();
+          this.writeLastContentMessage(promise);
           channelHandlerContext.flush();
-
-          // Assert that the ChunkedInput is drained and release its
-          // wrapped ByteBuf.
-          assert chunkedInput.isEndOfInput();
-          final boolean released = byteBuf.release();
-          assert released;
-
-          // Send whatever magic message it is that tells the HTTP
-          // machinery to finish up.
-          this.writeLastContentMessage();
-
-          // We're a Callable that returns Void, so we return null.
           return null;
-        });
+        }).addListener(listener);
+    }
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
     }
   }
 
@@ -343,48 +411,64 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    */
   @Override
   public final void failure(final Throwable throwable) {
-    if (!this.inEventLoop()) {
-      final ContainerException throwMe = new ContainerException("!this.inEventLoop()");
-      if (throwable != null) {
-        throwMe.addSuppressed(throwable);
-      }
-      throw throwMe;
+    final String mn = "failure";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, throwable);
     }
 
-    final ChunkedInput<?> chunkedInput = this.chunkedInput;
+    assert !this.inEventLoop();
+
     this.chunkedInput = null;
     final ReferenceCounted byteBuf = this.byteBuf;
     this.byteBuf = null;
-    if (chunkedInput != null) {
-      try {
-        this.channelHandlerContext.executor().submit(() -> {
+    try {
+      final ChannelPromise promise = this.channelHandlerContext.newPromise();
+      assert promise != null;
+      promise.addListener(listener);
+      this.channelHandlerContext.executor().submit((Callable<Void>)() -> {
+          try {
+            assert inEventLoop();
+            this.writeFailureMessage(promise);
+          } catch (final RuntimeException | Error throwMe) {
+            if (throwable != null) {
+              throwMe.addSuppressed(throwable);
+            }
+            throw throwMe;
+          } finally {
             try {
-              assert inEventLoop();
-              this.writeFailureMessage();
+              try {
+                channelHandlerContext.flush();
+              } catch (final RuntimeException | Error throwMe2) {
+                if (throwable != null) {
+                  throwMe2.addSuppressed(throwable);
+                }
+                throw throwMe2;
+              }
+              try {
+                channelHandlerContext.close();
+              } catch (final RuntimeException | Error throwMe2) {
+                if (throwable != null) {
+                  throwMe2.addSuppressed(throwable);
+                }
+                throw throwMe2;
+              }
+            } finally {
               assert byteBuf != null;
               assert byteBuf.refCnt() == 1;
               final boolean released = byteBuf.release();
               assert released;
-            } catch (final RuntimeException | Error throwMe) {
-              if (throwable != null) {
-                throwMe.addSuppressed(throwable);
-              }
-              throw throwMe;
-            } finally {
-              channelHandlerContext.flush();
-              channelHandlerContext.close();
             }
-            return null;
-          });
-      } catch (final RuntimeException | Error throwMe) {
-        // There was a problem submitting the task to the Netty
-        // infrastructure.  Make sure we don't lose the original
-        // Throwable.
-        if (throwable != null) {
-          throwMe.addSuppressed(throwable);
-        }
-        throw throwMe;
+          }
+          return null;
+        }).addListener(listener);
+    } catch (final RuntimeException | Error throwMe) {
+      // There was a problem submitting the task to the Netty
+      // infrastructure.  Make sure we don't lose the original
+      // Throwable.
+      if (throwable != null) {
+        throwMe.addSuppressed(throwable);
       }
+      throw throwMe;
     }
 
     // See
@@ -427,8 +511,8 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Returns {@code true} when invoked.
    *
    * <p>Note that this is a default value.  Response buffering <a
-   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778">can
-   * be configured</a>.</p>
+   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"
+   * target="_parent">can be configured</a>.</p>
    *
    * @return {@code true} when invoked
    *
@@ -499,6 +583,10 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * Returns {@code true} if the current {@link ContainerResponse}
    * being written needs an {@link OutputStream}.
    *
+   * <p>This method is called by the {@link
+   * #writeResponseStatusAndHeaders(long, ContainerResponse)}
+   * method.</p>
+   *
    * @param contentLength the length of the content in bytes; may be
    * less than {@code 0} if the content length is unknown
    *
@@ -515,30 +603,47 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * write} a message that indicates that there is not going to be any
    * further content sent back to the client.
    *
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
+   *
    * @see #channelHandlerContext
    *
    * @see ChannelHandlerContext#write(Object)
    */
-  protected abstract void writeLastContentMessage();
+  protected abstract void writeLastContentMessage(final ChannelPromise channelPromise);
 
   /**
-   * Called when this {@link AbstractNettyContainerResponseWriter}
-   * should {@linkplain ChannelHandlerContext#writeAndFlush(Object)
-   * write and flush} a message containing relevant headers and the
-   * HTTP status of the response being processed.
+   * Called by the {@link #writeResponseStatusAndHeaders(long,
+   * ContainerResponse)} method when this {@link
+   * AbstractNettyContainerResponseWriter} should {@linkplain
+   * ChannelHandlerContext#writeAndFlush(Object, ChannelPromise) write
+   * and flush} a message containing relevant headers and the HTTP
+   * status of the response being processed.
    *
    * @param containerResponse the {@link ContainerResponse} being
    * processed; must not be {@code null}
    *
    * @param contentLength the length of the content in bytes; may be
    * less than {@code 0} if the content length is unknown
+   *
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code containerResponse} or
+   * {@code channelPromise} is {@code null}
+   *
+   * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
    */
   protected abstract void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
-                                                        final long contentLength);
+                                                        final long contentLength,
+                                                        final ChannelPromise channelPromise);
 
   /**
-   * Called to create a {@link ChunkedInput} that will be used as part
-   * of setting up an {@link OutputStream} for the {@link
+   * Called to create a {@link BoundedChunkedInput} that will be used
+   * as part of setting up an {@link OutputStream} for the {@link
    * ContainerResponse} being processed.
    *
    * <p>Implementations of this method must not return {@code
@@ -554,6 +659,14 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * <p>Implementations of this method must arrange to read from the
    * supplied {@link ByteBuf}.  Undefined behavior will result if this
    * is not the case.</p>
+   *
+   * <p>The {@link BoundedChunkedInput} that is returned must
+   * {@linkplain ByteBuf#release() release} the supplied {@link
+   * ByteBuf} during an invocation of the {@link ChunkedInput#close()}
+   * method.</p>
+   *
+   * <p>Most implementations of this method should return some variety
+   * of {@link FunctionalByteBufChunkedInput}.</p>
    *
    * @param eventExecutor an {@link EventExecutor} supplied for
    * convenience in case any operations need to be performed on the
@@ -572,11 +685,14 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * that will treat the supplied {@code ByteBuf} as its source in
    * some manner
    *
+   * @exception NullPointerException if {@code eventExecutor} or
+   * {@code source} is {@code null}
+   *
    * @see ChunkedInput
    */
-  protected abstract ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor,
-                                                        final ByteBuf source,
-                                                        final long contentLength);
+  protected abstract BoundedChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor,
+                                                               final ByteBuf source,
+                                                               final long contentLength);
 
   /**
    * Called to {@linkplain ChannelHandlerContext#write(Object) write a
@@ -589,9 +705,15 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    * {@link Thread} that is <strong>not</strong> the {@linkplain
    * #inEventLoop() Netty event loop}.</p>
    *
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
+   *
    * @see #failure(Throwable)
    */
-  protected abstract void writeFailureMessage();
+  protected abstract void writeFailureMessage(final ChannelPromise channelPromise);
 
 
   /*
@@ -599,15 +721,39 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
    */
 
 
+  /**
+   * Returns {@code true} if the current thread is Netty's {@linkplain
+   * EventExecutor#inEventLoop() event loop}.
+   *
+   * @return {@code true} if the current thread is Netty's {@linkplain
+   * EventExecutor#inEventLoop() event loop}; {@code false} otherwise
+   *
+   * @see EventExecutor#inEventLoop()
+   */
   protected final boolean inEventLoop() {
     return this.channelHandlerContext.executor().inEventLoop();
   }
 
-  public static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
-                                       final BiConsumer<? super String, ? super List<String>> headersTarget) {
-    copyHeaders(headersSource, UnaryOperator.identity(), headersTarget);
-  }
-
+  /**
+   * A utility function that copies entries from a source {@link Map}
+   * by passing each entry to the supplied {@link BiConsumer},
+   * transforming the keys beforehand using the supplied {@link
+   * UnaryOperator} and that is intended in this framework to be used
+   * to copy HTTP or HTTP/2 headers to and from the proper places.
+   *
+   * @param headersSource the source of the headers to copy; may be
+   * {@code null} in which case no action will be taken
+   *
+   * @param keyTransformer a {@link UnaryOperator} that transforms a
+   * header name; if {@code null} then the return value of {@link
+   * UnaryOperator#identity()} will be used instead
+   *
+   * @param headersTarget where the headers will be copied to; may be
+   * {@code null} in which case no action will be taken
+   *
+   * @see #writeAndFlushStatusAndHeaders(ContainerResponse, long,
+   * ChannelPromise)
+   */
   public static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
                                        UnaryOperator<String> keyTransformer,
                                        final BiConsumer<? super String, ? super List<String>> headersTarget) {

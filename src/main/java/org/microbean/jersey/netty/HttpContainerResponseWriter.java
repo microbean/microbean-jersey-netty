@@ -19,12 +19,17 @@ package org.microbean.jersey.netty;
 import java.util.Objects;
 
 import java.util.concurrent.ScheduledExecutorService;
+
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import io.netty.buffer.ByteBuf;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
@@ -55,6 +60,17 @@ import org.glassfish.jersey.server.ContainerResponse;
  * @see Http2ContainerResponseWriter
  */
 public class HttpContainerResponseWriter extends AbstractNettyContainerResponseWriter<HttpRequest> {
+
+
+
+  /*
+   * Static fields.
+   */
+
+
+  private static final String cn = HttpContainerResponseWriter.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
 
 
   /*
@@ -94,7 +110,7 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
   /**
    * Implements the {@link
    * AbstractNettyContainerResponseWriter#writeAndFlushStatusAndHeaders(ContainerResponse,
-   * long)} method by {@linkplain
+   * long, ChannelPromise)} method by {@linkplain
    * ChannelHandlerContext#writeAndFlush(Object) writing and flushing}
    * an {@link HttpResponse} object containing a relevant {@link
    * HttpResponseStatus} object.
@@ -105,13 +121,24 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
    * @param contentLength the length of the content in bytes; will be
    * less than {@code 0} if the content length is unknown
    *
-   * @exception NullPointerException if {@code containerResponse} is
-   * {@code null}
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code containerResponse} or
+   * {@code channelPromise} is {@code null}
+   *
+   * @see #writeResponseStatusAndHeaders(long, ContainerResponse)
    */
   @Override
   protected final void writeAndFlushStatusAndHeaders(final ContainerResponse containerResponse,
-                                                     final long contentLength) {
+                                                     final long contentLength,
+                                                     final ChannelPromise channelPromise) {
+    final String mn = "writeAndFlushStatusAndHeaders";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { containerResponse, Long.valueOf(contentLength) });
+    }
     Objects.requireNonNull(containerResponse);
+    Objects.requireNonNull(channelPromise);
 
     final String reasonPhrase = containerResponse.getStatusInfo().getReasonPhrase();
     final HttpResponseStatus status = reasonPhrase == null ? HttpResponseStatus.valueOf(containerResponse.getStatus()) : new HttpResponseStatus(containerResponse.getStatus(), reasonPhrase);
@@ -134,7 +161,11 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
     if (HttpUtil.isKeepAlive(this.requestObject)) {
       HttpUtil.setKeepAlive(httpResponse, true);
     }
-    this.channelHandlerContext.writeAndFlush(httpResponse);
+    this.channelHandlerContext.writeAndFlush(httpResponse, channelPromise);
+
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn);
+    }
   }
 
   /**
@@ -159,7 +190,8 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
   }
 
   /**
-   * Returns a new {@link ByteBufChunkedInput} when invoked.
+   * Returns a new {@link FunctionalByteBufChunkedInput
+   * FunctionalByteBufChunkedInput&lt;ByteBuf&gt;} when invoked.
    *
    * @param eventExecutor {@inheritDoc}
    *
@@ -169,6 +201,9 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
    *
    * @return a new {@link ByteBufChunkedInput}; never {@code null}
    *
+   * @exception NullPointerException if {@code eventExecutor} or
+   * {@code source} is {@code null}
+   *
    * @see AbstractNettyContainerResponseWriter#createChunkedInput(EventExecutor, ByteBuf, long)
    *
    * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)
@@ -176,24 +211,38 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
    * @see ChunkedInput#readChunk(ByteBufAllocator)
    */
   @Override
-  protected final ChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
-    return new ByteBufChunkedInput(source, contentLength);
+  protected final BoundedChunkedInput<?> createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {
+    final String mn = "createChunkedInput";
+    if (logger.isLoggable(Level.FINER)) {
+      logger.entering(cn, mn, new Object[] { eventExecutor, source, Long.valueOf(contentLength) });
+    }
+    final BoundedChunkedInput<?> returnValue = new FunctionalByteBufChunkedInput<ByteBuf>(source, UnaryOperator.identity(), contentLength);
+    if (logger.isLoggable(Level.FINER)) {
+      logger.exiting(cn, mn, returnValue);
+    }
+    return returnValue;
   }
 
   /**
-   * {@linkplain ChannelHandlerContext#writeAndFlush(Object) Writes
-   * and flushes} {@link LastHttpContent#EMPTY_LAST_CONTENT} when
-   * invoked.
+   * {@linkplain ChannelHandlerContext#write(Object) Writes} {@link
+   * LastHttpContent#EMPTY_LAST_CONTENT} when invoked.
+   *
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
    *
    * @see LastHttpContent
    *
-   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage()
+   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage(ChannelPromise)
    */
   @Override
-  protected final void writeLastContentMessage() {
+  protected final void writeLastContentMessage(final ChannelPromise channelPromise) {
+    Objects.requireNonNull(channelPromise);
     // Send the magic message that tells the HTTP machinery to
     // finish up.
-    this.channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+    this.channelHandlerContext.write(LastHttpContent.EMPTY_LAST_CONTENT, channelPromise);
   }
 
   /**
@@ -202,16 +251,22 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
    * Content-Length} of {@code 0} and a status equal to {@link
    * HttpResponseStatus#INTERNAL_SERVER_ERROR}.
    *
-   * @see AbstractNettyContainerResponseWriter#writeFailureMessage()
+   * @param channelPromise a {@link ChannelPromise} to pass to any
+   * write operation; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelPromise} is
+   * {@code null}
+   *
+   * @see
+   * AbstractNettyContainerResponseWriter#writeFailureMessage(ChannelPromise)
    */
   @Override
-  protected final void writeFailureMessage() {
-    final HttpMessage failureMessage =
-      new DefaultFullHttpResponse(this.requestObject.protocolVersion(),
-                                  HttpResponseStatus.INTERNAL_SERVER_ERROR);
+  protected final void writeFailureMessage(final ChannelPromise channelPromise) {
+    Objects.requireNonNull(channelPromise);
+    final HttpMessage failureMessage = new DefaultFullHttpResponse(this.requestObject.protocolVersion(),
+                                                                   HttpResponseStatus.INTERNAL_SERVER_ERROR);
     HttpUtil.setContentLength(failureMessage, 0L);
-    this.channelHandlerContext.write(failureMessage);
+    this.channelHandlerContext.write(failureMessage, channelPromise);
   }
-
 
 }

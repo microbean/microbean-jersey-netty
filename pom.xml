@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.9.4-SNAPSHOT</version>
+  <version>0.11.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
@@ -197,7 +197,7 @@
 
   <properties>
     <runBlockingTests>false</runBlockingTests>
-    <links>https://netty.io/4.1/api/,https://jersey.github.io/apidocs/latest/jersey/,https://jakarta.ee/specifications/restful-ws/2.1/apidocs/</links>
+    <links>https://netty.io/4.1/api/,https://jakarta.ee/specifications/restful-ws/2.1/apidocs/,https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/</links>
     <stylesheetfile>css/stylesheet.css</stylesheetfile>
   </properties>
 
