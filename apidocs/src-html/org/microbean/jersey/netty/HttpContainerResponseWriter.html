@@ -207,77 +207,79 @@
 <span class="sourceLineNo">199</span>   *<a name="line.199"></a>
 <span class="sourceLineNo">200</span>   * @param contentLength {@inheritDoc}<a name="line.200"></a>
 <span class="sourceLineNo">201</span>   *<a name="line.201"></a>
-<span class="sourceLineNo">202</span>   * @return a new {@link ByteBufChunkedInput}; never {@code null}<a name="line.202"></a>
+<span class="sourceLineNo">202</span>   * @return a new {@link BoundedChunkedInput}; never {@code null}<a name="line.202"></a>
 <span class="sourceLineNo">203</span>   *<a name="line.203"></a>
 <span class="sourceLineNo">204</span>   * @exception NullPointerException if {@code eventExecutor} or<a name="line.204"></a>
 <span class="sourceLineNo">205</span>   * {@code source} is {@code null}<a name="line.205"></a>
 <span class="sourceLineNo">206</span>   *<a name="line.206"></a>
 <span class="sourceLineNo">207</span>   * @see AbstractNettyContainerResponseWriter#createChunkedInput(EventExecutor, ByteBuf, long)<a name="line.207"></a>
 <span class="sourceLineNo">208</span>   *<a name="line.208"></a>
-<span class="sourceLineNo">209</span>   * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)<a name="line.209"></a>
-<span class="sourceLineNo">210</span>   *<a name="line.210"></a>
-<span class="sourceLineNo">211</span>   * @see ChunkedInput#readChunk(ByteBufAllocator)<a name="line.211"></a>
-<span class="sourceLineNo">212</span>   */<a name="line.212"></a>
-<span class="sourceLineNo">213</span>  @Override<a name="line.213"></a>
-<span class="sourceLineNo">214</span>  protected final BoundedChunkedInput&lt;?&gt; createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {<a name="line.214"></a>
-<span class="sourceLineNo">215</span>    final String mn = "createChunkedInput";<a name="line.215"></a>
-<span class="sourceLineNo">216</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.216"></a>
-<span class="sourceLineNo">217</span>      logger.entering(cn, mn, new Object[] { eventExecutor, source, Long.valueOf(contentLength) });<a name="line.217"></a>
-<span class="sourceLineNo">218</span>    }<a name="line.218"></a>
-<span class="sourceLineNo">219</span>    final BoundedChunkedInput&lt;?&gt; returnValue = new FunctionalByteBufChunkedInput&lt;ByteBuf&gt;(source, UnaryOperator.identity(), contentLength);<a name="line.219"></a>
-<span class="sourceLineNo">220</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.220"></a>
-<span class="sourceLineNo">221</span>      logger.exiting(cn, mn, returnValue);<a name="line.221"></a>
-<span class="sourceLineNo">222</span>    }<a name="line.222"></a>
-<span class="sourceLineNo">223</span>    return returnValue;<a name="line.223"></a>
-<span class="sourceLineNo">224</span>  }<a name="line.224"></a>
-<span class="sourceLineNo">225</span><a name="line.225"></a>
-<span class="sourceLineNo">226</span>  /**<a name="line.226"></a>
-<span class="sourceLineNo">227</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} {@link<a name="line.227"></a>
-<span class="sourceLineNo">228</span>   * LastHttpContent#EMPTY_LAST_CONTENT} when invoked.<a name="line.228"></a>
-<span class="sourceLineNo">229</span>   *<a name="line.229"></a>
-<span class="sourceLineNo">230</span>   * @param channelPromise a {@link ChannelPromise} to pass to any<a name="line.230"></a>
-<span class="sourceLineNo">231</span>   * write operation; must not be {@code null}<a name="line.231"></a>
-<span class="sourceLineNo">232</span>   *<a name="line.232"></a>
-<span class="sourceLineNo">233</span>   * @exception NullPointerException if {@code channelPromise} is<a name="line.233"></a>
-<span class="sourceLineNo">234</span>   * {@code null}<a name="line.234"></a>
-<span class="sourceLineNo">235</span>   *<a name="line.235"></a>
-<span class="sourceLineNo">236</span>   * @see LastHttpContent<a name="line.236"></a>
+<span class="sourceLineNo">209</span>   * @see<a name="line.209"></a>
+<span class="sourceLineNo">210</span>   * FunctionalByteBufChunkedInput#FunctionalByteBufChunkedInput(ByteBuf,<a name="line.210"></a>
+<span class="sourceLineNo">211</span>   * Function, long)<a name="line.211"></a>
+<span class="sourceLineNo">212</span>   *<a name="line.212"></a>
+<span class="sourceLineNo">213</span>   * @see ChunkedInput#readChunk(ByteBufAllocator)<a name="line.213"></a>
+<span class="sourceLineNo">214</span>   */<a name="line.214"></a>
+<span class="sourceLineNo">215</span>  @Override<a name="line.215"></a>
+<span class="sourceLineNo">216</span>  protected final BoundedChunkedInput&lt;?&gt; createChunkedInput(final EventExecutor eventExecutor, final ByteBuf source, final long contentLength) {<a name="line.216"></a>
+<span class="sourceLineNo">217</span>    final String mn = "createChunkedInput";<a name="line.217"></a>
+<span class="sourceLineNo">218</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.218"></a>
+<span class="sourceLineNo">219</span>      logger.entering(cn, mn, new Object[] { eventExecutor, source, Long.valueOf(contentLength) });<a name="line.219"></a>
+<span class="sourceLineNo">220</span>    }<a name="line.220"></a>
+<span class="sourceLineNo">221</span>    final BoundedChunkedInput&lt;?&gt; returnValue = new FunctionalByteBufChunkedInput&lt;ByteBuf&gt;(source, UnaryOperator.identity(), contentLength);<a name="line.221"></a>
+<span class="sourceLineNo">222</span>    if (logger.isLoggable(Level.FINER)) {<a name="line.222"></a>
+<span class="sourceLineNo">223</span>      logger.exiting(cn, mn, returnValue);<a name="line.223"></a>
+<span class="sourceLineNo">224</span>    }<a name="line.224"></a>
+<span class="sourceLineNo">225</span>    return returnValue;<a name="line.225"></a>
+<span class="sourceLineNo">226</span>  }<a name="line.226"></a>
+<span class="sourceLineNo">227</span><a name="line.227"></a>
+<span class="sourceLineNo">228</span>  /**<a name="line.228"></a>
+<span class="sourceLineNo">229</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} {@link<a name="line.229"></a>
+<span class="sourceLineNo">230</span>   * LastHttpContent#EMPTY_LAST_CONTENT} when invoked.<a name="line.230"></a>
+<span class="sourceLineNo">231</span>   *<a name="line.231"></a>
+<span class="sourceLineNo">232</span>   * @param channelPromise a {@link ChannelPromise} to pass to any<a name="line.232"></a>
+<span class="sourceLineNo">233</span>   * write operation; must not be {@code null}<a name="line.233"></a>
+<span class="sourceLineNo">234</span>   *<a name="line.234"></a>
+<span class="sourceLineNo">235</span>   * @exception NullPointerException if {@code channelPromise} is<a name="line.235"></a>
+<span class="sourceLineNo">236</span>   * {@code null}<a name="line.236"></a>
 <span class="sourceLineNo">237</span>   *<a name="line.237"></a>
-<span class="sourceLineNo">238</span>   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage(ChannelPromise)<a name="line.238"></a>
-<span class="sourceLineNo">239</span>   */<a name="line.239"></a>
-<span class="sourceLineNo">240</span>  @Override<a name="line.240"></a>
-<span class="sourceLineNo">241</span>  protected final void writeLastContentMessage(final ChannelPromise channelPromise) {<a name="line.241"></a>
-<span class="sourceLineNo">242</span>    Objects.requireNonNull(channelPromise);<a name="line.242"></a>
-<span class="sourceLineNo">243</span>    // Send the magic message that tells the HTTP machinery to<a name="line.243"></a>
-<span class="sourceLineNo">244</span>    // finish up.<a name="line.244"></a>
-<span class="sourceLineNo">245</span>    this.channelHandlerContext.write(LastHttpContent.EMPTY_LAST_CONTENT, channelPromise);<a name="line.245"></a>
-<span class="sourceLineNo">246</span>  }<a name="line.246"></a>
-<span class="sourceLineNo">247</span><a name="line.247"></a>
-<span class="sourceLineNo">248</span>  /**<a name="line.248"></a>
-<span class="sourceLineNo">249</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} a new<a name="line.249"></a>
-<span class="sourceLineNo">250</span>   * {@link DefaultFullHttpResponse} message with a {@code<a name="line.250"></a>
-<span class="sourceLineNo">251</span>   * Content-Length} of {@code 0} and a status equal to {@link<a name="line.251"></a>
-<span class="sourceLineNo">252</span>   * HttpResponseStatus#INTERNAL_SERVER_ERROR}.<a name="line.252"></a>
-<span class="sourceLineNo">253</span>   *<a name="line.253"></a>
-<span class="sourceLineNo">254</span>   * @param channelPromise a {@link ChannelPromise} to pass to any<a name="line.254"></a>
-<span class="sourceLineNo">255</span>   * write operation; must not be {@code null}<a name="line.255"></a>
-<span class="sourceLineNo">256</span>   *<a name="line.256"></a>
-<span class="sourceLineNo">257</span>   * @exception NullPointerException if {@code channelPromise} is<a name="line.257"></a>
-<span class="sourceLineNo">258</span>   * {@code null}<a name="line.258"></a>
-<span class="sourceLineNo">259</span>   *<a name="line.259"></a>
-<span class="sourceLineNo">260</span>   * @see<a name="line.260"></a>
-<span class="sourceLineNo">261</span>   * AbstractNettyContainerResponseWriter#writeFailureMessage(ChannelPromise)<a name="line.261"></a>
-<span class="sourceLineNo">262</span>   */<a name="line.262"></a>
-<span class="sourceLineNo">263</span>  @Override<a name="line.263"></a>
-<span class="sourceLineNo">264</span>  protected final void writeFailureMessage(final ChannelPromise channelPromise) {<a name="line.264"></a>
-<span class="sourceLineNo">265</span>    Objects.requireNonNull(channelPromise);<a name="line.265"></a>
-<span class="sourceLineNo">266</span>    final HttpMessage failureMessage = new DefaultFullHttpResponse(this.requestObject.protocolVersion(),<a name="line.266"></a>
-<span class="sourceLineNo">267</span>                                                                   HttpResponseStatus.INTERNAL_SERVER_ERROR);<a name="line.267"></a>
-<span class="sourceLineNo">268</span>    HttpUtil.setContentLength(failureMessage, 0L);<a name="line.268"></a>
-<span class="sourceLineNo">269</span>    this.channelHandlerContext.write(failureMessage, channelPromise);<a name="line.269"></a>
-<span class="sourceLineNo">270</span>  }<a name="line.270"></a>
-<span class="sourceLineNo">271</span><a name="line.271"></a>
-<span class="sourceLineNo">272</span>}<a name="line.272"></a>
+<span class="sourceLineNo">238</span>   * @see LastHttpContent<a name="line.238"></a>
+<span class="sourceLineNo">239</span>   *<a name="line.239"></a>
+<span class="sourceLineNo">240</span>   * @see AbstractNettyContainerResponseWriter#writeLastContentMessage(ChannelPromise)<a name="line.240"></a>
+<span class="sourceLineNo">241</span>   */<a name="line.241"></a>
+<span class="sourceLineNo">242</span>  @Override<a name="line.242"></a>
+<span class="sourceLineNo">243</span>  protected final void writeLastContentMessage(final ChannelPromise channelPromise) {<a name="line.243"></a>
+<span class="sourceLineNo">244</span>    Objects.requireNonNull(channelPromise);<a name="line.244"></a>
+<span class="sourceLineNo">245</span>    // Send the magic message that tells the HTTP machinery to<a name="line.245"></a>
+<span class="sourceLineNo">246</span>    // finish up.<a name="line.246"></a>
+<span class="sourceLineNo">247</span>    this.channelHandlerContext.write(LastHttpContent.EMPTY_LAST_CONTENT, channelPromise);<a name="line.247"></a>
+<span class="sourceLineNo">248</span>  }<a name="line.248"></a>
+<span class="sourceLineNo">249</span><a name="line.249"></a>
+<span class="sourceLineNo">250</span>  /**<a name="line.250"></a>
+<span class="sourceLineNo">251</span>   * {@linkplain ChannelHandlerContext#write(Object) Writes} a new<a name="line.251"></a>
+<span class="sourceLineNo">252</span>   * {@link DefaultFullHttpResponse} message with a {@code<a name="line.252"></a>
+<span class="sourceLineNo">253</span>   * Content-Length} of {@code 0} and a status equal to {@link<a name="line.253"></a>
+<span class="sourceLineNo">254</span>   * HttpResponseStatus#INTERNAL_SERVER_ERROR}.<a name="line.254"></a>
+<span class="sourceLineNo">255</span>   *<a name="line.255"></a>
+<span class="sourceLineNo">256</span>   * @param channelPromise a {@link ChannelPromise} to pass to any<a name="line.256"></a>
+<span class="sourceLineNo">257</span>   * write operation; must not be {@code null}<a name="line.257"></a>
+<span class="sourceLineNo">258</span>   *<a name="line.258"></a>
+<span class="sourceLineNo">259</span>   * @exception NullPointerException if {@code channelPromise} is<a name="line.259"></a>
+<span class="sourceLineNo">260</span>   * {@code null}<a name="line.260"></a>
+<span class="sourceLineNo">261</span>   *<a name="line.261"></a>
+<span class="sourceLineNo">262</span>   * @see<a name="line.262"></a>
+<span class="sourceLineNo">263</span>   * AbstractNettyContainerResponseWriter#writeFailureMessage(ChannelPromise)<a name="line.263"></a>
+<span class="sourceLineNo">264</span>   */<a name="line.264"></a>
+<span class="sourceLineNo">265</span>  @Override<a name="line.265"></a>
+<span class="sourceLineNo">266</span>  protected final void writeFailureMessage(final ChannelPromise channelPromise) {<a name="line.266"></a>
+<span class="sourceLineNo">267</span>    Objects.requireNonNull(channelPromise);<a name="line.267"></a>
+<span class="sourceLineNo">268</span>    final HttpMessage failureMessage = new DefaultFullHttpResponse(this.requestObject.protocolVersion(),<a name="line.268"></a>
+<span class="sourceLineNo">269</span>                                                                   HttpResponseStatus.INTERNAL_SERVER_ERROR);<a name="line.269"></a>
+<span class="sourceLineNo">270</span>    HttpUtil.setContentLength(failureMessage, 0L);<a name="line.270"></a>
+<span class="sourceLineNo">271</span>    this.channelHandlerContext.write(failureMessage, channelPromise);<a name="line.271"></a>
+<span class="sourceLineNo">272</span>  }<a name="line.272"></a>
+<span class="sourceLineNo">273</span><a name="line.273"></a>
+<span class="sourceLineNo">274</span>}<a name="line.274"></a>
 
 
 
