@@ -36,7 +36,10 @@ import io.netty.util.concurrent.GenericFutureListener;
  * target="_parent">Laird Nelson</a>
  *
  * @see #write(byte[], int, int)
+ *
+ * @deprecated Not currently used; possibly slated for removal.
  */
+@Deprecated
 public final class EventLoopPinnedByteBufOutputStream extends OutputStream {
 
 

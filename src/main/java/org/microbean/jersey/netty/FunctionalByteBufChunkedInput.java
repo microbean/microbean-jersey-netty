@@ -274,8 +274,8 @@ public class FunctionalByteBufChunkedInput<T> implements BoundedChunkedInput<T> 
    * implementation may use if it wishes but normally should have no
    * use for; may be {@code null}
    *
-   * @return a chunk of this {@link ByteBufChunkedInput}'s overall
-   * input, or {@code null}
+   * @return a chunk of this {@link FunctionalByteBufChunkedInput}'s
+   * overall input, or {@code null}
    *
    * @exception IllegalStateException if {@link #close()} has been
    * called

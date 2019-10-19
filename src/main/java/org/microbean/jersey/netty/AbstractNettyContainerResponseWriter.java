@@ -37,6 +37,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -276,17 +277,19 @@ public abstract class AbstractNettyContainerResponseWriter<T> implements Contain
       chunkedInputWritePromise.addListener(listener);
       channelHandlerContext.write(chunkedInput, chunkedInputWritePromise);
 
-      // Then return an OutputStream implementation that writes to
-      // the very same ByteBuf, ensuring that writes take place on
-      // the event loop.  The net effect is that as this stream
-      // writes to the ByteBuf, the ChunkedWriteHandler consuming
-      // the ChunkedInput by way of its readChunk() method, also on
-      // the event loop, will stream the results as they are made
-      // available.
-      returnValue =
-        new EventLoopPinnedByteBufOutputStream(this.channelHandlerContext.executor(),
-                                               byteBuf,
-                                               listener);
+      // Then return an OutputStream implementation that writes to the
+      // very same ByteBuf.  The net effect is that as this stream
+      // writes to the ByteBuf, the ChunkedWriteHandler consuming the
+      // ChunkedInput by way of its readChunk() method, on the event
+      // loop, will stream the results as they are made available.  We
+      // can get away with this
+      // two-threads-interacting-with-the-same-ByteBuf-without-synchronization
+      // use case because one thread is affecting only the ByteBuf's
+      // reader index, and the other is affecting only the ByteBuf's
+      // writer index.  See
+      // https://stackoverflow.com/questions/58403725/although-bytebuf-is-not-guaranteed-to-be-thread-safe-will-this-use-case-be-ok
+      // for more.
+      returnValue = new ByteBufOutputStream(byteBuf);
     } else {
       returnValue = null;
     }

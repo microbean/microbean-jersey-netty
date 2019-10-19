@@ -18,6 +18,11 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+
+import java.util.function.Supplier;
+
 import javax.ws.rs.core.Application;
 
 import io.netty.bootstrap.ServerBootstrap; // for javadoc only
@@ -44,8 +49,6 @@ import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 
-import io.netty.handler.logging.LoggingHandler;
-
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 import io.netty.handler.ssl.SslContext;
@@ -57,10 +60,15 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 
 import org.glassfish.jersey.server.ApplicationHandler;
+import org.glassfish.jersey.server.ContainerRequest; // for javadoc only
+
+import org.glassfish.jersey.spi.ExecutorServiceProvider; // for javadoc only
+import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider; // for javadoc only
 
 /**
  * A {@link ChannelInitializer} that sets up <a
- * href="https://jersey.github.io/">Jersey</a> integration.
+ * href="https://eclipse-ee4j.github.io/jersey/"
+ * target="_parent">Jersey</a> integration.
  *
  * <p>An instance of this class should be all you need when setting up
  * your channel pipeline.  It handles HTTP 1.1 and HTTP/2
@@ -146,6 +154,42 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
   private final ApplicationHandler applicationHandler;
 
+  /**
+   * An {@link Executor} that will offload Jersey-related work from
+   * the Netty event loop, often as provided by {@link
+   * ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}.
+   *
+   * <p>The value of this field is frequently (but certainly does not
+   * have to be) an instance of <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/core-server/src/main/java/org/glassfish/jersey/server/ServerExecutorProvidersConfigurator.java#L86"
+   * target="_parent">{@code DefaultManagedAsyncExecutorProvider}</a>,
+   * which is a subclass of {@link
+   * org.glassfish.jersey.spi.ThreadPoolExecutorProvider}.</p>
+   *
+   * <p>This field may be {@code null}.</p>
+   *
+   * <p>The value of this field is used to {@linkplain
+   * ApplicationHandler#handle(ContainerRequest) perform Jersey
+   * application handling} so that it occurs on a thread that is
+   * guaranteed not to be the Netty event loop.</p>
+   *
+   * @see JerseyChannelInboundHandler#jerseyExecutor
+   */
+  private final Executor jerseyExecutor;
+
+  /**
+   * A {@link Supplier} of a {@link ScheduledExecutorService} whose
+   * {@linkplain Supplier#get() return value} may be indirectly used
+   * by a {@link JerseyChannelInboundHandler} implementation.
+   *
+   * <p>This field may be {@code null}.</p>
+   *
+   * @see
+   * JerseyChannelInboundHandler#jerseyScheduledExecutorServiceSupplier
+   */
+  private final Supplier<? extends ScheduledExecutorService> jerseyScheduledExecutorServiceSupplier;
+
 
   /*
    * Constructors.
@@ -156,10 +200,15 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Creates a new {@link JerseyChannelInitializer}.
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer() {
-    this(null, null, Long.MAX_VALUE, (ApplicationHandler)null);
+    this(null,
+         null,
+         Long.MAX_VALUE,
+         (ApplicationHandler)null,
+         null,
+         null);
   }
 
   /**
@@ -171,10 +220,15 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final Application application) {
-    this(null, null, Long.MAX_VALUE, new ApplicationHandler(application == null ? new Application() : application));
+    this(null,
+         null,
+         Long.MAX_VALUE,
+         new ApplicationHandler(application == null ? new Application() : application),
+         null,
+         null);
   }
 
   /**
@@ -186,10 +240,15 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * <code>ApplicationHandler</code>} will be used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final ApplicationHandler applicationHandler) {
-    this(null, null, Long.MAX_VALUE, applicationHandler);
+    this(null,
+         null,
+         Long.MAX_VALUE,
+         applicationHandler,
+         null,
+         null);
   }
 
   /**
@@ -206,11 +265,16 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final Application application) {
-    this(baseUri, null, Long.MAX_VALUE, new ApplicationHandler(application == null ? new Application() : application));
+    this(baseUri,
+         null,
+         Long.MAX_VALUE,
+         new ApplicationHandler(application == null ? new Application() : application),
+         null,
+         null);
   }
 
   /**
@@ -227,11 +291,16 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * <code>ApplicationHandler</code>} will be used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final ApplicationHandler applicationHandler) {
-    this(baseUri, null, Long.MAX_VALUE, applicationHandler);
+    this(baseUri,
+         null,
+         Long.MAX_VALUE,
+         applicationHandler,
+         null,
+         null);
   }
 
   /**
@@ -253,12 +322,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final Application application) {
-    this(baseUri, sslContext, Long.MAX_VALUE, new ApplicationHandler(application == null ? new Application() : application));
+    this(baseUri,
+         sslContext,
+         Long.MAX_VALUE,
+         new ApplicationHandler(application == null ? new Application() : application),
+         null,
+         null);
   }
 
   /**
@@ -279,12 +353,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * <code>ApplicationHandler</code>} will be used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final ApplicationHandler applicationHandler) {
-    this(baseUri, sslContext, Long.MAX_VALUE, applicationHandler);
+    this(baseUri,
+         sslContext,
+         Long.MAX_VALUE,
+         applicationHandler,
+         null,
+         null);
   }
 
   /**
@@ -313,13 +392,18 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * used instead
    *
    * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final long maxIncomingContentLength,
                                   final Application application) {
-    this(baseUri, sslContext, maxIncomingContentLength, new ApplicationHandler(application == null ? new Application() : application));
+    this(baseUri,
+         sslContext,
+         maxIncomingContentLength,
+         new ApplicationHandler(application == null ? new Application() : application),
+         null,
+         null);
   }
 
   /**
@@ -346,11 +430,71 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * the {@link Application} to serve; may be {@code null} in which
    * case a {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * ApplicationHandler, Executor, Supplier)
    */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final long maxIncomingContentLength,
                                   final ApplicationHandler applicationHandler) {
+    this(baseUri,
+         sslContext,
+         maxIncomingContentLength,
+         applicationHandler,
+         null,
+         null);
+  }
+
+  /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri the base {@link URI} of the Jersey application;
+   * may be {@code null} in which case the return value resulting from
+   * invoking {@link URI#create(String) URI.create("/")} will be used
+   * instead
+   *
+   * @param sslContext an {@link SslContext} that may be used to
+   * {@linkplain #createSslHandler(SslContext, ByteBufAllocator)
+   * create an <code>SslHandler</code>}; may be {@code null}
+   *
+   * @param maxIncomingContentLength in the case of HTTP to HTTP/2
+   * upgrades, this parameter governs the maximum permitted incoming
+   * entity length in bytes; if less than {@code 0} then {@link
+   * Long#MAX_VALUE} will be used instead; if exactly {@code 0} then
+   * if the HTTP message containing the upgrade header is something
+   * like a {@code POST} it will be rejected with a {@code 413} error
+   * code
+   *
+   * @param applicationHandler the {@link ApplicationHandler} hosting
+   * the {@link Application} to serve; may be {@code null} in which
+   * case a {@linkplain ApplicationHandler#ApplicationHandler() new
+   * <code>ApplicationHandler</code>} will be used instead
+   *
+   * @param jerseyExecutor the {@link Executor} that will be used to
+   * {@linkplain Executor#execute(Runnable) execute} a Jersey
+   * application; may be {@code null} in which case the return value
+   * of {@link ExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}
+   * may be used instead
+   *
+   * @param jerseyScheduledExecutorServiceSupplier a {@link Supplier}
+   * of {@link ScheduledExecutorService} instances that may be used by
+   * a {@link JerseyChannelInboundHandler} instance; may be {@code
+   * null} in which case the return value of {@linkplain
+   * ScheduledExecutorServiceProvider#getExecutorService()
+   * applicationHandler.getInjectionManager().getInstance(ScheduledExecutorServiceProvider.class).getExecutorService()}
+   * may be used instead
+   *
+   * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI,
+   * ApplicationHandler, Executor, Supplier)
+   */
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final long maxIncomingContentLength,
+                                  final ApplicationHandler applicationHandler,
+                                  final Executor jerseyExecutor,
+                                  final Supplier<? extends ScheduledExecutorService> jerseyScheduledExecutorServiceSupplier) {
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
     this.sslContext = sslContext;
@@ -365,6 +509,8 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.maxIncomingContentLength = maxIncomingContentLength;
     }
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
+    this.jerseyExecutor = jerseyExecutor;
+    this.jerseyScheduledExecutorServiceSupplier = jerseyScheduledExecutorServiceSupplier;
   }
 
 
@@ -540,9 +686,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * A hook for performing {@link Channel} initialization before
    * the Jersey integration is set up.
    *
-   * <p>This implementation {@linkplain
-   * ChannelPipeline#addLast(String, ChannelHandler) installs} a
-   * {@link LoggingHandler}.</p>
+   * <p>This implementation does nothing.</p>
    *
    * <p>Overrides must not call {@link #initChannel(Channel)} or
    * an infinite loop will result.</p>
@@ -556,11 +700,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * @see ChannelPipeline#addLast(String, ChannelHandler)
    */
   protected void preInitChannel(final Channel channel) {
-    if (channel != null) {
-      final ChannelPipeline channelPipeline = channel.pipeline();
-      assert channelPipeline != null;
-      channelPipeline.addLast("LoggingHandler", new LoggingHandler());
-    }
+
   }
 
   /**
@@ -664,8 +804,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       // writes, so the ChunkedWriteHandler is the next outbound
       // recipient.  See https://stackoverflow.com/a/42527075/208288
       // for a nice explanation.
-      channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(), new ChunkedWriteHandler());
-      channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(), new JerseyChannelInboundHandler(baseUri, applicationHandler));
+      channelPipeline.addLast(ChunkedWriteHandler.class.getSimpleName(),
+                              new ChunkedWriteHandler());
+      channelPipeline.addLast(JerseyChannelInboundHandler.class.getSimpleName(),
+                              new JerseyChannelInboundHandler(baseUri,
+                                                              applicationHandler,
+                                                              jerseyExecutor,
+                                                              jerseyScheduledExecutorServiceSupplier));
     }
 
   }

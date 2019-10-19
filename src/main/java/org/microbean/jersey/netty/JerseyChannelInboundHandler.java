@@ -87,11 +87,11 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * Static fields.
    */
 
-  
+
   private static final String cn = JerseyChannelInboundHandler.class.getName();
 
   private static final Logger logger = Logger.getLogger(cn);
-  
+
 
   /*
    * Instance fields.
@@ -122,7 +122,8 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * ExecutorServiceProvider#getExecutorService()
    * applicationHandler.getInjectionManager().getInstance(ExecutorServiceProvider.class).getExecutorService()}.
    *
-   * <p>The value of this field is frequently an instance of <a
+   * <p>The value of this field is frequently (but certainly does not
+   * have to be) an instance of <a
    * href="https://github.com/eclipse-ee4j/jersey/blob/eafb9bdcb82dfa3fd76dd957d307b99d4a22c87f/core-server/src/main/java/org/glassfish/jersey/server/ServerExecutorProvidersConfigurator.java#L86"
    * target="_parent">{@code DefaultManagedAsyncExecutorProvider}</a>,
    * which is a subclass of {@link
@@ -350,19 +351,20 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * @see #messageReceived(ChannelHandlerContext, ByteBuf, boolean)
    */
   @Override
-  protected final void channelRead0(final ChannelHandlerContext channelHandlerContext, final Object message) {
+  protected final void channelRead0(final ChannelHandlerContext channelHandlerContext,
+                                    final Object message) {
     final String mn = "channelRead0";
     if (logger.isLoggable(Level.FINER)) {
       logger.entering(cn, mn, new Object[] { channelHandlerContext, message });
     }
-    
+
     Objects.requireNonNull(channelHandlerContext);
     if (message instanceof HttpRequest || message instanceof Http2HeadersFrame) {
       this.messageReceived(channelHandlerContext, message);
     } else if (message instanceof HttpContent || message instanceof Http2DataFrame) {
       this.messageReceived(channelHandlerContext,
                            ((ByteBufHolder)message).content(),
-                           message instanceof LastHttpContent || (message instanceof Http2DataFrame) && ((Http2DataFrame)message).isEndStream());
+                           message instanceof LastHttpContent || ((message instanceof Http2DataFrame) && ((Http2DataFrame)message).isEndStream()));
     } else {
       throw new IllegalArgumentException("Unexpected message type: " + message);
     }
@@ -372,13 +374,52 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
     }
   }
 
-  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final Object requestObject) {
+  /**
+   * Called by the {@link #channelRead0(ChannelHandlerContext,
+   * Object)} method when either an {@link HttpRequest} or an {@link
+   * Http2HeadersFrame} is received.
+   *
+   * <p>This method calls the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method on a separate
+   * thread to start the Jersey application handling process.</p>
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param requestObject either an {@link HttpRequest} or an {@link
+   * Http2HeadersFrame}; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelHandlerContext}
+   * or {@code requestObject} is {@code null}
+   *
+   * @exception IllegalArgumentException if somehow {@code
+   * requestObject} is neither an {@link HttpRequest} nor an {@link
+   * Http2HeadersFrame} (this should be impossible)
+   *
+   * @exception IllegalStateException if an override of any of the
+   * {@link #createContainerRequest(ChannelHandlerContext,
+   * HttpRequest)}, {@link
+   * #createContainerRequest(ChannelHandlerContext,
+   * Http2HeadersFrame)}, {@link
+   * #createContainerResponseWriter(HttpRequest,
+   * ChannelHandlerContext, Supplier)}, or {@link
+   * #createContainerResponseWriter(Http2HeadersFrame,
+   * ChannelHandlerContext, Supplier)} methods returns {@code null}
+   *
+   * @see <a
+   * href="https://github.com/microbean/microbean-jersey-netty/issues/8"
+   * target="_parent">Issue #8</a>
+   */
+  private final void messageReceived(final ChannelHandlerContext channelHandlerContext,
+                                     final Object requestObject) {
     final String mn = "messageReceived";
     if (logger.isLoggable(Level.FINER)) {
       logger.entering(cn, mn, new Object[] { channelHandlerContext, requestObject });
     }
-    
+
     Objects.requireNonNull(channelHandlerContext);
+    Objects.requireNonNull(requestObject);
     assert channelHandlerContext.executor().inEventLoop();
     assert this.byteBufQueue == null;
 
@@ -390,13 +431,14 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       writer = this.createContainerResponseWriter(httpRequest,
                                                   channelHandlerContext,
                                                   this.jerseyScheduledExecutorServiceSupplier);
-    } else {
-      assert requestObject instanceof Http2HeadersFrame;
+    } else if (requestObject instanceof Http2HeadersFrame) {
       final Http2HeadersFrame http2HeadersFrame = (Http2HeadersFrame)requestObject;
       containerRequest = this.createContainerRequest(channelHandlerContext, http2HeadersFrame);
       writer = this.createContainerResponseWriter(http2HeadersFrame,
                                                   channelHandlerContext,
                                                   this.jerseyScheduledExecutorServiceSupplier);
+    } else {
+      throw new IllegalArgumentException("Unexpected requestObject: " + requestObject);
     }
     if (containerRequest == null) {
       throw new IllegalStateException("createContainerRequest() == null");
@@ -412,7 +454,7 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
         } catch (final RuntimeException | Error problem) {
           // If Jersey is well-behaved, this will never happen,
           // because the containerResponseWriter's failure(Throwable)
-          // method will be called.
+          // method will have been called.
           if (logger.isLoggable(Level.SEVERE)) {
             logger.logp(Level.SEVERE, cn, mn, problem.getMessage(), problem);
           }
@@ -428,8 +470,8 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
   }
 
   /**
-   * Processes the supplied {@link ByteBuf} representing one of
-   * possibly many "content" portions of an overall HTTP message.
+   * Processes the supplied incoming {@link ByteBuf} representing one
+   * of possibly many "content" portions of an overall HTTP message.
    *
    * <p>Internally, the supplied {@code content}, if {@linkplain
    * ByteBuf#isReadable() readable}, is {@linkplain ByteBuf#retain()
@@ -442,40 +484,40 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    * EventExecutor#inEventLoop() in the Netty event loop}.</p>
    *
    * @param channelHandlerContext the {@link ChannelHandlerContext}
-   * representing the current Netty execution; must not be {@code
+   * representing the current Netty execution; may be {@code
    * null}
    *
-   * @param content the {@link ByteBuf} to process; must not be {@code
-   * null}
+   * @param content the {@link ByteBuf} to process; may be {@code
+   * null} somewhat pathologically
    *
    * @param lastOne {@code true} if {@code content} is known to be the
    * last such content chunk; {@code false} in all other cases
    *
    * @see #channelRead0(ChannelHandlerContext, Object)
    */
-  private final void messageReceived(final ChannelHandlerContext channelHandlerContext, final ByteBuf content, final boolean lastOne) {
+  private final void messageReceived(final ChannelHandlerContext channelHandlerContext,
+                                     final ByteBuf content,
+                                     final boolean lastOne) {
     final String mn = "messageReceived";
     if (logger.isLoggable(Level.FINER)) {
       logger.entering(cn, mn, new Object[] { channelHandlerContext, content, Boolean.valueOf(lastOne) });
     }
-        
-    Objects.requireNonNull(channelHandlerContext);
-    Objects.requireNonNull(content);
-    // TODO: in HTTP/2 incoming-payload scenarios this (commented out)
-    // refCnt() returnValue can be 4?!  May have to do with all the
-    // various handlers up front dealing with upgrades etc.
-    //
-    // assert content.refCnt() == 1 : "Unexpected refCnt: " + content.refCnt() + "; thread: " + Thread.currentThread();
-    assert channelHandlerContext.executor().inEventLoop();
 
     final ByteBufQueue byteBufQueue = this.byteBufQueue;
 
-    if (content.isReadable()) {
+    // Handle incoming payloads.
+    if (content != null && content.isReadable()) {
       assert byteBufQueue != null;
+      // TODO: do we actually need to retain this, given that it's
+      // going to end up in a CompositeByteBuf?
       content.retain();
       byteBufQueue.addByteBuf(content);
     }
 
+    // If that was the last incoming payload chunk, then we have no
+    // more need for our ByteBufQueue: we've added all we're ever
+    // going to add.  This will help to fail fast if somehow more
+    // content comes in.
     if (lastOne && byteBufQueue != null) {
       this.byteBufQueue = null;
     }
@@ -516,7 +558,8 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * @see ByteBufQueue
    */
-  protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final HttpRequest httpRequest) {
+  protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext,
+                                                    final HttpRequest httpRequest) {
     return this.createContainerRequest(channelHandlerContext, (Object)httpRequest);
   }
 
@@ -551,16 +594,50 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * @see ByteBufQueue
    */
-  protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final Http2HeadersFrame http2HeadersFrame) {
+  protected ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext,
+                                                    final Http2HeadersFrame http2HeadersFrame) {
     return this.createContainerRequest(channelHandlerContext, (Object)http2HeadersFrame);
   }
 
-  private final ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext, final Object requestObject) {
+  /**
+   * A method to which both the {@link
+   * #createContainerRequest(ChannelHandlerContext,
+   * Http2HeadersFrame)} and {@link
+   * #createContainerRequest(ChannelHandlerContext, HttpRequest)}
+   * delegate.
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext}
+   * representing the current Netty execution; must not be {@code
+   * null}
+   *
+   * @param requestObject the {@link HttpRequest} or {@link
+   * Http2HeadersFrame} from which a {@link ContainerRequest} should
+   * be synthesized
+   *
+   * @return a new {@link ContainerRequest}; never {@code null}
+   *
+   * @exception NullPointerException if either {@code
+   * channelHandlerContext} or {@code requestObject} is {@code null}
+   *
+   * @exception IllegalArgumentException if somehow {@code
+   * requestObject} is neither an {@link HttpRequest} nor an {@link
+   * Http2HeadersFrame} (this should be impossible)
+   *
+   * @see ContainerRequest
+   *
+   * @see #createContainerRequest(ChannelHandlerContext,
+   * Http2HeadersFrame)
+   *
+   * @see #createContainerRequest(ChannelHandlerContext,
+   * HttpRequest) 
+   */
+  private final ContainerRequest createContainerRequest(final ChannelHandlerContext channelHandlerContext,
+                                                        final Object requestObject) {
     final String mn = "createContainerRequest";
     if (logger.isLoggable(Level.FINER)) {
       logger.entering(cn, mn, new Object[] { channelHandlerContext, requestObject });
     }
-    
+
     Objects.requireNonNull(channelHandlerContext);
     Objects.requireNonNull(requestObject);
     assert channelHandlerContext.executor().inEventLoop();
@@ -575,13 +652,14 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
       nettyHeaderNames = httpHeaders.names();
       method = httpRequest.method().name();
       uriString = httpRequest.uri();
-    } else {
-      assert requestObject instanceof Http2HeadersFrame;
+    } else if (requestObject instanceof Http2HeadersFrame) {
       final Http2HeadersFrame http2HeadersFrame = (Http2HeadersFrame)requestObject;
       final Http2Headers headers = http2HeadersFrame.headers();
       nettyHeaderNames = headers.names();
       method = headers.method().toString();
       uriString = headers.path().toString();
+    } else {
+      throw new IllegalArgumentException("Unexpected requestObject: " + requestObject);
     }
     assert method != null;
     assert uriString != null;
@@ -635,7 +713,8 @@ public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Obj
    *
    * @see SecurityContextAdapter
    */
-  private final SecurityContext createSecurityContext(final ChannelHandlerContext channelHandlerContext, final Object httpRequest) {
+  private final SecurityContext createSecurityContext(final ChannelHandlerContext channelHandlerContext,
+                                                      final Object httpRequest) {
     return new SecurityContextAdapter();
   }
 

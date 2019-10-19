@@ -199,14 +199,16 @@ public class HttpContainerResponseWriter extends AbstractNettyContainerResponseW
    *
    * @param contentLength {@inheritDoc}
    *
-   * @return a new {@link ByteBufChunkedInput}; never {@code null}
+   * @return a new {@link BoundedChunkedInput}; never {@code null}
    *
    * @exception NullPointerException if {@code eventExecutor} or
    * {@code source} is {@code null}
    *
    * @see AbstractNettyContainerResponseWriter#createChunkedInput(EventExecutor, ByteBuf, long)
    *
-   * @see ByteBufChunkedInput#ByteBufChunkedInput(ByteBuf, long)
+   * @see
+   * FunctionalByteBufChunkedInput#FunctionalByteBufChunkedInput(ByteBuf,
+   * Function, long)
    *
    * @see ChunkedInput#readChunk(ByteBufAllocator)
    */
