@@ -36,35 +36,102 @@ import io.netty.handler.codec.http.HttpContent;
  *
  * @see #createLastMessage()
  */
-public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream extends ByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
+public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
+
+
+  /*
+   * Constructors.
+   */
+
 
   /**
    * Creates a new {@link ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}.
    *
-   * @param channelOutboundInvoker {@inheritDoc}
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
    *
-   * @param closeChannelOutboundInvoker {@inheritDoc}
+   * @param closeChannelOutboundInvoker whether {@link
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
+   *
+   * @see
+   * #ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(ChannelOutboundInvoker,
+   * int, boolean,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    */
   public ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
                                                                      final boolean closeChannelOutboundInvoker) {
-    super(channelOutboundInvoker, closeChannelOutboundInvoker);
+    this(channelOutboundInvoker, Integer.MAX_VALUE, closeChannelOutboundInvoker, null);
   }
-  
+
+  /**
+   * Creates a new {@link ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}.
+   *
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
+   *
+   * @param flushThreshold the minimum number of bytes that this
+   * instance has to {@linkplain #write(byte[], int, int) write}
+   * before an automatic {@linkplain #flush() flush} will take place;
+   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * Integer#MAX_VALUE} then no automatic flushing will occur
+   *
+   * @param closeChannelOutboundInvoker whether {@link
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that will be used
+   * to {@linkplain ByteBufCreator#toByteBuf(byte[], int, int) create
+   * <code>ByteBuf</code> instances}; may be {@code null} in which
+   * case a default {@link ByteBufCreator} adapting {@link
+   * io.netty.buffer.Unpooled#wrappedBuffer(byte[], int, int)} will be
+   * used instead
+   */
   public ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
                                                                      final int flushThreshold,
                                                                      final boolean closeChannelOutboundInvoker,
-                                                                     final ByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator byteBufCreator) {
+                                                                     final ByteBufCreator byteBufCreator) {
     super(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker, byteBufCreator);
   }
 
+
+  /*
+   * Instance methods.
+   */
+
+
+  /**
+   * Returns a new {@link DefaultLastHttpContent} when invoked.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * @return a new {@link DefaultLastHttpContent}
+   *
+   * @see #close()
+   */
   @Override
   protected final HttpContent createLastMessage() {
     return new DefaultLastHttpContent();
   }
-  
+
+  /**
+   * Returns a new {@link DefaultHttpContent} whose {@link
+   * DefaultHttpContent#content() content()} method returns the
+   * supplied {@link ByteBuf}.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * @param content a {@link ByteBuf}; must not be {@code null}
+   *
+   * @return a new {@link DefaultHttpContent} whose {@link
+   * DefaultHttpContent#content() content()} method returns the
+   * supplied {@link ByteBuf}; never {@code null}
+   */
   @Override
   protected final HttpContent createMessage(final ByteBuf content) {
     return new DefaultHttpContent(content);
   }
-  
+
 }

@@ -33,27 +33,30 @@ import io.netty.channel.ChannelPromise;
  * An {@link OutputStream} that delegates writing and flushing
  * operations to a {@link ChannelOutboundInvoker}.
  *
+ * @param <T> the type of message that will be written
+ *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
  * @see ChannelOutboundInvoker
  */
-public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStream {
+public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends OutputStream {
 
 
   /*
    * Instance fields.
    */
 
-  
+
   /**
    * The {@link ChannelOutboundInvoker} underlying this {@link
-   * ChannelOutboundInvokingOutputStream} implementation to which most
-   * operations are adapted.
+   * AbstractChannelOutboundInvokingOutputStream} implementation to
+   * which most operations are adapted.
    *
    * @see ChannelOutboundInvoker
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean)
    */
   protected final ChannelOutboundInvoker channelOutboundInvoker;
@@ -62,15 +65,16 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * Indicates whether the {@link #channelOutboundInvoker
    * ChannelOutboundInvoker} should also be {@linkplain
    * ChannelOutboundInvoker#close(ChannelPromise) closed} when {@link
-   * #close()} is called.
+   * #close() close()} is called.
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean)
    */
   protected final boolean closeChannelOutboundInvoker;
 
   private final int flushThreshold;
-  
+
   private volatile int bytesWritten;
 
 
@@ -78,23 +82,24 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * Constructors;
    */
 
-  
+
   /**
-   * Creates a new {@link ChannelOutboundInvokingOutputStream} that
-   * does not automatically flush.
+   * Creates a new {@link AbstractChannelOutboundInvokingOutputStream}
+   * that does not automatically flush.
    *
    * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
    * to which operations are adapted; must not be {@code null}
    *
    * @param closeChannelOutboundInvoker whether {@link
-   * ChannelOutboundInvoker#close(ChannelPromise)} will be closed on
-   * the supplied {@link ChannelOutboundInvoker} when {@link #close()}
-   * is called
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
    *
    * @exception NullPointerException if {@code channelOutboundInvoker}
    * is {@code null}
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean)
    *
    * @see ChannelOutboundInvoker
@@ -103,28 +108,28 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    *
    * @see #close()
    */
-  protected ChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                final boolean closeChannelOutboundInvoker) {
+  protected AbstractChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+                                                        final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, Integer.MAX_VALUE, closeChannelOutboundInvoker);
   }
 
   /**
-   * Creates a new {@link ChannelOutboundInvokingOutputStream}.
+   * Creates a new {@link
+   * AbstractChannelOutboundInvokingOutputStream}.
    *
    * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
    * to which operations are adapted; must not be {@code null}
    *
    * @param flushThreshold the minimum number of bytes that this
-   * {@link ChannelOutboundInvokingOutputStream} implementation has to
-   * {@linkplain #write(byte[], int, int) write} before an automatic
-   * {@linkplain #flush() flush} will take place; if less than {@code
-   * 0} {@code 0} will be used instead; if {@code Integer#MAX_VALUE}
-   * then no automatic flushing will occur
+   * instance has to {@linkplain #write(byte[], int, int) write}
+   * before an automatic {@linkplain #flush() flush} will take place;
+   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * Integer#MAX_VALUE} then no automatic flushing will occur
    *
    * @param closeChannelOutboundInvoker whether {@link
-   * ChannelOutboundInvoker#close(ChannelPromise)} will be closed on
-   * the supplied {@link ChannelOutboundInvoker} when {@link #close()}
-   * is called
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
    *
    * @exception NullPointerException if {@code channelOutboundInvoker}
    * is {@code null}
@@ -135,9 +140,9 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    *
    * @see #close()
    */
-  protected ChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                             final int flushThreshold,
-                                             final boolean closeChannelOutboundInvoker) {
+  protected AbstractChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+                                                        final int flushThreshold,
+                                                        final boolean closeChannelOutboundInvoker) {
     super();
     this.flushThreshold = Math.max(0, flushThreshold);
     this.channelOutboundInvoker = Objects.requireNonNull(channelOutboundInvoker);
@@ -149,12 +154,12 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * Instance methods.
    */
 
-  
+
   /**
    * Returns the minimum number of bytes that this {@link
-   * ChannelOutboundInvokingOutputStream} implementation has to
-   * {@linkplain #write(byte[], int, int) write} before an automatic
-   * {@linkplain #flush() flush} will take place.
+   * AbstractChannelOutboundInvokingOutputStream} implementation has
+   * to {@linkplain #write(byte[], int, int) write} before an
+   * automatic {@linkplain #flush() flush} will take place.
    *
    * <p>This method will always return {@code 0} or a positive {@code
    * int}.</p>
@@ -167,12 +172,13 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * automatic flushing will occur.</p>
    *
    * @return the minimum number of bytes that this {@link
-   * ChannelOutboundInvokingOutputStream} implementation has to
-   * {@linkplain #write(byte[], int, int) write} before an automatic
-   * {@linkplain #flush() flush} will take place; always {@code 0} or
-   * a positive {@code int}
+   * AbstractChannelOutboundInvokingOutputStream} implementation has
+   * to {@linkplain #write(byte[], int, int) write} before an
+   * automatic {@linkplain #flush() flush} will take place; always
+   * {@code 0} or a positive {@code int}
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean)
    *
    * @see ChannelOutboundInvoker#flush()
@@ -185,7 +191,7 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
   public final void write(final int singleByte) throws IOException {
     this.write(this.createMessage(singleByte), 1);
   }
-  
+
   @Override
   public final void write(final byte[] bytes) throws IOException {
     this.write(bytes, 0, bytes.length);
@@ -234,7 +240,7 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * Returns a new message representing the single supplied {@code
    * byte} to be {@linkplain ChannelOutboundInvoker#write(Object,
    * ChannelPromise) written} by this {@link
-   * ChannelOutboundInvokingOutputStream}'s various {@link
+   * AbstractChannelOutboundInvokingOutputStream}'s various {@link
    * #write(byte[], int, int) write} methods.
    *
    * <p>This method never returns {@code null}.</p>
@@ -268,8 +274,8 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * Returns a new message representing a portion (or all) of the
    * supplied {@code byte} array that will be {@linkplain
    * ChannelOutboundInvoker#write(Object, ChannelPromise) written} by
-   * this {@link ChannelOutboundInvokingOutputStream}'s various {@link
-   * #write(byte[], int, int) write} methods.
+   * this {@link AbstractChannelOutboundInvokingOutputStream}'s
+   * various {@link #write(byte[], int, int) write} methods.
    *
    * <p>Implementations of this method must not return {@code null}.</p>
    *
@@ -308,8 +314,8 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    * <p>The default implementation of this method returns {@code
    * null}.</p>
    *
-   * @return a final message to write when {@link #close()} is called,
-   * or {@code null} if no final message needs to be written
+   * @return a final message to write when {@link #close() close()} is
+   * called, or {@code null} if no final message needs to be written
    *
    * @see #close()
    *
@@ -345,14 +351,15 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
   /**
    * Calls the {@link ChannelOutboundInvoker#flush()} method on the
    * {@link ChannelOutboundInvoker} {@linkplain
-   * #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker, int,
-   * boolean) supplied at construction time}.
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean) supplied at construction time}.
    *
    * @see ChannelOutboundInvoker#flush()
    *
    * @see #getFlushThreshold()
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean)
    */
   @Override
@@ -363,11 +370,11 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
 
   /**
    * {@linkplain OutputStream#close() Closes} this {@link
-   * ChannelOutboundInvokingOutputStream}, optionally {@linkplain
-   * ChannelOutboundInvoker#writeAndFlush(Object, ChannelPromise)
-   * writing and flushing} a {@linkplain #createLastMessage() final
-   * message}, or simply just {@linkplain #flush() flushing} first,
-   * before possibly {@linkplain
+   * AbstractChannelOutboundInvokingOutputStream}, optionally
+   * {@linkplain ChannelOutboundInvoker#writeAndFlush(Object,
+   * ChannelPromise) writing and flushing} a {@linkplain
+   * #createLastMessage() final message}, or simply just {@linkplain
+   * #flush() flushing} first, before possibly {@linkplain
    * ChannelOutboundInvoker#close(ChannelPromise) closing the
    * underlying <code>ChannelOutboundInvoker</code>}.
    *
@@ -378,7 +385,9 @@ public abstract class ChannelOutboundInvokingOutputStream<T> extends OutputStrea
    *
    * @see ChannelOutboundInvoker#close(ChannelPromise)
    *
-   * @see #ChannelOutboundInvokingOutputStream(ChannelOutboundInvoker, int, boolean)
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean)
    */
   @Override
   public void close() throws IOException {

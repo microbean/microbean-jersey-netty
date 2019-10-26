@@ -24,74 +24,99 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelOutboundInvoker;
 
 /**
- * A {@link ChannelOutboundInvokingOutputStream} that {@linkplain
- * #createMessage(ByteBuf) creates its messages} from {@link ByteBuf}
- * instances.
+ * An {@link AbstractChannelOutboundInvokingOutputStream} that
+ * {@linkplain #createMessage(ByteBuf) creates its messages} from
+ * {@link ByteBuf} instances.
+ *
+ * @param <T> the type of message that will be written
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
  * @see #createMessage(ByteBuf)
  */
-public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extends ChannelOutboundInvokingOutputStream<T> {
+public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T> extends AbstractChannelOutboundInvokingOutputStream<T> {
 
 
   /*
    * Instance fields.
    */
 
-  
+
   private final ByteBufCreator byteBufCreator;
 
 
   /*
    * Constructors.
    */
-  
+
 
   /**
-   * Creates a new {@link ByteBufBackedChannelOutboundInvokingOutputStream}.
+   * Creates a new {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}.
    *
-   * @param channelOutboundInvoker {@inheritDoc}
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
    *
-   * @param closeChannelOutboundInvoker {@inheritDoc}
+   * @param closeChannelOutboundInvoker whether {@link
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
    *
    * @see
-   * #ByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * #AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean, ByteBufCreator)
    */
-  protected ByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+  protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
                                                              final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, Integer.MAX_VALUE, closeChannelOutboundInvoker, null);
   }
 
   /**
-   * Creates a new {@link ByteBufBackedChannelOutboundInvokingOutputStream}.
+   * Creates a new {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}.
    *
-   * @param channelOutboundInvoker {@inheritDoc}
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
    *
-   * @param flushThreshold {@inheritDoc}
+   * @param flushThreshold the minimum number of bytes that this
+   * instance has to {@linkplain #write(byte[], int, int) write}
+   * before an automatic {@linkplain #flush() flush} will take place;
+   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * Integer#MAX_VALUE} then no automatic flushing will occur
    *
-   * @param closeChannelOutboundInvoker {@inheritDoc}
+   * @param closeChannelOutboundInvoker whether {@link
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
    *
    * @see
-   * #ByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * #AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean, ByteBufCreator)
    */
-  protected ByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+  protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
                                                              final int flushThreshold,
                                                              final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker, null);
   }
 
   /**
-   * Creates a new {@link ByteBufBackedChannelOutboundInvokingOutputStream}.
+   * Creates a new {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}.
    *
-   * @param channelOutboundInvoker {@inheritDoc}
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
    *
-   * @param flushThreshold {@inheritDoc}
+   * @param flushThreshold the minimum number of bytes that this
+   * instance has to {@linkplain #write(byte[], int, int) write}
+   * before an automatic {@linkplain #flush() flush} will take place;
+   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * Integer#MAX_VALUE} then no automatic flushing will occur
    *
-   * @param closeChannelOutboundInvoker {@inheritDoc}
+   * @param closeChannelOutboundInvoker whether {@link
+   * ChannelOutboundInvoker#close(ChannelPromise)} will be called on
+   * the supplied {@link ChannelOutboundInvoker} when {@link #close()
+   * close()} is called
    *
    * @param byteBufCreator a {@link ByteBufCreator} that will be used
    * to {@linkplain ByteBufCreator#toByteBuf(byte[], int, int) create
@@ -103,7 +128,7 @@ public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extend
    *
    * @see Unpooled#wrappedBuffer(byte[], int, int)
    */
-  protected ByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+  protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
                                                              final int flushThreshold,
                                                              final boolean closeChannelOutboundInvoker,
                                                              final ByteBufCreator byteBufCreator) {
@@ -120,12 +145,12 @@ public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extend
    * Instance methods.
    */
 
-  
+
   /**
    * Returns the result of invoking the {@link
    * #createMessage(ByteBuf)} method with a {@link ByteBuf} returned
    * by the {@link ByteBufCreator} {@linkplain
-   * #ByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * #AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
    * int, boolean, ByteBufCreator) supplied at construction time}.
    *
    * @param bytes {@inheritDoc}
@@ -171,10 +196,10 @@ public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extend
    * Inner and nested classes.
    */
 
-  
+
   /**
-   * An allocator of {@link ByteBuf}s that uses a {@code byte} array or a
-   * portion of a {@code byte} array as its raw materials.
+   * An allocator of {@link ByteBuf}s that uses a {@code byte} array
+   * or a portion of a {@code byte} array as its raw materials.
    *
    * @author <a href="https://about.me/lairdnelson"
    * target="_parent">Laird Nelson</a>
@@ -188,9 +213,11 @@ public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extend
      * Returns a {@link ByteBuf} that uses the designated {@code byte}
      * array portion as its raw materials.
      *
-     * <p>Implementations of this method must not return {@code null}.</p>
+     * <p>Implementations of this method must not return {@code
+     * null}.</p>
      *
-     * @param bytes the {@code byte} array from which to read; must not be {@code null}
+     * @param bytes the {@code byte} array from which to read; must
+     * not be {@code null}
      *
      * @param offset the zero-based offset of the supplied {@code
      * byte} array at which to start reading; must be {@code 0} or a
@@ -207,7 +234,7 @@ public abstract class ByteBufBackedChannelOutboundInvokingOutputStream<T> extend
      * @see Unpooled#wrappedBuffer(byte[], int, int)
      */
     public ByteBuf toByteBuf(final byte[] bytes, final int offset, final int length);
-    
+
   }
-  
+
 }
