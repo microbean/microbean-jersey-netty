@@ -145,7 +145,7 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
       map = new HashMap<>();
       this.map = map;
     }
-    map.put(null, value);
+    map.put(name, value);
   }
 
   /**

@@ -37,5 +37,11 @@ public interface ByteBufQueue {
    * null}
    */
   public void addByteBuf(final ByteBuf byteBuf);
+
+  /**
+   * Indicates that no further calls to {@link #addByteBuf(ByteBuf)}
+   * will be made.
+   */
+  public void terminate();
   
 }

@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.12.1-SNAPSHOT</version>
+  <version>0.20.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
@@ -55,7 +55,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-bom</artifactId>
-        <version>4.1.42.Final</version>
+        <version>4.1.43.Final</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -175,6 +175,17 @@
   </dependencies>
 
   <build>
+    <pluginManagement>
+      <plugins>
+
+        <plugin>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>3.1.0</version>
+        </plugin>
+        
+      </plugins>
+    </pluginManagement>
+    
     <plugins>
 
       <plugin>

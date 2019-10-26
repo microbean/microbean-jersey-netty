@@ -204,6 +204,11 @@ public class EventLoopPinnedByteBufInputStream extends InputStream implements By
     }
   }
 
+  @Override
+  public void terminate() {
+    // TODO: implement...or not
+  }
+
 
   /*
    * Protected methods.
