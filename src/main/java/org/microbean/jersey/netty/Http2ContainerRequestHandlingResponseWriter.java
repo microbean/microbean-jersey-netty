@@ -51,11 +51,13 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
   protected final boolean writeStatusAndHeaders(final long contentLength,
                                                 final ContainerResponse containerResponse) {
     Objects.requireNonNull(containerResponse);
+    
     final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
     
     final Http2Headers nettyHeaders = new DefaultHttp2Headers();
-    nettyHeaders.status(Integer.toString(containerResponse.getStatus()));
     copyHeaders(containerResponse.getStringHeaders(), String::toLowerCase, nettyHeaders::add);
+    // See https://tools.ietf.org/html/rfc7540#section-8.1.2.4
+    nettyHeaders.status(Integer.toString(containerResponse.getStatus()));
 
     final boolean needsOutputStream;
     if (contentLength < 0L) {
@@ -70,57 +72,38 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
       nettyHeaders.set(HttpHeaders.CONTENT_LENGTH.toLowerCase(), Long.toString(contentLength));
     }
 
+    final Object message = new DefaultHttp2HeadersFrame(nettyHeaders, !needsOutputStream);
     ChannelPromise channelPromise = channelHandlerContext.newPromise();
     assert channelPromise != null;
-    channelHandlerContext.writeAndFlush(new DefaultHttp2HeadersFrame(nettyHeaders, contentLength == 0L), channelPromise);
+    if (needsOutputStream) {
+      channelHandlerContext.write(message, channelPromise);
+    } else {
+      channelHandlerContext.writeAndFlush(message, channelPromise);
+    }
 
     return needsOutputStream;
   }
 
   @Override
-  protected final OutputStream createOutputStream(final long contentLength,
-                                                  final ContainerResponse containerResponse) {
-    final OutputStream returnValue = super.createOutputStream(contentLength, containerResponse);
-    if (returnValue instanceof ByteBufOutputStream) {
-      this.entityByteBuf = ((ByteBufOutputStream)returnValue).buffer();
+  protected OutputStream createOutputStream(final long contentLength,
+                                            final ContainerResponse containerResponse) {
+    Objects.requireNonNull(containerResponse);
+    if (contentLength == 0L) {
+      throw new IllegalArgumentException("contentLength == 0L");
     }
+    final OutputStream returnValue = new ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(this.getChannelHandlerContext(), 8192, false, null);
     return returnValue;
   }
 
   @Override
   public final void commit() {
-    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-    final ChannelPromise channelPromise = channelHandlerContext.newPromise();
-    assert channelPromise != null;
-    final ByteBuf entityByteBuf = this.entityByteBuf;
-    try {
-      if (entityByteBuf == null) {
-        channelHandlerContext.writeAndFlush(new DefaultHttp2DataFrame(true), channelPromise);
-      } else {
-        channelHandlerContext.writeAndFlush(new DefaultHttp2DataFrame(entityByteBuf, true), channelPromise);
-      }
-    } finally {
-      this.entityByteBuf = null;
-      if (entityByteBuf != null) {
-        entityByteBuf.release();
-      }
-    }
+    // No-op
   }
   
   @Override
   protected final void writeFailureMessage(final Throwable failureCause) {
     final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-    final ChannelPromise channelPromise = channelHandlerContext.newPromise();
-    assert channelPromise != null;
-    try {
-      channelHandlerContext.write(new DefaultHttp2Headers().status(String.valueOf(Status.INTERNAL_SERVER_ERROR.getStatusCode())), channelPromise);
-    } finally {
-      final ByteBuf entityByteBuf = this.entityByteBuf;
-      this.entityByteBuf = null;
-      if (entityByteBuf != null) {
-        entityByteBuf.release();
-      }
-    }
+    channelHandlerContext.write(new DefaultHttp2Headers().status(String.valueOf(Status.INTERNAL_SERVER_ERROR.getStatusCode())), channelHandlerContext.newPromise());
   }
   
 }

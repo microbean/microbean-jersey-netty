@@ -20,13 +20,12 @@ import io.netty.buffer.ByteBuf;
 
 import io.netty.channel.ChannelOutboundInvoker;
 
-import io.netty.handler.codec.http.DefaultLastHttpContent;
-import io.netty.handler.codec.http.DefaultHttpContent;
-import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
+import io.netty.handler.codec.http2.Http2DataFrame;
 
 /**
  * An {@link AbstractByteBufBackedChannelOutboundInvokingOutputStream}
- * that writes {@link HttpContent} messages.
+ * that writes {@link Http2DataFrame} messages.
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
@@ -35,17 +34,17 @@ import io.netty.handler.codec.http.HttpContent;
  *
  * @see #createLastMessage()
  */
-public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
+public class ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<Http2DataFrame> {
 
 
   /*
    * Constructors.
    */
 
-
+  
   /**
    * Creates a new {@link
-   * ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}.
+   * ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream}.
    *
    * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
    * to which operations are adapted; must not be {@code null}
@@ -56,18 +55,18 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream e
    * close()} is called
    *
    * @see
-   * #ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(ChannelOutboundInvoker,
+   * #ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(ChannelOutboundInvoker,
    * int, boolean,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    */
-  public ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                                     final boolean closeChannelOutboundInvoker) {
+  public ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+                                                                        final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, Integer.MAX_VALUE, closeChannelOutboundInvoker, null);
   }
 
   /**
    * Creates a new {@link
-   * ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}.
+   * ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream}.
    *
    * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
    * to which operations are adapted; must not be {@code null}
@@ -90,10 +89,10 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream e
    * io.netty.buffer.Unpooled#wrappedBuffer(byte[], int, int)} will be
    * used instead
    */
-  public ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                                     final int flushThreshold,
-                                                                     final boolean closeChannelOutboundInvoker,
-                                                                     final ByteBufCreator byteBufCreator) {
+  public ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
+                                                                        final int flushThreshold,
+                                                                        final boolean closeChannelOutboundInvoker,
+                                                                        final ByteBufCreator byteBufCreator) {
     super(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker, byteBufCreator);
   }
 
@@ -104,35 +103,36 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream e
 
 
   /**
-   * Returns a new {@link DefaultLastHttpContent} when invoked.
+   * Returns a new, empty {@link DefaultHttp2DataFrame} when
+   * invoked.
    *
    * <p>This method never returns {@code null}.</p>
    *
-   * @return a new {@link DefaultLastHttpContent}
+   * @return a new, empty {@link DefaultHttp2DataFrame}
    *
    * @see #close()
    */
   @Override
-  protected final HttpContent createLastMessage() {
-    return new DefaultLastHttpContent();
+  protected final Http2DataFrame createLastMessage() {
+    return new DefaultHttp2DataFrame(true);
   }
 
   /**
-   * Returns a new {@link DefaultHttpContent} whose {@link
-   * DefaultHttpContent#content() content()} method returns the
+   * Returns a new {@link DefaultHttp2DataFrame} whose {@link
+   * DefaultHttp2DataFrame#content() content()} method returns the
    * supplied {@link ByteBuf}.
    *
    * <p>This method never returns {@code null}.</p>
    *
    * @param content a {@link ByteBuf}; must not be {@code null}
    *
-   * @return a new {@link DefaultHttpContent} whose {@link
-   * DefaultHttpContent#content() content()} method returns the
+   * @return a new {@link DefaultHttp2DataFrame} whose {@link
+   * DefaultHttp2DataFrame#content() content()} method returns the
    * supplied {@link ByteBuf}; never {@code null}
    */
   @Override
-  protected final HttpContent createMessage(final ByteBuf content) {
-    return new DefaultHttpContent(content);
+  protected final Http2DataFrame createMessage(final ByteBuf content) {
+    return new DefaultHttp2DataFrame(content);
   }
-
+  
 }

@@ -33,10 +33,6 @@ import java.util.function.UnaryOperator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufOutputStream;
-
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
@@ -170,28 +166,8 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
   protected abstract boolean writeStatusAndHeaders(final long contentLength,
                                                    final ContainerResponse containerResponse);
 
-  protected OutputStream createOutputStream(final long contentLength,
-                                            final ContainerResponse containerResponse) {
-    Objects.requireNonNull(containerResponse);
-    if (contentLength == 0L) {
-      throw new IllegalArgumentException("contentLength == 0L");
-    }
-    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-    final ByteBufAllocator byteBufAllocator = channelHandlerContext.alloc();
-    assert byteBufAllocator != null;
-    final ByteBuf entityByteBuf;
-    if (contentLength > 0L && contentLength <= Integer.MAX_VALUE) {
-      // Positive content length.
-      entityByteBuf = byteBufAllocator.ioBuffer((int)contentLength, (int)contentLength);
-    } else {
-      // Negative content length or ridiculously huge content
-      // length so ignore it for capacity purposes.
-      entityByteBuf = byteBufAllocator.ioBuffer();
-    }
-    assert entityByteBuf != null;
-    final OutputStream returnValue = new ByteBufOutputStream(entityByteBuf);
-    return returnValue;
-  }
+  protected abstract OutputStream createOutputStream(final long contentLength,
+                                                     final ContainerResponse containerResponse);
 
   @Override
   public final boolean suspend(final long timeout,
