@@ -41,8 +41,6 @@ import org.glassfish.jersey.server.ContainerResponse;
 
 public class Http2ContainerRequestHandlingResponseWriter extends AbstractContainerRequestHandlingResponseWriter {
 
-  private ByteBuf entityByteBuf;
-  
   public Http2ContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
     super(applicationHandler);
   }
