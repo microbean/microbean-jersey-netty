@@ -33,7 +33,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 
 import org.glassfish.jersey.server.ContainerRequest;
 
-public final class HttpObjectToContainerRequestDecoder extends AbstractContainerRequestDecoder<HttpObject> {
+public final class HttpObjectToContainerRequestDecoder extends AbstractContainerRequestDecoder<HttpObject, HttpRequest, HttpContent> {
 
   private static final String cn = HttpObjectToContainerRequestDecoder.class.getName();
   
@@ -44,48 +44,38 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
   }
   
   public HttpObjectToContainerRequestDecoder(final URI baseUri) {
-    super(baseUri);
+    super(baseUri, HttpRequest.class, HttpContent.class);
+  }
+
+  /**
+   * Extracts and returns a {@link String} representing a request URI
+   * from the supplied message, which is guaranteed to be a
+   * {@linkplain #isHeaders(Object) "headers" message}.
+   *
+   * <p>This implementation casts the supplied {@link HttpObject} to
+   * an {@link HttpRequest}, calls its {@link HttpRequest#uri()}
+   * method, and returns the result.</p>
+   *
+   * @param httpRequest the message to interrogate; will not be {@code
+   * null}
+   *
+   * @return a {@link String} representing a request URI from the
+   * supplied message, or {@code null}
+   */
+  @Override
+  protected final String getRequestUriString(final HttpRequest httpRequest) {
+    return httpRequest.uri();
   }
 
   @Override
-  public final boolean acceptInboundMessage(final Object message) {
-    return message instanceof HttpRequest || message instanceof HttpContent;
-  }
-
-  @Override
-  protected final boolean isHeaders(final HttpObject httpObject) {
-    return httpObject instanceof HttpRequest;
-  }
-
-  @Override
-  protected final String getUriString(final HttpObject httpObject) {
-    return ((HttpRequest)httpObject).uri();
-  }
-
-  @Override
-  protected final String getMethod(final HttpObject httpObject) {
-    return ((HttpRequest)httpObject).method().name();
-  }
-
-  @Override
-  protected final void installMessage(final HttpObject httpObject, final ContainerRequest containerRequest) {
-    containerRequest.setProperty("org.microbean.jersey.netty.HttpRequest", httpObject);
-  }
-
-  @Override
-  protected final boolean isData(final HttpObject httpObject) {
-    return httpObject instanceof HttpContent;
-  }
-
-  @Override
-  protected final ByteBuf getContent(final HttpObject httpObject) {
-    return ((ByteBufHolder)httpObject).content();
+  protected final String getMethod(final HttpRequest httpRequest) {
+    return httpRequest.method().name();
   }
 
   @Override
   protected final boolean isLast(final HttpObject httpObject) {
     final boolean returnValue;
-    if (httpObject instanceof HttpMessage) {
+    if (httpObject instanceof HttpRequest) {
       final HttpMessage message = (HttpMessage)httpObject;
       returnValue =
         HttpUtil.getContentLength(message, -1L) > 0L ||

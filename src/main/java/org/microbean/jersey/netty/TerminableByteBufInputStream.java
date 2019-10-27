@@ -140,6 +140,7 @@ public final class TerminableByteBufInputStream extends InputStream implements B
     case TERMINATED:
       // fall through
     case OPEN:
+      // Synchronization will be handled by #read(Function)
       return length == 0 ? 0 : this.read(sourceByteBuf -> {
           final int readThisManyBytes = Math.min(length, sourceByteBuf.readableBytes());
           sourceByteBuf.readBytes(targetByteArray, offset, readThisManyBytes);

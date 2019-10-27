@@ -77,9 +77,11 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
       throw new IllegalArgumentException("containerResponse.getRequestContext() == null");
     }
     
-    final Object httpRequestValue = containerRequest.getProperty("org.microbean.jersey.netty.HttpRequest");
+    final Object httpRequestValue = containerRequest.getProperty(HttpRequest.class.getName());
     if (!(httpRequestValue instanceof HttpRequest)) {
-      throw new IllegalArgumentException("!(containerResponse.getRequestContext().getProperty(\"org.microbean.jersey.netty.HttpRequest\") instanceof HttpRequest): " + httpRequestValue);
+      throw new IllegalArgumentException("containerResponse; !(containerResponse.getRequestContext().getProperty(\"" +
+                                         HttpRequest.class.getName() +
+                                         "\") instanceof HttpRequest): " + httpRequestValue);
     }
     final HttpRequest httpRequest = (HttpRequest)httpRequestValue;
     
