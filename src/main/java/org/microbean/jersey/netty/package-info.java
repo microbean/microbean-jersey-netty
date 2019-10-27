@@ -22,7 +22,5 @@
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
- *
- * @see org.microbean.jersey.netty.OldJerseyChannelInitializer
  */
 package org.microbean.jersey.netty;
