@@ -57,7 +57,7 @@ import io.netty.util.ReferenceCountUtil;
 
 import org.glassfish.jersey.server.ApplicationHandler;
 
-public class NewJerseyChannelInitializer extends ChannelInitializer<Channel> {
+public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
   /*
@@ -79,7 +79,7 @@ public class NewJerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>This field is never {@code null}.</p>
    *
-   * @see #NewJerseyChannelInitializer(URI, SslContext, long,
+   * @see #JerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    */
   private final URI baseUri;
@@ -91,7 +91,7 @@ public class NewJerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>This field may be {@code null}.</p>
    *
-   * @see #NewJerseyChannelInitializer(URI, SslContext, long,
+   * @see #JerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    *
    * @see SslContext
@@ -109,19 +109,16 @@ public class NewJerseyChannelInitializer extends ChannelInitializer<Channel> {
    * like a {@code POST} it will be rejected with a {@code 413} error
    * code.
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
-   * ApplicationHandler)
-   *
    * @see HttpServerUpgradeHandler#maxContentLength()
    */
   private final long maxIncomingContentLength;
 
   private final ApplicationHandler applicationHandler;
   
-  public NewJerseyChannelInitializer(final URI baseUri,
-                                     final SslContext sslContext,
-                                     final long maxIncomingContentLength,
-                                     final ApplicationHandler applicationHandler) {
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final long maxIncomingContentLength,
+                                  final ApplicationHandler applicationHandler) {
     super();
     this.baseUri = baseUri;
     this.sslContext = sslContext;

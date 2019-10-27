@@ -36,7 +36,7 @@ import org.glassfish.jersey.internal.PropertiesDelegate;
  *
  * @see PropertiesDelegate
  */
-final class MapBackedPropertiesDelegate implements PropertiesDelegate {
+public class MapBackedPropertiesDelegate implements PropertiesDelegate {
 
 
   /*
@@ -65,7 +65,7 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    *
    * @see #MapBackedPropertiesDelegate(Map)
    */
-  MapBackedPropertiesDelegate() {
+  public MapBackedPropertiesDelegate() {
     this(null);
   }
 
@@ -75,7 +75,7 @@ final class MapBackedPropertiesDelegate implements PropertiesDelegate {
    * @param map the {@link Map} implementing this {@link
    * MapBackedPropertiesDelegate}; may be {@code null} in which case a
    * {@linkplain HashMap#HashMap() new} {@link HashMap} will be used
-   * instead
+   * instead; accessed by reference
    */
   public MapBackedPropertiesDelegate(final Map<String, Object> map) {
     super();

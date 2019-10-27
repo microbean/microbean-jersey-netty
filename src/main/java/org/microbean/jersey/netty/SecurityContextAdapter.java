@@ -47,7 +47,7 @@ public class SecurityContextAdapter implements SecurityContext {
   /**
    * Creates a new {@link SecurityContextAdapter}.
    */
-  protected SecurityContextAdapter() {
+  public SecurityContextAdapter() {
     super();
   }
 

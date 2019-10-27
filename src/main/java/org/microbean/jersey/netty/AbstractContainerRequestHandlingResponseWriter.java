@@ -67,9 +67,6 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
    * The {@link ApplicationHandler} that represents Jersey.
    *
    * <p>This field is never {@code null}.</p>
-   *
-   * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI,
-   * ApplicationHandler)
    */
   private final ApplicationHandler applicationHandler;
 
