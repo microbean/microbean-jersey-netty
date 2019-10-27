@@ -58,7 +58,10 @@ import org.glassfish.jersey.server.ContainerResponse;
  * @see AbstractNettyContainerResponseWriter
  *
  * @see HttpContainerResponseWriter
+ *
+ * @deprecated Slated for reoval.
  */
+@Deprecated
 public class Http2ContainerResponseWriter extends AbstractNettyContainerResponseWriter<Http2HeadersFrame> {
 
 

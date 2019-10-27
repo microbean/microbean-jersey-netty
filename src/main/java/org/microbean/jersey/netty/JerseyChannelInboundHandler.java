@@ -78,8 +78,11 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider;
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
- * @see JerseyChannelInitializer
+ * @see OldJerseyChannelInitializer
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public class JerseyChannelInboundHandler extends SimpleChannelInboundHandler<Object> {
 
 

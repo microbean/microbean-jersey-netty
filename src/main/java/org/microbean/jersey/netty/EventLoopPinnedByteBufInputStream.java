@@ -48,7 +48,10 @@ import io.netty.util.concurrent.EventExecutor;
  * @see #read(byte[], int, int)
  *
  * @see #read(Function)
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public class EventLoopPinnedByteBufInputStream extends InputStream implements ByteBufQueue {
 
 

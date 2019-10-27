@@ -72,7 +72,10 @@ import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
  * @see #commit()
  *
  * @see #failure(Throwable)
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public abstract class AbstractNettyContainerResponseWriter<T> implements ContainerResponseWriter {
 
 

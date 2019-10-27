@@ -32,7 +32,7 @@ import org.glassfish.jersey.server.spi.Container;
  *
  * @see Container
  *
- * @see JerseyChannelInitializer
+ * @see OldJerseyChannelInitializer
  */
 public class SimpleContainer implements Container {
 

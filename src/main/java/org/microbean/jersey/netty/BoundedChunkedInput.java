@@ -28,7 +28,10 @@ import io.netty.handler.stream.ChunkedInput;
  * target="_parent">Laird Nelson</a>
  *
  * @see #setEndOfInput()
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public interface BoundedChunkedInput<T> extends ChunkedInput<T> {
 
   /**

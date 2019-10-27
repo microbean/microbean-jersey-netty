@@ -39,7 +39,10 @@ import io.netty.handler.stream.ChunkedInput;
  * target="_parent">Laird Nelson</a>
  *
  * @see #readChunk(ByteBufAllocator)
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public class FunctionalByteBufChunkedInput<T> implements BoundedChunkedInput<T> {
 
 

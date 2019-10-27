@@ -78,7 +78,7 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider; // for javadoc
  * ServerBootstrap#childHandler(ChannelHandler) child handler} of a
  * {@link ServerBootstrap}:</p>
  *
- * <blockquote><pre>{@link ServerBootstrap serverBootstrap}.{@link ServerBootstrap#childHandler(ChannelHandler) childHandler}(new {@link JerseyChannelInitializer}(baseUri,
+ * <blockquote><pre>{@link ServerBootstrap serverBootstrap}.{@link ServerBootstrap#childHandler(ChannelHandler) childHandler}(new {@link OldJerseyChannelInitializer}(baseUri,
  *    {@link SslContext sslContext},
  *    {@link HttpServerUpgradeHandler#maxContentLength() Long.MAX_VALUE},
  *    new {@link ApplicationHandler}({@link Application yourJaxRsApplication})));</pre></blockquote>
@@ -91,8 +91,11 @@ import org.glassfish.jersey.spi.ScheduledExecutorServiceProvider; // for javadoc
  * @see #initChannel(Channel)
  *
  * @see JerseyChannelInboundHandler
+ *
+ * @deprecated Slated for removal.
  */
-public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
+@Deprecated
+public class OldJerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
   /*
@@ -105,7 +108,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>This field is never {@code null}.</p>
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    */
   private final URI baseUri;
@@ -117,7 +120,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>This field may be {@code null}.</p>
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    *
    * @see SslContext
@@ -135,7 +138,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * like a {@code POST} it will be rejected with a {@code 413} error
    * code.
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    *
    * @see HttpServerUpgradeHandler#maxContentLength()
@@ -147,7 +150,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>This field is never {@code null}.</p>
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler)
    *
    * @see ApplicationHandler
@@ -197,12 +200,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer() {
+  public OldJerseyChannelInitializer() {
     this(null,
          null,
          Long.MAX_VALUE,
@@ -212,17 +215,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param application the {@link Application} to serve; may be
    * {@code null} in which case a {@linkplain
    * Application#Application() new <code>Application</code>} will be
    * used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final Application application) {
+  public OldJerseyChannelInitializer(final Application application) {
     this(null,
          null,
          Long.MAX_VALUE,
@@ -232,17 +235,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param applicationHandler the {@link ApplicationHandler} hosting
    * the {@link Application} to serve; may be {@code null} in which
    * case a {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final ApplicationHandler applicationHandler) {
+  public OldJerseyChannelInitializer(final ApplicationHandler applicationHandler) {
     this(null,
          null,
          Long.MAX_VALUE,
@@ -252,7 +255,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -264,10 +267,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Application#Application() new <code>Application</code>} will be
    * used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final Application application) {
     this(baseUri,
          null,
@@ -278,7 +281,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -290,10 +293,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * case a {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final ApplicationHandler applicationHandler) {
     this(baseUri,
          null,
@@ -304,7 +307,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -321,10 +324,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Application#Application() new <code>Application</code>} will be
    * used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final Application application) {
     this(baseUri,
@@ -336,7 +339,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -352,10 +355,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * case a {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final ApplicationHandler applicationHandler) {
     this(baseUri,
@@ -367,7 +370,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -391,10 +394,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Application#Application() new <code>Application</code>} will be
    * used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final long maxIncomingContentLength,
                                   final Application application) {
@@ -407,7 +410,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -431,10 +434,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * case a {@linkplain ApplicationHandler#ApplicationHandler() new
    * <code>ApplicationHandler</code>} will be used instead
    *
-   * @see #JerseyChannelInitializer(URI, SslContext, long,
+   * @see #OldJerseyChannelInitializer(URI, SslContext, long,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final long maxIncomingContentLength,
                                   final ApplicationHandler applicationHandler) {
@@ -447,7 +450,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
-   * Creates a new {@link JerseyChannelInitializer}.
+   * Creates a new {@link OldJerseyChannelInitializer}.
    *
    * @param baseUri the base {@link URI} of the Jersey application;
    * may be {@code null} in which case the return value resulting from
@@ -489,7 +492,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI,
    * ApplicationHandler, Executor, Supplier)
    */
-  public JerseyChannelInitializer(final URI baseUri,
+  public OldJerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
                                   final long maxIncomingContentLength,
                                   final ApplicationHandler applicationHandler,
@@ -559,7 +562,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
         final HttpServerCodec httpServerCodec = new HttpServerCodec();
 
-        final JerseyChannelSubInitializer jerseyChannelSubInitializer = new JerseyChannelSubInitializer();
+        final OldJerseyChannelSubInitializer oldJerseyChannelSubInitializer = new OldJerseyChannelSubInitializer();
 
         // See https://github.com/netty/netty/issues/7079
         final int maxIncomingContentLength;
@@ -585,7 +588,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                          } else {
                                            returnValue =
                                              new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
-                                                                         new Http2MultiplexHandler(jerseyChannelSubInitializer));
+                                                                         new Http2MultiplexHandler(oldJerseyChannelSubInitializer));
                                          }
                                          return returnValue;
                                        },
@@ -623,7 +626,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                                      final ChannelPipeline channelPipeline = channel.pipeline();
                                                      assert channelPipeline != null;
                                                      channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(), Http2FrameCodecBuilder.forServer().build());
-                                                     channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(jerseyChannelSubInitializer));
+                                                     channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(oldJerseyChannelSubInitializer));
                                                    }
                                                  });
 
@@ -654,11 +657,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               channelPipeline.replace(this, HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
 
               // ...and then after that add the "real" initializer (a
-              // JerseyChannelSubInitializer instance, defined below
+              // OldJerseyChannelSubInitializer instance, defined below
               // in this source file) that will install a
               // ChunkedWriteHandler followed by the main Jersey
               // integration.
-              channelPipeline.addLast(JerseyChannelSubInitializer.class.getName(), jerseyChannelSubInitializer);
+              channelPipeline.addLast(OldJerseyChannelSubInitializer.class.getName(), oldJerseyChannelSubInitializer);
 
               // Forward the event on as we never touched it.
               channelHandlerContext.fireChannelRead(ReferenceCountUtil.retain(httpMessage));
@@ -765,12 +768,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @see ChannelInitializer
    */
-  private final class JerseyChannelSubInitializer extends ChannelInitializer<Channel> {
+  private final class OldJerseyChannelSubInitializer extends ChannelInitializer<Channel> {
 
     /**
-     * Creates a new {@link JerseyChannelSubInitializer}.
+     * Creates a new {@link OldJerseyChannelSubInitializer}.
      */
-    private JerseyChannelSubInitializer() {
+    private OldJerseyChannelSubInitializer() {
       super();
     }
 
@@ -856,12 +859,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       switch (protocol) {
       case ApplicationProtocolNames.HTTP_2:
         channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(), Http2FrameCodecBuilder.forServer().build());
-        channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(new JerseyChannelSubInitializer()));
+        channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(), new Http2MultiplexHandler(new OldJerseyChannelSubInitializer()));
         break;
       case ApplicationProtocolNames.HTTP_1_1:
         channelPipeline.addLast(HttpServerCodec.class.getSimpleName(), new HttpServerCodec());
         channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(), new HttpServerExpectContinueHandler());
-        channelPipeline.addLast(JerseyChannelSubInitializer.class.getSimpleName(), new JerseyChannelSubInitializer());
+        channelPipeline.addLast(OldJerseyChannelSubInitializer.class.getSimpleName(), new OldJerseyChannelSubInitializer());
         break;
       default:
         throw new IllegalArgumentException("protocol: " + protocol);
