@@ -29,7 +29,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 
-public final class TerminableByteBufInputStream extends InputStream implements ByteBufQueue {
+public final class TerminableByteBufInputStream extends InputStream {
 
   private static final int OPEN = 0;
 
@@ -73,7 +73,6 @@ public final class TerminableByteBufInputStream extends InputStream implements B
     }
   }
 
-  @Override
   public final void terminate() {
     final int state = this.state;
     switch (state) {
@@ -151,7 +150,6 @@ public final class TerminableByteBufInputStream extends InputStream implements B
     }
   }
 
-  @Override
   public final void addByteBuf(final ByteBuf byteBuf) {
     Objects.requireNonNull(byteBuf);
     if (!byteBuf.isReadable()) {

@@ -27,6 +27,7 @@ import java.util.logging.Logger;
 import javax.ws.rs.core.SecurityContext;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -81,7 +82,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   
   private final URI baseUri;
 
-  private ByteBufQueue byteBufQueue;
+  private TerminableByteBufInputStream terminableByteBufInputStream;
   
   private ContainerRequest containerRequestUnderConstruction;
 
@@ -317,7 +318,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                               final List<Object> out) {
     if (isHeaders(message)) {
       if (this.containerRequestUnderConstruction == null) {
-        if (this.byteBufQueue == null) {
+        if (this.terminableByteBufInputStream == null) {
           final URI requestUri;
           final H headersMessage = this.headersClass.cast(message);
           final String requestUriString = this.getRequestUriString(headersMessage);
@@ -344,7 +345,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
             this.containerRequestUnderConstruction = containerRequest;
           }
         } else {
-          throw new IllegalStateException("this.byteBufQueue != null: " + this.byteBufQueue);
+          throw new IllegalStateException("this.terminableByteBufInputStream != null: " + this.terminableByteBufInputStream);
         }
       } else {
         throw new IllegalStateException("this.containerRequestUnderConstruction != null: " + this.containerRequestUnderConstruction);
@@ -355,16 +356,16 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
       if (content == null || content.readableBytes() <= 0) {
         if (this.isLast(message)) {
           if (this.containerRequestUnderConstruction == null) {
-            if (this.byteBufQueue != null) {
-              throw new IllegalStateException("this.containerRequestUnderConstruction == null && this.byteBufQueue != null: " + this.byteBufQueue);
+            if (this.terminableByteBufInputStream != null) {
+              throw new IllegalStateException("this.containerRequestUnderConstruction == null && this.terminableByteBufInputStream != null: " + this.terminableByteBufInputStream);
             }
           } else {
             out.add(this.containerRequestUnderConstruction);
             this.containerRequestUnderConstruction = null;
           }
-          if (this.byteBufQueue != null) {
-            this.byteBufQueue.terminate();
-            this.byteBufQueue = null;
+          if (this.terminableByteBufInputStream != null) {
+            this.terminableByteBufInputStream.terminate();
+            this.terminableByteBufInputStream = null;
           }
         } else if (this.containerRequestUnderConstruction == null) {
           throw new IllegalStateException("this.containerRequestUnderConstruction == null");
@@ -374,33 +375,37 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
       } else if (this.containerRequestUnderConstruction == null) {
         throw new IllegalStateException("this.containerRequestUnderConstruction == null");
       } else if (this.isLast(message)) {
-        final ByteBufQueue byteBufQueue;
-        if (this.byteBufQueue == null) {
-          final TerminableByteBufInputStream entityStream = new TerminableByteBufInputStream(channelHandlerContext.alloc());
-          this.containerRequestUnderConstruction.setEntityStream(entityStream);
+        final TerminableByteBufInputStream terminableByteBufInputStream;
+        if (this.terminableByteBufInputStream == null) {
+          final TerminableByteBufInputStream newlyCreatedTerminableByteBufInputStream = this.createTerminableByteBufInputStream(channelHandlerContext.alloc());
+          this.containerRequestUnderConstruction.setEntityStream(newlyCreatedTerminableByteBufInputStream);
           out.add(this.containerRequestUnderConstruction);
-          byteBufQueue = entityStream;
+          terminableByteBufInputStream = newlyCreatedTerminableByteBufInputStream;
         } else {
-          byteBufQueue = this.byteBufQueue;
-          this.byteBufQueue = null;
+          terminableByteBufInputStream = this.terminableByteBufInputStream;
+          this.terminableByteBufInputStream = null;
         }
-        assert this.byteBufQueue == null;
-        assert byteBufQueue != null;
-        byteBufQueue.addByteBuf(content);
-        byteBufQueue.terminate();
+        assert this.terminableByteBufInputStream == null;
+        assert terminableByteBufInputStream != null;
+        terminableByteBufInputStream.addByteBuf(content);
+        terminableByteBufInputStream.terminate();
         this.containerRequestUnderConstruction = null;
       } else {
-        if (this.byteBufQueue == null) {
-          final TerminableByteBufInputStream entityStream = new TerminableByteBufInputStream(channelHandlerContext.alloc());
-          this.byteBufQueue = entityStream;
-          this.containerRequestUnderConstruction.setEntityStream(entityStream);
+        if (this.terminableByteBufInputStream == null) {
+          final TerminableByteBufInputStream newlyCreatedTerminableByteBufInputStream = this.createTerminableByteBufInputStream(channelHandlerContext.alloc());
+          this.terminableByteBufInputStream = newlyCreatedTerminableByteBufInputStream;
+          this.containerRequestUnderConstruction.setEntityStream(newlyCreatedTerminableByteBufInputStream);
           out.add(this.containerRequestUnderConstruction);
         }
-        this.byteBufQueue.addByteBuf(content);
+        this.terminableByteBufInputStream.addByteBuf(content);
       }
     } else {
       throw new IllegalArgumentException("Unexpected message: " + message);
     }
+  }
+
+  protected TerminableByteBufInputStream createTerminableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
+    return new TerminableByteBufInputStream(byteBufAllocator);
   }
   
 }

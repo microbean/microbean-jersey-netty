@@ -26,7 +26,10 @@ import io.netty.buffer.ByteBuf;
  * target="_parent">Laird Nelson</a>
  *
  * @see #addByteBuf(ByteBuf)
+ *
+ * @deprecated Slated for removal.
  */
+@Deprecated
 public interface ByteBufQueue {
 
   /**
