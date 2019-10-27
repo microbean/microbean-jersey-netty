@@ -127,7 +127,7 @@ public abstract class AbstractContainerRequestDecoder<T> extends MessageToMessag
       } else if (this.isLast(message)) {
         final ByteBufQueue byteBufQueue;
         if (this.byteBufQueue == null) {
-          final TerminatableByteBufInputStream entityStream = new TerminatableByteBufInputStream(channelHandlerContext.alloc());
+          final TerminableByteBufInputStream entityStream = new TerminableByteBufInputStream(channelHandlerContext.alloc());
           this.containerRequestUnderConstruction.setEntityStream(entityStream);
           out.add(this.containerRequestUnderConstruction);
           byteBufQueue = entityStream;
@@ -142,7 +142,7 @@ public abstract class AbstractContainerRequestDecoder<T> extends MessageToMessag
         this.containerRequestUnderConstruction = null;
       } else {
         if (this.byteBufQueue == null) {
-          final TerminatableByteBufInputStream entityStream = new TerminatableByteBufInputStream(channelHandlerContext.alloc());
+          final TerminableByteBufInputStream entityStream = new TerminableByteBufInputStream(channelHandlerContext.alloc());
           this.byteBufQueue = entityStream;
           this.containerRequestUnderConstruction.setEntityStream(entityStream);
           out.add(this.containerRequestUnderConstruction);

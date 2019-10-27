@@ -29,7 +29,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
 
-public final class TerminatableByteBufInputStream extends InputStream implements ByteBufQueue {
+public final class TerminableByteBufInputStream extends InputStream implements ByteBufQueue {
 
   private static final int OPEN = 0;
 
@@ -43,7 +43,7 @@ public final class TerminatableByteBufInputStream extends InputStream implements
 
   private final Phaser phaser;
 
-  public TerminatableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
+  public TerminableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
     super();
     this.byteBuf = Objects.requireNonNull(byteBufAllocator).compositeBuffer();
     this.phaser = new Phaser(2);
