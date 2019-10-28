@@ -23,6 +23,7 @@ import java.util.Objects;
 import io.netty.buffer.ByteBufAllocator;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -37,6 +38,7 @@ import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler.SourceCodec; // for javadoc only
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
 
@@ -56,7 +58,37 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 
 import org.glassfish.jersey.server.ApplicationHandler;
+import org.glassfish.jersey.server.ContainerRequest; // for javadoc only
 
+import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;
+
+/**
+ * A {@link ChannelInitializer} that {@linkplain
+ * #initChannel(Channel) initializes
+ * <code>Channel</code>s} by configuring their {@link
+ * ChannelPipeline}s to include {@link ChannelHandler}s that transform
+ * Netty HTTP and HTTP/2 messages into Jersey {@link
+ * ContainerRequest}s that are then {@linkplain
+ * ApplicationHandler#handle(ContainerRequest) handled} by an {@link
+ * ApplicationHandler}.
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #initChannel(Channel)
+ *
+ * @see ContainerRequest
+ *
+ * @see ApplicationHandler#handle(ContainerRequest)
+ *
+ * @see HttpObjectToContainerRequestDecoder
+ *
+ * @see HttpContainerRequestHandlingResponseWriter
+ *
+ * @see Http2StreamFrameToContainerRequestDecoder
+ *
+ * @see Http2ContainerRequestHandlingResponseWriter
+ */
 public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
@@ -64,16 +96,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Static fields.
    */
 
-  
-  private static final EventExecutorGroup eventExecutorGroup =
-    new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors()); // no idea how to size this
-
 
   /*
    * Instance fields.
    */
 
-  
+
   /**
    * The base {@link URI} for the Jersey application.
    *
@@ -100,6 +128,8 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
   private final SslContext sslContext;
 
+  private final boolean http2Support;
+
   /**
    * In the case of HTTP to HTTP/2
    * upgrades, this field governs the maximum permitted incoming
@@ -113,15 +143,104 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
   private final long maxIncomingContentLength;
 
+  private final EventExecutorGroup jerseyEventExecutorGroup;
+
   private final ApplicationHandler applicationHandler;
-  
+
+  private final int flushThreshold;
+
+  private final ByteBufCreator byteBufCreator;
+
+  /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param sslContext an {@link SslContext}; may be {@code null} in
+   * which case network communications will occur in plain text
+   *
+   * @param http2Support if HTTP/2 support (including upgrades, prior
+   * knowledge, h2c, etc.) should be enabled
+   *
+   * @param maxIncomingContentLength in the case of HTTP to HTTP/2
+   * upgrades, a {@code long} that governs the maximum permitted
+   * incoming entity length in bytes; if less than {@code 0} then
+   * {@link Long#MAX_VALUE} will be used instead; if exactly {@code 0}
+   * then if the HTTP message containing the upgrade header is
+   * something like a {@code POST} it will be rejected with a {@code
+   * 413} error code; ignored entirely if {@code http2Support} is
+   * {@code false}
+   *
+   * @param jerseyEventExecutorGroup an {@link EventExecutorGroup}
+   * that will manage the thread on which an {@link
+   * ApplicationHandler#handle(ContainerRequest)} call will occur; may
+   * be {@code null} in which case a new {@link
+   * DefaultEventExecutorGroup} will be used instead
+   *
+   * @param applicationHandler an {@link ApplicationHandler}
+   * representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}
+   * returned by an implementation of the {@link
+   * AbstractContainerRequestHandlingResponseWriter#createOutputStream(long,
+   * ContainerResponse)} method must write before an automatic
+   * {@linkplain
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()
+   * flush} may take place; if less than {@code 0} {@code 0} will be
+   * used instead; if {@link Integer#MAX_VALUE} then it is suggested
+   * that no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that will be
+   * {@linkplain
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * passed to an
+   * <code>AbstractContainerRequestHandlingResponseWriter</code>}
+   * implementation; may be {@code null}
+   *
+   * @see ContainerRequest
+   *
+   * @see SslContext
+   *
+   * @see
+   * HttpServerUpgradeHandler#HttpServerUpgradeHandler(SourceCodec,
+   * UpgradeCodecFactory, int)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see AbstractContainerRequestHandlingResponseWriter
+   *
+   * @see HttpObjectToContainerRequestDecoder
+   *
+   * @see HttpContainerRequestHandlingResponseWriter
+   *
+   * @see Http2StreamFrameToContainerRequestDecoder
+   *
+   * @see Http2ContainerRequestHandlingResponseWriter
+   */
   public JerseyChannelInitializer(final URI baseUri,
                                   final SslContext sslContext,
+                                  final boolean http2Support,
                                   final long maxIncomingContentLength,
-                                  final ApplicationHandler applicationHandler) {
+                                  final EventExecutorGroup jerseyEventExecutorGroup,
+                                  final ApplicationHandler applicationHandler,
+                                  final int flushThreshold,
+                                  final ByteBufCreator byteBufCreator) {
     super();
     this.baseUri = baseUri;
     this.sslContext = sslContext;
+    this.http2Support = http2Support;
     // It's somewhat odd that Netty's MessageAggregator class (of
     // which HttpServerUpgradeHandler is a subclass) expresses a
     // maximum content length as an int, when Jersey and other
@@ -132,15 +251,74 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     } else {
       this.maxIncomingContentLength = maxIncomingContentLength;
     }
+    if (jerseyEventExecutorGroup == null) {
+      this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors()); // no idea how to size this
+    } else {
+      this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
+    }
     this.applicationHandler = applicationHandler;
+    this.flushThreshold = Math.max(0, flushThreshold);
+    this.byteBufCreator = byteBufCreator;
   }
 
 
   /*
    * Instance methods.
    */
-  
 
+
+  /**
+   * Initializes the supplied {@link Channel} using an appropriate
+   * sequencing of several {@link ChannelHandler}s and other Netty
+   * utility classes.
+   *
+   * <p>The {@link ChannelHandler}s and other classes involved include:</p>
+   *
+   * <ul>
+   *
+   * <li>{@link HttpObjectToContainerRequestDecoder}</li>
+   *
+   * <li>{@link HttpContainerRequestHandlingResponseWriter}</li>
+   *
+   * <li>{@link Http2StreamFrameToContainerRequestDecoder}</li>
+   *
+   * <li>{@link Http2ContainerRequestHandlingResponseWriter}</li>
+   *
+   * <li>{@link HttpServerCodec}</li>
+   *
+   * <li>{@link UpgradeCodecFactory}</li>
+   *
+   * <li>{@link UpgradeCodec}</li>
+   *
+   * <li>{@link Http2FrameCodecBuilder}</li>
+   *
+   * <li>{@link Http2FrameCodec}</li>
+   *
+   * <li>{@link Http2ServerUpgradeCodec}</li>
+   *
+   * <li>{@link Http2MultiplexHandler}</li>
+   *
+   * <li>{@link HttpServerUpgradeHandler}</li>
+   *
+   * <li>{@link CleartextHttp2ServerUpgradeHandler}</li>
+   *
+   * <li>{@link HttpServerExpectContinueHandler}</li>
+   *
+   * <li>{@link HttpNegotiationHandler}</li>
+   *
+   * </ul>
+   *
+   * <p>All of these classes collaborate to form a {@link
+   * ChannelPipeline} that can handle HTTP 1.0, HTTP 1.1 and HTTP/2
+   * scenarios, including upgrades.</p>
+   *
+   * @param channel the {@link Channel} to initialize; must not be
+   * {@code null}
+   *
+   * @exception NullPointerException if {@code channel} is {@code
+   * null}, or if the return value of {@link Channel#pipeline()
+   * channel.pipeline()} is {@code null}
+   */
   @Override
   protected final void initChannel(final Channel channel) {
     Objects.requireNonNull(channel);
@@ -155,137 +333,180 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     if (sslHandler == null) {
 
-      // Plaintext.
-      
       final HttpServerCodec httpServerCodec = new HttpServerCodec();
 
-      // See https://github.com/netty/netty/issues/7079
-      final int maxIncomingContentLength;
-      if (this.maxIncomingContentLength >= Integer.MAX_VALUE) {
-        maxIncomingContentLength = Integer.MAX_VALUE;
-      } else {
-        maxIncomingContentLength = (int)this.maxIncomingContentLength;
-      }
-      
-      final UpgradeCodecFactory upgradeCodecFactory = new UpgradeCodecFactory() {
-          @Override
-          public final UpgradeCodec newUpgradeCodec(final CharSequence protocolName) {
-            final UpgradeCodec returnValue;
-            if (protocolName == null ||
-                !AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocolName)) {
-              returnValue = null;
-            } else {
-              returnValue =
-                new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
-                                            new Http2MultiplexHandler(new Http2JerseyChannelInitializer()));
+      if (this.http2Support) {
+
+        // See https://github.com/netty/netty/issues/7079
+        final int maxIncomingContentLength;
+        if (this.maxIncomingContentLength >= Integer.MAX_VALUE) {
+          maxIncomingContentLength = Integer.MAX_VALUE;
+        } else {
+          maxIncomingContentLength = (int)this.maxIncomingContentLength;
+        }
+
+        final UpgradeCodecFactory upgradeCodecFactory = new UpgradeCodecFactory() {
+            @Override
+            public final UpgradeCodec newUpgradeCodec(final CharSequence protocolName) {
+              final UpgradeCodec returnValue;
+              if (protocolName == null ||
+                  !AsciiString.contentEquals(Http2CodecUtil.HTTP_UPGRADE_PROTOCOL_NAME, protocolName)) {
+                returnValue = null;
+              } else {
+                returnValue =
+                  new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
+                                              new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                                                          baseUri,
+                                                                                                          applicationHandler,
+                                                                                                          flushThreshold,
+                                                                                                          byteBufCreator)));
+              }
+              return returnValue;
             }
-            return returnValue;
-          }
-        };
-      
-      // Create a handler that will deal with HTTP 1.1-to-HTTP/2
-      // upgrade scenarios.  It by itself doesn't really do anything
-      // but it will be supplied to a new instance of
-      // CleartextHttp2ServerUpgradeHandler.
-      final HttpServerUpgradeHandler httpServerUpgradeHandler =
-        new HttpServerUpgradeHandler(httpServerCodec, upgradeCodecFactory, maxIncomingContentLength);
+          };
 
-      // Build a CleartextHttp2ServerUpgradeHandler.  This is really a
-      // channel pipeline reconfigurator: it arranges things such
-      // that:
+        // Create a handler that will deal with HTTP 1.1-to-HTTP/2
+        // upgrade scenarios.  It by itself doesn't really do anything
+        // but it will be supplied to a new instance of
+        // CleartextHttp2ServerUpgradeHandler.
+        final HttpServerUpgradeHandler httpServerUpgradeHandler =
+          new HttpServerUpgradeHandler(httpServerCodec, upgradeCodecFactory, maxIncomingContentLength);
 
-      //   * A private internal handler created inside the
-      //     CleartextHttp2ServerUpgradeHandler class is added first
-      //     (it will see if a prior knowledge situation is occurring;
-      //     see
-      //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L74-L100
-      //     for details)
+        // Build a CleartextHttp2ServerUpgradeHandler.  This is really a
+        // channel pipeline reconfigurator: it arranges things such
+        // that:
+        //
+        //   * A private internal handler created inside the
+        //     CleartextHttp2ServerUpgradeHandler class is added first
+        //     (it will see if a prior knowledge situation is
+        //     occurring and then will decide to do with the handlers
+        //     supplied in this constructor; see
+        //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L74-L100
+        //     for details)
+        //
+        //   * The first handler, an HttpServerCodec, MAY be added to
+        //     the pipeline next (it will, if the prior knowledge
+        //     handler doesn't bypass and remove it, be responsible
+        //     for interpreting an HTTP 1.1 message that might be
+        //     destined for an upgrade to HTTP/2)
+        //
+        //   * The second handler, an HttpServerUpgradeHandler,
+        //     created by us above, will be added next if indeed the
+        //     HttpServerCodec was actually added by the prior
+        //     knowledge handler (it will read an HttpMessage (an HTTP
+        //     1.1 message) and will see if it represents an upgrade
+        //     request).  If this handler is actually added to the
+        //     pipeline, then "prior knowledge" is not in effect.
+        //
+        //   * The third handler is held in reserve to be used only in
+        //     those cases where prior knowledge is in effect; see
+        //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L90-L95
+        //     for details and
+        //     https://http2.github.io/http2-spec/#known-http for
+        //     specification references.
+        //
+        // This API is tremendously confusing; it's not just you.
+        final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler =
+          new CleartextHttp2ServerUpgradeHandler(httpServerCodec,
+                                                 httpServerUpgradeHandler,
+                                                 new ChannelInitializer<Channel>() {
+                                                   @Override
+                                                   public final void initChannel(final Channel channel) {
+                                                     // "Prior
+                                                     // knowledge" is in
+                                                     // effect.  See
+                                                     // https://http2.github.io/http2-spec/#known-http.
+                                                     assert channel != null;
+                                                     final ChannelPipeline channelPipeline = channel.pipeline();
+                                                     assert channelPipeline != null;
+                                                     channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(),
+                                                                             Http2FrameCodecBuilder.forServer().build());
+                                                     channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
+                                                                             new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                                                                                         baseUri,
+                                                                                                                                         applicationHandler,
+                                                                                                                                         flushThreshold,
+                                                                                                                                         byteBufCreator)));
+                                                   }
+                                                 });
+        channelPipeline.addLast(cleartextHttp2ServerUpgradeHandler);
 
-      //   * The first argument, an HttpServerCodec, is added next (it
-      //     will, if the prior knowledge handler doesn't bypass and
-      //     remove it, be responsible for interpreting an HTTP 1.1
-      //     message that might be destined for an upgrade to HTTP/2)
-      
-      //   * The second argument, an HttpServerUpgradeHandler, created
-      //     by us above, is added next (it will read an HttpMessage
-      //     (an HTTP 1.1 message) and will see if it represents an
-      //     upgrade request)
-      
-      //   * The third argument is held in reserve to be used only in
-      //     those cases where the prior knowledge handler kicks in;
-      //     see
-      //     https://github.com/netty/netty/blob/d8b1a2d93f556a08270e6549bf7f91b3b09f24bb/codec-http2/src/main/java/io/netty/handler/codec/http2/CleartextHttp2ServerUpgradeHandler.java#L90-L95
-      //     for details
-      
-      // This API is tremendously confusing; it's not just you.
-      final CleartextHttp2ServerUpgradeHandler cleartextHttp2ServerUpgradeHandler =
-        new CleartextHttp2ServerUpgradeHandler(httpServerCodec,
-                                               httpServerUpgradeHandler,
-                                               new ChannelInitializer<Channel>() {
-                                                 @Override
-                                                 public final void initChannel(final Channel channel) {
-                                                   assert channel != null;
-                                                   final ChannelPipeline channelPipeline = channel.pipeline();
-                                                   assert channelPipeline != null;
-                                                   channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(),
-                                                                           Http2FrameCodecBuilder.forServer().build());
-                                                   channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
-                                                                           new Http2MultiplexHandler(new Http2JerseyChannelInitializer()));
-                                                 }
-                                               });
-      channelPipeline.addLast(cleartextHttp2ServerUpgradeHandler);
+        // We add a CONDITIONAL handler for the (probably very common)
+        // case where no one (a) connected with HTTP/2 or (b) asked
+        // for an HTTP/2 upgrade.  In this case after all the
+        // shenanigans we just jumped through we're just a regular old
+        // common HTTP 1.1 connection.  Strangely, we have to handle
+        // this in Netty as a special case even though it is likely to
+        // be the most common one.
+        channelPipeline.addLast(new SimpleChannelInboundHandler<HttpMessage>() {
+            @Override
+            protected final void channelRead0(final ChannelHandlerContext channelHandlerContext,
+                                              final HttpMessage httpMessage)
+              throws Exception {
+              assert channelHandlerContext != null;
+              final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
+              assert channelPipeline != null;
 
-      // We add a handler for the (probably very common) case where
-      // no one (a) connected with HTTP/2 or (b) asked for an HTTP/2
-      // upgrade.  In this case after all the shenanigans we just
-      // jumped through we're just a regular old common HTTP 1.1
-      // connection.  Strangely, we have to handle this in Netty as
-      // a special case even though it is likely to be the most
-      // common one.
-      channelPipeline.addLast(new SimpleChannelInboundHandler<HttpMessage>() {
-          @Override
-          protected final void channelRead0(final ChannelHandlerContext channelHandlerContext,
-                                            final HttpMessage httpMessage)
-            throws Exception {
-            assert channelHandlerContext != null;
-            final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
-            assert channelPipeline != null;
-            
-            // We know that in "front" of us is an HttpServerCodec
-            // because otherwise we wouldn't have been called (note
-            // that our event is an HttpMessage).  Now that we know
-            // this is going to be HTTP 1.1 with no upgrades, replace
-            // *this* handler we're "in" now with a handler that deals
-            // with HTTP 100-class statuses...
-            channelPipeline.replace(this,
-                                    HttpServerExpectContinueHandler.class.getSimpleName(),
-                                    new HttpServerExpectContinueHandler());
-            
-            // ...and then after that add the "real" initializer (a
-            // JerseyChannelSubInitializer instance, defined below
-            // in this source file) that will install a
-            // ChunkedWriteHandler followed by the main Jersey
-            // integration.
-            channelPipeline.addLast(HttpJerseyChannelInitializer.class.getName(),
-                                    new HttpJerseyChannelInitializer());
-            
-            // Forward the event on as we never touched it.
-            channelHandlerContext.fireChannelRead(ReferenceCountUtil.retain(httpMessage));
-          }
-        });
+              // If we're actually called then we know that in "front"
+              // of us is an HttpServerCodec because otherwise we
+              // wouldn't have been called (note that our event is an
+              // HttpMessage).  Now that we know this is going to be
+              // HTTP 1.1 with no upgrades, replace *this* handler
+              // we're "in" now with a handler that deals with HTTP
+              // 100-class statuses...
+              channelPipeline.replace(this,
+                                      HttpServerExpectContinueHandler.class.getSimpleName(),
+                                      new HttpServerExpectContinueHandler());
+
+              // ...and then after that add the "real" initializer (a
+              // JerseyChannelSubInitializer instance, defined below
+              // in this source file) that will install a
+              // ChunkedWriteHandler followed by the main Jersey
+              // integration.
+              channelPipeline.addLast("HttpJerseyChannelInitializer",
+                                      new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                       baseUri,
+                                                                       applicationHandler,
+                                                                       flushThreshold,
+                                                                       byteBufCreator));
+
+              // Forward the event on as we never touched it.
+              channelHandlerContext.fireChannelRead(ReferenceCountUtil.retain(httpMessage));
+            }
+          });
+      } else {
+        channelPipeline.addLast(HttpServerCodec.class.getSimpleName(),
+                                httpServerCodec);
+        channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(),
+                                new HttpServerExpectContinueHandler());
+        channelPipeline.addLast("HttpJerseyChannelInitializer",
+                                new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                 baseUri,
+                                                                 applicationHandler,
+                                                                 flushThreshold,
+                                                                 byteBufCreator));
+      }
+
+
     } else {
 
       // The SSL handler decodes TLS stuff...
-      channelPipeline.addLast(sslHandler.getClass().getSimpleName(), sslHandler);
-      
+      channelPipeline.addLast(sslHandler.getClass().getSimpleName(),
+                              sslHandler);
+
       // ...then the HttpNegotiationHandler does ALPN
       // (Application-Level Protocol Negotiation) to figure out
       // whether it's HTTP 1.1 or HTTP/2; see the private inner
       // class below for details.
-      channelPipeline.addLast(HttpNegotiationHandler.class.getSimpleName(), new HttpNegotiationHandler());
-      
+      channelPipeline.addLast(HttpNegotiationHandler.class.getSimpleName(),
+                              new HttpNegotiationHandler(jerseyEventExecutorGroup,
+                                                         baseUri,
+                                                         applicationHandler,
+                                                         flushThreshold,
+                                                         byteBufCreator));
+
     }
-                            
+
   }
 
   /**
@@ -295,6 +516,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * <p>Overrides of this method must not return {@code null}.</p>
    *
+   * <p>This implementation calls {@link
+   * SslContext#newHandler(ByteBufAllocator)
+   * sslContext.newHandler(byteBufAllocator)} and returns the
+   * result.</p>
+   *
    * @param sslContext the {@link SslContext} that may assist in the
    * creation; must not be {@code null}
    *
@@ -303,13 +529,15 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @return a new {@link SslHandler}; never {@code null}
    *
+   * @exception NullPointerException if {@code sslContext} is {@code null}
+   *
    * @see SslContext#newHandler(ByteBufAllocator)
    */
   protected SslHandler createSslHandler(final SslContext sslContext, final ByteBufAllocator byteBufAllocator) {
     return sslContext.newHandler(byteBufAllocator);
   }
 
-  
+
   /*
    * Inner and nested classes.
    */
@@ -318,25 +546,54 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
   /**
    * A {@link ChannelInitializer} that {@linkplain
-   * ChannelPipeline#addLast(String, ChannelHandler) adds} TODO
+   * ChannelPipeline#addLast(String, ChannelHandler) adds} an {@link
+   * HttpObjectToContainerRequestDecoder} followed by an {@link
+   * HttpContainerRequestHandlingResponseWriter} (which is added with
+   * its own {@link EventExecutorGroup}).
    *
    * @author <a href="https://about.me/lairdnelson"
    * target="_parent">Laird Nelson</a>
    *
    * @see ChannelInitializer
    */
-  private final class HttpJerseyChannelInitializer extends ChannelInitializer<Channel> {
+  private static final class HttpJerseyChannelInitializer extends ChannelInitializer<Channel> {
 
+    private final EventExecutorGroup jerseyEventExecutorGroup;
+
+    private final URI baseUri;
+    
+    private final ApplicationHandler applicationHandler;
+
+    private final int flushThreshold;
+
+    private final ByteBufCreator byteBufCreator;
+    
     /**
      * Creates a new {@link HttpJerseyChannelInitializer}.
      */
-    private HttpJerseyChannelInitializer() {
+    private HttpJerseyChannelInitializer(final EventExecutorGroup jerseyEventExecutorGroup,
+                                         final URI baseUri,
+                                         final ApplicationHandler applicationHandler,
+                                         final int flushThreshold,
+                                         final ByteBufCreator byteBufCreator) {
       super();
+      if (jerseyEventExecutorGroup == null) {
+        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
+      } else {
+        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
+      }
+      this.baseUri = baseUri;
+      this.applicationHandler = applicationHandler;
+      this.flushThreshold = Math.max(0, flushThreshold);
+      this.byteBufCreator = byteBufCreator;
     }
 
     /**
      * {@linkplain ChannelPipeline#addLast(String, ChannelHandler)
-     * Adds} a TODO
+     * Adds} an {@link
+     * HttpObjectToContainerRequestDecoder} followed by an {@link
+     * HttpContainerRequestHandlingResponseWriter} (which is added with
+     * its own {@link EventExecutorGroup})
      *
      * @param channel the {@link Channel} being configured; must
      * not be {@code null}
@@ -347,51 +604,81 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
-      channelPipeline.addLast(HttpObjectToContainerRequestDecoder.class.getName(),
+      channelPipeline.addLast(HttpObjectToContainerRequestDecoder.class.getSimpleName(),
                               new HttpObjectToContainerRequestDecoder(baseUri));
-      channelPipeline.addLast(eventExecutorGroup,
-                              HttpContainerRequestHandlingResponseWriter.class.getName(),
-                              new HttpContainerRequestHandlingResponseWriter(applicationHandler));
+      channelPipeline.addLast(jerseyEventExecutorGroup,
+                              HttpContainerRequestHandlingResponseWriter.class.getSimpleName(),
+                              new HttpContainerRequestHandlingResponseWriter(applicationHandler,
+                                                                             flushThreshold,
+                                                                             byteBufCreator));
     }
 
   }
 
-  
+
   /**
    * A {@link ChannelInitializer} that {@linkplain
-   * ChannelPipeline#addLast(String, ChannelHandler) adds} TODO
+   * ChannelPipeline#addLast(String, ChannelHandler) adds} an {@link
+   * Http2StreamFrameToContainerRequestDecoder} followed by an {@link
+   * Http2ContainerRequestHandlingResponseWriter} (which is added with
+   * its own {@link EventExecutorGroup}).
    *
    * @author <a href="https://about.me/lairdnelson"
    * target="_parent">Laird Nelson</a>
    *
    * @see ChannelInitializer
    */
-  private final class Http2JerseyChannelInitializer extends ChannelInitializer<Channel> {
+  private static final class Http2JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
+    private final EventExecutorGroup jerseyEventExecutorGroup;
+
+    private final URI baseUri;
+    
+    private final ApplicationHandler applicationHandler;
+
+    private final int flushThreshold;
+
+    private final ByteBufCreator byteBufCreator;
+    
     /**
      * Creates a new {@link Http2JerseyChannelInitializer}.
      */
-    private Http2JerseyChannelInitializer() {
+    private Http2JerseyChannelInitializer(final EventExecutorGroup jerseyEventExecutorGroup,
+                                          final URI baseUri,
+                                          final ApplicationHandler applicationHandler,
+                                          final int flushThreshold,
+                                          final ByteBufCreator byteBufCreator) {
       super();
+      if (jerseyEventExecutorGroup == null) {
+        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
+      } else {
+        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
+      }
+      this.baseUri = baseUri;
+      this.applicationHandler = applicationHandler;
+      this.flushThreshold = Math.max(0, flushThreshold);
+      this.byteBufCreator = byteBufCreator;
     }
 
     /**
      * {@linkplain ChannelPipeline#addLast(String, ChannelHandler)
-     * Adds} a TODO
+     * Adds} an {@link
+     * Http2StreamFrameToContainerRequestDecoder} followed by an {@link
+     * Http2ContainerRequestHandlingResponseWriter} (which is added with
+     * its own {@link EventExecutorGroup}).
      *
      * @param channel the {@link Channel} being configured; must
      * not be {@code null}
-     *
      */
     @Override
     protected final void initChannel(final Channel channel) {
       assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
       assert channelPipeline != null;
-      channelPipeline.addLast(Http2StreamFrameToContainerRequestDecoder.class.getName(),
+      channelPipeline.addLast(Http2StreamFrameToContainerRequestDecoder.class.getSimpleName(),
                               new Http2StreamFrameToContainerRequestDecoder(baseUri));
-      channelPipeline.addLast(eventExecutorGroup,
-                              Http2ContainerRequestHandlingResponseWriter.class.getName(),
+      channelPipeline.addLast(jerseyEventExecutorGroup,
+                              Http2ContainerRequestHandlingResponseWriter.class.getSimpleName(),
                               new Http2ContainerRequestHandlingResponseWriter(applicationHandler));
     }
 
@@ -407,13 +694,35 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @see ApplicationProtocolNegotiationHandler
    */
-  private final class HttpNegotiationHandler extends ApplicationProtocolNegotiationHandler {
+  private static final class HttpNegotiationHandler extends ApplicationProtocolNegotiationHandler {
 
+    private final EventExecutorGroup jerseyEventExecutorGroup;
+
+    private final URI baseUri;
+    
+    private final ApplicationHandler applicationHandler;
+
+    private final int flushThreshold;
+
+    private final ByteBufCreator byteBufCreator;
     /**
      * Creates a new {@link HttpNegotiationHandler}.
      */
-    private HttpNegotiationHandler() {
+    private HttpNegotiationHandler(final EventExecutorGroup jerseyEventExecutorGroup,
+                                   final URI baseUri,
+                                   final ApplicationHandler applicationHandler,
+                                   final int flushThreshold,
+                                   final ByteBufCreator byteBufCreator) {
       super(ApplicationProtocolNames.HTTP_1_1);
+      if (jerseyEventExecutorGroup == null) {
+        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
+      } else {
+        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
+      }
+      this.baseUri = baseUri;
+      this.applicationHandler = applicationHandler;
+      this.flushThreshold = Math.max(0, flushThreshold);
+      this.byteBufCreator = byteBufCreator;
     }
 
     /**
@@ -440,15 +749,23 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(),
                                 Http2FrameCodecBuilder.forServer().build());
         channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
-                                new Http2MultiplexHandler(new Http2JerseyChannelInitializer()));
+                                new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                                            baseUri,
+                                                                                            applicationHandler,
+                                                                                            flushThreshold,
+                                                                                            byteBufCreator)));
         break;
       case ApplicationProtocolNames.HTTP_1_1:
         channelPipeline.addLast(HttpServerCodec.class.getSimpleName(),
                                 new HttpServerCodec());
         channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(),
                                 new HttpServerExpectContinueHandler());
-        channelPipeline.addLast(HttpJerseyChannelInitializer.class.getSimpleName(),
-                                new HttpJerseyChannelInitializer());
+        channelPipeline.addLast("HttpJerseyChannelInitializer",
+                                new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                 baseUri,
+                                                                 applicationHandler,
+                                                                 flushThreshold,
+                                                                 byteBufCreator));
         break;
       default:
         throw new IllegalArgumentException("protocol: " + protocol);
@@ -456,5 +773,5 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     }
 
   }
-  
+
 }

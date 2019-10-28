@@ -33,6 +33,11 @@ import io.netty.channel.ChannelPromise;
  * An {@link OutputStream} that delegates writing and flushing
  * operations to a {@link ChannelOutboundInvoker}.
  *
+ * <h2>Thread Safety</h2>
+ *
+ * <p>Instances of this class are safe for concurrent use by multiple
+ * threads.</p>
+ *
  * @param <T> the type of message that will be written
  *
  * @author <a href="https://about.me/lairdnelson"
@@ -277,7 +282,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * this {@link AbstractChannelOutboundInvokingOutputStream}'s
    * various {@link #write(byte[], int, int) write} methods.
    *
-   * <p>Implementations of this method must not return {@code null}.</p>
+   * <p>Implementations of this method must not return {@code
+   * null}.</p>
    *
    * @param bytes a {@code byte} array originating from,
    * <em>e.g.</em>, a {@link #write(byte[], int, int)} method
@@ -326,7 +332,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
   }
 
   /**
-   * Creates and returns a new {@link ChannelPromise}.
+   * Creates and returns new {@link ChannelPromise}s that will be used
+   * in many {@link ChannelOutboundInvoker} operations.
    *
    * <p>This method never returns {@code null}.</p>
    *
@@ -390,7 +397,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * int, boolean)
    */
   @Override
-  public void close() throws IOException {
+  public final void close() throws IOException {
     super.close();
     final Object lastMessage = this.createLastMessage();
     if (lastMessage == null) {

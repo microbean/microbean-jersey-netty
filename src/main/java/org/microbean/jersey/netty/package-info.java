@@ -22,5 +22,18 @@
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
+ *
+ * @see org.microbean.jersey.netty.JerseyChannelInitializer
+ *
+ * @see org.microbean.jersey.netty.HttpObjectToContainerRequestDecoder
+ *
+ * @see
+ * org.microbean.jersey.netty.HttpContainerRequestHandlingResponseWriter
+ *
+ * @see
+ * org.microbean.jersey.netty.Http2StreamFrameToContainerRequestDecoder
+ *
+ * @see
+ * org.microbean.jersey.netty.Http2ContainerRequestHandlingResponseWriter
  */
 package org.microbean.jersey.netty;

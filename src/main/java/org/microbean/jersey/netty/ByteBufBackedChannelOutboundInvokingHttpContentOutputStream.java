@@ -35,7 +35,8 @@ import io.netty.handler.codec.http.HttpContent;
  *
  * @see #createLastMessage()
  */
-public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
+public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
+  extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
 
 
   /*
@@ -102,21 +103,7 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream e
    * Instance methods.
    */
 
-
-  /**
-   * Returns a new {@link DefaultLastHttpContent} when invoked.
-   *
-   * <p>This method never returns {@code null}.</p>
-   *
-   * @return a new {@link DefaultLastHttpContent}
-   *
-   * @see #close()
-   */
-  @Override
-  protected final HttpContent createLastMessage() {
-    return new DefaultLastHttpContent();
-  }
-
+  
   /**
    * Returns a new {@link DefaultHttpContent} whose {@link
    * DefaultHttpContent#content() content()} method returns the
@@ -133,6 +120,21 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream e
   @Override
   protected final HttpContent createMessage(final ByteBuf content) {
     return new DefaultHttpContent(content);
+  }
+
+
+  /**
+   * Returns a new {@link DefaultLastHttpContent} when invoked.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * @return a new {@link DefaultLastHttpContent}
+   *
+   * @see #close()
+   */
+  @Override
+  protected final HttpContent createLastMessage() {
+    return new DefaultLastHttpContent();
   }
 
 }

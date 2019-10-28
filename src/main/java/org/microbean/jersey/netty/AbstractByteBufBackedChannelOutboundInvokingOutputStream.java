@@ -82,7 +82,7 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * @param flushThreshold the minimum number of bytes that this
    * instance has to {@linkplain #write(byte[], int, int) write}
    * before an automatic {@linkplain #flush() flush} will take place;
-   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * if less than {@code 0} {@code 0} will be used instead; if {@link
    * Integer#MAX_VALUE} then no automatic flushing will occur
    *
    * @param closeChannelOutboundInvoker whether {@link
@@ -110,7 +110,7 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * @param flushThreshold the minimum number of bytes that this
    * instance has to {@linkplain #write(byte[], int, int) write}
    * before an automatic {@linkplain #flush() flush} will take place;
-   * if less than {@code 0} {@code 0} will be used instead; if {@code
+   * if less than {@code 0} {@code 0} will be used instead; if {@link
    * Integer#MAX_VALUE} then no automatic flushing will occur
    *
    * @param closeChannelOutboundInvoker whether {@link
@@ -134,7 +134,7 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
                                                              final ByteBufCreator byteBufCreator) {
     super(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker);
     if (byteBufCreator == null) {
-      this.byteBufCreator = (bytes, offset, length) -> Unpooled.wrappedBuffer(bytes, offset, length);
+      this.byteBufCreator = Unpooled::wrappedBuffer;
     } else {
       this.byteBufCreator = byteBufCreator;
     }
@@ -198,8 +198,8 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
 
 
   /**
-   * An allocator of {@link ByteBuf}s that uses a {@code byte} array
-   * or a portion of a {@code byte} array as its raw materials.
+   * A creator of {@link ByteBuf}s that uses a {@code byte} array or a
+   * portion of a {@code byte} array as its raw materials.
    *
    * @author <a href="https://about.me/lairdnelson"
    * target="_parent">Laird Nelson</a>

@@ -35,6 +35,7 @@ import java.util.logging.Logger;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelOutboundInvoker; // for javadoc only
 import io.netty.channel.ChannelPromise;
 
 import org.glassfish.jersey.server.ApplicationHandler;
@@ -45,7 +46,30 @@ import org.glassfish.jersey.server.ContainerResponse;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
 
-public abstract class AbstractContainerRequestHandlingResponseWriter extends ChannelInboundHandlerAdapter implements ContainerResponseWriter {
+import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;
+
+/**
+ * An abstract {@link ChannelInboundHandlerAdapter} that is also a
+ * {@link ContainerResponseWriter} that processes incoming {@link
+ * ContainerRequest} events, such as those dispatched by an {@link
+ * AbstractContainerRequestDecoder}.
+ *
+ * <p>Instances of this class are in charge of properly invoking
+ * {@link ApplicationHandler#handle(ContainerRequest)}, thus adapting
+ * <a href="https://eclipse-ee4j.github.io/jersey/"
+ * target="_parent">Jersey</a> to <a href="https://netty.io/"
+ * target="_parent">Netty</a>'s constraints and vice versa.</p>
+ *
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
+ *
+ * @see #channelRead(ChannelHandlerContext, Object)
+ * 
+ * @see ChannelInboundHandlerAdapter
+ *
+ * @see ContainerResponseWriter
+ */
+public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends ChannelInboundHandlerAdapter implements ContainerResponseWriter {
 
 
   /*
@@ -76,15 +100,87 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
 
   private ChannelHandlerContext channelHandlerContext;
 
+  private final int flushThreshold;
+
+  private final ByteBufCreator byteBufCreator;
 
   /*
    * Constructors.
    */
 
-
+  /**
+   * Creates a new {@link
+   * AbstractContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandler an {@link ApplicationHandler}
+   * representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @see
+   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * 
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #channelRead(ChannelHandlerContext, Object)
+   */
   protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
+    this(applicationHandler, 8192, null);
+  }
+  
+  /**
+   * Creates a new {@link
+   * AbstractContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandler an {@link ApplicationHandler}
+   * representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}
+   * returned by the {@link #createOutputStream(long,
+   * ContainerResponse)} method must write before an automatic
+   * {@linkplain
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()
+   * flush} may take place; if less than {@code 0} {@code 0} will be
+   * used instead; if {@code Integer#MAX_VALUE} then it is suggested
+   * that no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that may be used
+   * (but does not have to be used) by the implementation of the
+   * {@link #createOutputStream(long, ContainerResponse)} method; may
+   * be {@code null}
+   *
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #channelRead(ChannelHandlerContext, Object)
+   *
+   * @see #getFlushThreshold()
+   *
+   * @see #getByteBufCreator()
+   *
+   * @see #createOutputStream(long, ContainerResponse)
+   */
+  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
+                                                           final int flushThreshold,
+                                                           final ByteBufCreator byteBufCreator) {
     super();
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
+    this.flushThreshold = Math.max(0, flushThreshold);
+    this.byteBufCreator = byteBufCreator;
   }
 
 
@@ -93,10 +189,39 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
    */
 
 
+  /**
+   * If the supplied {@code message} is a {@link ContainerRequest}
+   * then this method will {@linkplain
+   * ContainerRequest#setWriter(ContainerResponseWriter) install
+   * itself as that request's <code>ContainerResponseWriter</code>}
+   * and will invoke {@link
+   * ApplicationHandler#handle(ContainerRequest)}.
+   *
+   * <p>In all other cases this method will simply call {@link
+   * ChannelInboundHandlerAdapter#channelRead(ChannelHandlerContext,
+   * Object)} with the supplied {@code message}.</p>
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; must not be {@code null}
+   *
+   * @param message the incoming message, or event; may be {@code null}
+   *
+   * @exception NullPointerException if {@code channelHandlerContext}
+   * is {@code null}
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see ContainerResponseWriter
+   *
+   * @see ContainerRequest#setWriter(ContainerResponseWriter)
+   */
   @Override
   public final void channelRead(final ChannelHandlerContext channelHandlerContext,
                                 final Object message)
     throws Exception {
+    if (this.getChannelHandlerContext() != null) {
+      throw new IllegalStateException("this.getChannelHandlerContext() != null: " + this.getChannelHandlerContext());
+    }
     this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);
     try {
       if (message instanceof ContainerRequest) {
@@ -111,11 +236,37 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
     }
   }
 
+  /**
+   * Overrides the {@link
+   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}
+   * method to call {@link ChannelHandlerContext#flush()
+   * channelHandlerContext.flush()} before calling the superclass
+   * implementation.
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelHandlerContext} is {@code null}
+   *
+   * @exception Exception if {@link
+   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}
+   * throws an {@link Exception}
+   */
   @Override
-  public final void channelReadComplete(final ChannelHandlerContext channelHandlerContext) {
+  public final void channelReadComplete(final ChannelHandlerContext channelHandlerContext) throws Exception {
     Objects.requireNonNull(channelHandlerContext).flush();
+    super.channelReadComplete(channelHandlerContext);
   }
 
+  /**
+   * Returns the {@link ChannelHandlerContext} in effect, or {@code
+   * null} if there is no such {@link ChannelHandlerContext}.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @return the {@link ChannelHandlerContext} in effect, or {@code
+   * null} if there is no such {@link ChannelHandlerContext}
+   */
   protected final ChannelHandlerContext getChannelHandlerContext() {
     return this.channelHandlerContext;
   }
@@ -148,11 +299,43 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
     return true;
   }
 
+  /**
+   * Writes the status and headers portion of the response present in
+   * the supplied {@link ContainerResponse} by calling the {@link
+   * #writeStatusAndHeaders(long, ContainerResponse)} method, and, if
+   * the supplied {@code contentLength} is not {@code 0L} and that
+   * method returns {@code true} indicating that output will be
+   * forthcoming, returns the result of invoking {@link
+   * #createOutputStream(long, ContainerResponse)}.
+   *
+   * <p>In all other cases, this method returns {@code null}.</p>
+   *
+   * @param contentLength the content length as determined by the
+   * logic encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method; a value less
+   * than zero indicates an unknown content length
+   *
+   * @param containerResponse the {@link ContainerResponse} containing
+   * status and headers information; must not be {@code null}
+   *
+   * @return the {@link OutputStream} returned by the {@link
+   * #createOutputStream(long, ContainerResponse)} method, or {@code
+   * null}
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   *
+   * @see #writeStatusAndHeaders(long, ContainerResponse)
+   *
+   * @see #createOutputStream(long, ContainerResponse)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   */
   @Override
   public final OutputStream writeResponseStatusAndHeaders(final long contentLength,
                                                           final ContainerResponse containerResponse) {
     final OutputStream returnValue;
-    if (this.writeStatusAndHeaders(contentLength, Objects.requireNonNull(containerResponse))) {
+    if (this.writeStatusAndHeaders(contentLength, Objects.requireNonNull(containerResponse)) && contentLength != 0L) {
       returnValue = this.createOutputStream(contentLength, containerResponse);
     } else {
       returnValue = null;
@@ -160,12 +343,141 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
     return returnValue;
   }
 
+  /**
+   * Writes the status and headers portion of the response present in
+   * the supplied {@link ContainerResponse} and returns {@code true}
+   * if further output is forthcoming.
+   *
+   * <p>Implementations of this method must not call the {@link
+   * #writeResponseStatusAndHeaders(long, ContainerResponse)} method
+   * or an infinite loop may result.</p>
+   *
+   * <p>Implementations of this method must not call the {@link
+   * #createOutputStream(long, ContainerResponse)} method or undefined
+   * behavior may result.</p>
+   *
+   * @param contentLength the content length as determined by the
+   * logic encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method; a value less
+   * than zero indicates an unknown content length
+   *
+   * @param containerResponse the {@link ContainerResponse} containing
+   * status and headers information; must not be {@code null}
+   *
+   * @return {@code true} if the {@link #createOutputStream(long,
+   * ContainerResponse)} method should be invoked, <em>i.e.</em> if
+   * further output is forthcoming
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #createOutputStream(long, ContainerResponse) 
+   */
   protected abstract boolean writeStatusAndHeaders(final long contentLength,
                                                    final ContainerResponse containerResponse);
 
-  protected abstract OutputStream createOutputStream(final long contentLength,
-                                                     final ContainerResponse containerResponse);
+  /**
+   * Creates and returns a new {@link
+   * AbstractChannelOutboundInvokingOutputStream}, or returns {@code
+   * null} if it is determined that no {@link
+   * AbstractChannelOutboundInvokingOutputStream} is required given
+   * the supplied {@code contentLength} parameter value.
+   *
+   * <p>Implementations of this method may return {@code null}.</p>
+   *
+   * @param contentLength the content length as determined by the
+   * logic encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method; a value less
+   * than zero indicates an unknown content length; must not be equal
+   * to {@code 0L}
+   *
+   * @param containerResponse the {@link ContainerResponse} containing
+   * status and headers information; must not be {@code null}; may be
+   * (and often is) ignored by implementations
+   *
+   * @return a new {@link AbstractChannelOutboundInvokingOutputStream}
+   * implementation, or {@code null}
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   *
+   * @exception IllegalArgumentException if {@code contentLength} is
+   * equal to {@code 0L}
+   */
+  protected abstract AbstractChannelOutboundInvokingOutputStream<? extends T> createOutputStream(final long contentLength,
+                                                                                                 final ContainerResponse containerResponse);
 
+  /**
+   * Returns the minimum number of bytes that an {@link
+   * AbstractChannelOutboundInvokingOutputStream} returned by the
+   * {@link #createOutputStream(long, ContainerResponse)} method must
+   * write before an automatic {@linkplain
+   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may
+   * take place.
+   *
+   * <p><strong>Note:</strong> Implementations of the {@link
+   * #createOutputStream(long, ContainerResponse)} method may choose
+   * to ignore the return value of this method.  It is supplied for
+   * convenience only in implementing the {@link
+   * #createOutputStream(long, ContainerResponse)} method.</p>
+   *
+   * @return the minimum number of bytes that an {@link
+   * AbstractChannelOutboundInvokingOutputStream} returned by the
+   * {@link #createOutputStream(long, ContainerResponse)} method must
+   * write before an automatic {@linkplain
+   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may
+   * take place; always {@code 0L} or a positive {@code int}; if
+   * {@code 0} it is suggested that automatic flushing occur after
+   * every write; if {@code Integer#MAX_VALUE} it is suggested that no
+   * automatic flushing should occur
+   *
+   * @see #createOutputStream(long, ContainerResponse)
+   *
+   * @see
+   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean, ByteBufCreator)
+   */
+  protected final int getFlushThreshold() {
+    return this.flushThreshold;
+  }
+
+  /**
+   * Returns a {@link ByteBufCreator} that may be used to create the
+   * {@link AbstractChannelOutboundInvokingOutputStream}
+   * implementation that must be returned by an implementation of the
+   * {@link #createOutputStream(long, ContainerResponse)} method.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * <p><strong>Note:</strong> Implementations of the {@link
+   * #createOutputStream(long, ContainerResponse)} method may choose
+   * to ignore the return value of this method.  It is supplied for
+   * convenience only in implementing the {@link
+   * #createOutputStream(long, ContainerResponse)} method.</p>
+   *
+   * @return a {@link ByteBufCreator}, or {@code null}
+   *
+   * @see #createOutputStream(long, ContainerResponse)
+   *
+   * @see
+   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * int, AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean, ByteBufCreator)
+   */
+  protected final ByteBufCreator getByteBufCreator() {
+    return this.byteBufCreator;
+  }
+  
   @Override
   public final boolean suspend(final long timeout,
                                final TimeUnit timeUnit,
@@ -207,6 +519,26 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
     }
   }
 
+  /**
+   * Handles any failure case encountered by the logic encapsulated by
+   * the {@link ApplicationHandler#handle(ContainerRequest)} method.
+   *
+   * <p>This method calls the {@link #writeFailureMessage(Throwable)}
+   * method and takes great care to ensure that any {@link Throwable}s
+   * encountered along the way are properly recorded and {@linkplain
+   * Throwable#addSuppressed(Throwable) suppressed}.</p>
+   *
+   * <p><strong>This implementation never returns.</strong> A {@link
+   * ContainerException} is always thrown by this method.</p>
+   *
+   * @param failureCause the {@link Throwable} encountered by the
+   * {@link ApplicationHandler#handle(ContainerRequest)} method; may
+   * be {@code null}
+   *
+   * @exception ContainerException when this method is invoked; it
+   * will have the supplied {@code failureCause} as its {@linkplain
+   * Throwable#getCause() cause}
+   */
   @Override
   public final void failure(final Throwable failureCause) {
     final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
@@ -267,6 +599,16 @@ public abstract class AbstractContainerRequestHandlingResponseWriter extends Cha
     }
   }
 
+  /**
+   * Writes an appropriate message, possibly using the {@link
+   * #getChannelHandlerContext() ChannelHandlerContext} to do so.
+   *
+   * <p>Implementations of this method must not call the {@link
+   * #failure(Throwable)} method or an infinite loop may result.</p>
+   *
+   * @param failureCause the {@link Throwable} responsible for this
+   * method's invocation; may be {@code null} in pathological cases
+   */
   protected abstract void writeFailureMessage(final Throwable failureCause);
 
 

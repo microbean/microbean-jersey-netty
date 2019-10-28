@@ -31,10 +31,13 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline; // for javadoc only
 
 import io.netty.handler.codec.MessageToMessageDecoder;
 
 import org.glassfish.jersey.internal.PropertiesDelegate;
+
+import org.glassfish.jersey.internal.inject.Bindings;
 
 import org.glassfish.jersey.server.ContainerRequest;
 
@@ -43,6 +46,10 @@ import org.glassfish.jersey.server.internal.ContainerUtils;
 /**
  * A {@link MessageToMessageDecoder} that decodes messages of a
  * specific type into {@link ContainerRequest}s.
+ *
+ * <p>Instances of this class are normally followed in a {@link
+ * ChannelPipeline} by instances of the {@link
+ * AbstractContainerRequestHandlingResponseWriter} class.</p>
  *
  * @param <T> the common supertype of messages that can be decoded
  *
@@ -58,6 +65,8 @@ import org.glassfish.jersey.server.internal.ContainerUtils;
  * @see MessageToMessageDecoder
  *
  * @see ContainerRequest
+ *
+ * @see AbstractContainerRequestHandlingResponseWriter
  */
 public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends T> extends MessageToMessageDecoder<T> {
 
@@ -339,6 +348,10 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                  securityContext == null ? new SecurityContextAdapter() : securityContext,
                                  propertiesDelegate == null ? new MapBackedPropertiesDelegate() : propertiesDelegate);
           this.installMessage(headersMessage, containerRequest);
+          containerRequest.setRequestScopedInitializer(injectionManager -> {
+              injectionManager.register(Bindings.service(headersMessage).to(this.headersClass));
+              injectionManager.register(Bindings.service(channelHandlerContext).to(ChannelHandlerContext.class));
+            });
           if (this.isLast(message)) {
             out.add(containerRequest);
           } else {
@@ -404,6 +417,15 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
     }
   }
 
+  /**
+   * Creates and returns a new {@link TerminableByteBufInputStream}.
+   *
+   * @param byteBufAllocator a {@link ByteBufAllocator} that may be
+   * used or ignored; will not be {@code null}
+   *
+   * @return a new, non-{@code null} {@link
+   * TerminableByteBufInputStream}
+   */
   protected TerminableByteBufInputStream createTerminableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
     return new TerminableByteBufInputStream(byteBufAllocator);
   }
