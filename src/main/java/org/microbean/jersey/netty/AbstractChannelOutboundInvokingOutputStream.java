@@ -259,6 +259,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * Subclasses are encouraged, but not required, to override this
    * method to be more efficient.</p>
    *
+   * <p>Overrides of this method should be stateless.</p>
+   *
    * @param singleByte an {@code int} whose low-order bits hold a
    * {@code byte} to be written
    *
@@ -284,6 +286,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    *
    * <p>Implementations of this method must not return {@code
    * null}.</p>
+   *
+   * <p>Implementations of this method should be stateless.</p>
    *
    * @param bytes a {@code byte} array originating from,
    * <em>e.g.</em>, a {@link #write(byte[], int, int)} method
@@ -319,6 +323,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    *
    * <p>The default implementation of this method returns {@code
    * null}.</p>
+   *
+   * <p>Overrides of this method should be stateless.</p>
    *
    * @return a final message to write when {@link #close() close()} is
    * called, or {@code null} if no final message needs to be written
