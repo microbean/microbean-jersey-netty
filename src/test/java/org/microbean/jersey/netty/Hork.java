@@ -16,12 +16,23 @@
  */
 package org.microbean.jersey.netty;
 
+import javax.inject.Inject;
+
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
+
+import io.netty.channel.ChannelHandlerContext;
+
+import io.netty.handler.codec.http.HttpRequest;
+
+import static org.junit.Assert.assertNotNull;
 
 @Path("/hork")
 public class Hork {
 
+  @Inject
+  private ChannelHandlerContext channelHandlerContext;
+  
   public Hork() {
     super();
   }
@@ -29,6 +40,7 @@ public class Hork {
   @GET
   @Path("/")
   public String hork() {
+    assertNotNull(channelHandlerContext);
     return "blatz";
   }
 

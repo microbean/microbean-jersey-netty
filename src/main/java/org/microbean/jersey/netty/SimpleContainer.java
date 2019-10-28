@@ -31,8 +31,6 @@ import org.glassfish.jersey.server.spi.Container;
  * target="_parent">Laird Nelson</a>
  *
  * @see Container
- *
- * @see JerseyChannelInitializer
  */
 public class SimpleContainer implements Container {
 

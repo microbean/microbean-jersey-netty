@@ -34,7 +34,7 @@ import org.glassfish.jersey.server.ApplicationHandler; // for javadoc only
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
- * @see JerseyChannelInboundHandler#JerseyChannelInboundHandler(URI, ApplicationHandler)
+ * @see SecurityContext
  */
 public class SecurityContextAdapter implements SecurityContext {
 
@@ -47,7 +47,7 @@ public class SecurityContextAdapter implements SecurityContext {
   /**
    * Creates a new {@link SecurityContextAdapter}.
    */
-  protected SecurityContextAdapter() {
+  public SecurityContextAdapter() {
     super();
   }
 
