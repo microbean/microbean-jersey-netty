@@ -20,6 +20,11 @@ header](https://svn.tools.ietf.org/svn/wg/httpbis/specs/rfc7230.html#header.upgr
 [ALPN](https://www.rfc-editor.org/rfc/rfc7301#page-2) or [prior
 knowledge](https://http2.github.io/http2-spec/#known-http).
 
+## Status
+
+This project uses [semantic versioning](https://semver.org/).  It is
+still in an alpha state.
+
 ## Installation
 
 Add a dependency on this project in your Netty-based Maven project:
