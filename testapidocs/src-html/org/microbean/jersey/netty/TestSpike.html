@@ -58,7 +58,7 @@
 <span class="sourceLineNo">050</span>        .group(group)<a name="line.50"></a>
 <span class="sourceLineNo">051</span>        .channel(NioServerSocketChannel.class)<a name="line.51"></a>
 <span class="sourceLineNo">052</span>        .localAddress(new InetSocketAddress("localhost", 8080))<a name="line.52"></a>
-<span class="sourceLineNo">053</span>        .childHandler(new JerseyChannelInitializer(null, null, 20000000L, new ApplicationHandler(new Application())));<a name="line.53"></a>
+<span class="sourceLineNo">053</span>        .childHandler(new JerseyChannelInitializer(null, null, true, 20000000L, null, new ApplicationHandler(new Application()), 8192, null));<a name="line.53"></a>
 <span class="sourceLineNo">054</span>      final ChannelFuture bindFuture = serverBootstrap.bind();<a name="line.54"></a>
 <span class="sourceLineNo">055</span>      bindFuture.channel().closeFuture().addListener(c -&gt; System.out.println("*** server closed"));<a name="line.55"></a>
 <span class="sourceLineNo">056</span>      bindFuture.sync();<a name="line.56"></a>
