@@ -28,7 +28,7 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.9.3</version>
+  <version>0.20.0</version>
 </dependency>
 ```
 
@@ -47,27 +47,76 @@ of a Netty
 
 ## Background and Motivation
 
-Jersey itself contains a [Netty integration
+While Jersey itself contains a [Netty integration
 project](https://github.com/eclipse-ee4j/jersey/tree/master/containers/netty-http),
-but it is annotated with
+it is annotated with
 [`@Beta`](https://jersey.github.io/apidocs/2.28/jersey/org/glassfish/jersey/Beta.html),
-and the author additionally writes:
-
-> Note that this implementation cannot be more experimental.
-
-There are several issues with this "native" Netty integration project.
-The most problematic seems to be [issue
+and the author additionally writes that his "implementation cannot be
+more experimental".  In addition, there are several issues with the
+Jersey-supplied Netty integration project.  The most problematic seems
+to be [issue
 3500](https://github.com/eclipse-ee4j/jersey/issues/3500).  This issue
-and others stem from the fact that the "native" Netty integration
-project sets up its own internal queues for streaming, which overflow.
-Additionally, new `ByteBuffer`s are allocated throughout.  It is also
-not entirely clear if HTTP/2 is fully supported.
+and others stem from the fact that the Jersey-supplied Netty
+integration project sets up its own internal queues for streaming,
+which overflow.  Additionally, new `ByteBuffer`s and `InputStream`s
+are allocated throughout.  It is also not entirely clear if HTTP/2 is
+fully supported.
 
-This implementation instead shares a
-[`ByteBuf`](https://netty.io/4.1/api/io/netty/buffer/ByteBuf.html) for
-reading and writing, and makes heavy use of Netty's
-[`ChunkedWriteHandler`](https://netty.io/4.1/api/io/netty/handler/stream/ChunkedWriteHandler.html),
-while also ultimately ensuring that all operations on a given
-`ByteBuf` that originate from Jersey are serialized to the Netty event
-loop.  This dramatically reduces object allocations, locks, threading
-issues, exception handling pathways and other concurrency problems.
+## Implementation Details
+
+By contrast, microBean™ Jersey Netty Integration approaches the
+problem of running a Jakarta RESTful Web Services application under
+Netty by following the spirit of Netty.
+
+Several composable channel pipeline components are provided.
+
+Considering HTTP 1.1 support, the first is a
+[_decoder_](https://netty.io/4.1/api/io/netty/handler/codec/MessageToMessageDecoder.html)
+that decodes
+[`HttpRequest`](https://netty.io/4.1/api/io/netty/handler/codec/http/HttpRequest.html)
+and
+[`HttpContent`](https://netty.io/4.1/api/io/netty/handler/codec/http/HttpContent.html)
+messages into
+[`ContainerRequest`](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/ContainerRequest.html)
+objects, which are the objects consumed natively by Jersey.
+
+A
+[`ContainerRequest`](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/ContainerRequest.html)
+may need an [entity
+stream](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/ContainerRequest.html#setEntityStream-java.io.InputStream-),
+and that can be tricky.  Since a Jakarta RESTful Web Services
+application may block whatever thread it is running on for some time
+(for example, perhaps it is performing synchronous database access
+over a slow connection), then normally it should be run on its own
+thread that is not the Netty event loop.  But assuming that is so, the
+`InputStream` it will receive by way of a [`ContainerRequest`'s entity
+stream](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/ContainerRequest.html#setEntityStream-java.io.InputStream-)
+will now be operated on by two threads: the application-hosting
+thread, and the Netty event loop.  microBean™ Jersey Netty Integration
+ensures that [this `InputStream` implementation](https://microbean.github.io/microbean-jersey-netty/apidocs/org/microbean/jersey/netty/TerminableByteBufInputStream.html) is thread-safe, uses as
+few locks as possible, allocates as little memory as possible, and
+takes advantage of
+[`CompositeByteBuf`](https://netty.io/4.1/api/io/netty/buffer/CompositeByteBuf.html)
+and other Netty native constructs to ensure this inter-thread
+messaging is safe and efficient.
+
+Similarly, a `ContainerRequest` needs a
+[`ContainerResponseWriter`](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/spi/ContainerResponseWriter.html#writeResponseStatusAndHeaders-long-org.glassfish.jersey.server.ContainerResponse-)
+which is responsible for actually writing the Jakarta RESTful Web
+Services application's output.  microBean™ Jersey Netty Integration
+provides a `ContainerResponseWriter` implementation that is also a
+[`ChannelInboundHandlerAdapter`](https://netty.io/4.1/api/io/netty/channel/ChannelInboundHandlerAdapter.html):
+it takes `ContainerRequest`s as input, installs itself as their
+`ContainerResponseWriter` implementation, and writes the requisite
+output back to the channel safely and efficiently.
+
+The `OutputStream` implementation used to do this must, of course,
+ensure that writes take place on the Netty event loop.  microBean™
+Jersey Netty Integration ensures that [this `OutputStream`
+implementation](https://microbean.github.io/microbean-jersey-netty/apidocs/org/microbean/jersey/netty/ByteBufBackedChannelOutboundInvokingHttpContentOutputStream.html)
+does not needlessly buffer and/or copy `byte` arrays but instead takes
+advantage of the built-in outbound event queuing present in the Netty
+event loop itself.
+
+Similar constructs are provided for HTTP/2 support as well.
+
