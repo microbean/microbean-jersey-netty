@@ -16,16 +16,12 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.Closeable;
-import java.io.Flushable;
 import java.io.IOException;
 import java.io.OutputStream;
 
 import java.util.Objects;
 
-import java.util.function.Function;
-import java.util.function.Supplier;
-
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelOutboundInvoker;
 import io.netty.channel.ChannelPromise;
 
@@ -210,7 +206,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
     this.write(this.createMessage(bytes, offset, length), length);
   }
 
-  private final void write(final T message, final int length) {
+  private final void write(final T message, final int length) throws IOException {
     final ChannelPromise channelPromise = this.newPromise();
     final int flushThreshold = this.getFlushThreshold();
     switch (flushThreshold) {
@@ -223,7 +219,8 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
     default:
       int bytesWritten = this.bytesWritten; // volatile read
       if (bytesWritten > flushThreshold) {
-        // Flush previous writes, if any, and set our "days since flush" back to 0 (see #flush())
+        // Flush previous writes, if any, and set our "days since
+        // flush" back to 0 (see #flush())
         this.flush();
       } else if (channelPromise.isVoid()) {
         // Optimistically assume the write will succeed; if we get
@@ -231,14 +228,11 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
         // often as expected.
         this.bytesWritten = bytesWritten + length;
       } else {
-        channelPromise.addListener(f -> {
-            if (f.isSuccess()) {
-              this.bytesWritten = bytesWritten + length;
-            }
-          });
+        channelPromise.addListener(f -> this.bytesWritten = bytesWritten + length);
       }
     }
     this.channelOutboundInvoker.write(message, channelPromise);
+    maybeThrow(channelPromise.cause());
   }
 
   /**
@@ -414,17 +408,40 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
         this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);
         this.bytesWritten = 0;
       } else {
-        channelPromise.addListener(f -> {
-            if (f.isSuccess()) {
-              this.bytesWritten = 0;
-            }
-          });
+        channelPromise.addListener(f -> this.bytesWritten = 0);
         this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);
       }
+      maybeThrow(channelPromise.cause());
     }
     if (this.closeChannelOutboundInvoker) {
-      this.channelOutboundInvoker.close(this.newPromise());
+      final ChannelPromise channelPromise = this.newPromise();
+      this.channelOutboundInvoker.close(channelPromise);
+      maybeThrow(channelPromise.cause());
     }
+  }
+
+  private static final void maybeThrow(final Throwable cause) throws IOException {
+    if (cause == null) {
+      return;
+    } else if (cause instanceof RuntimeException) {
+      throw (RuntimeException)cause;
+    } else if (cause instanceof IOException) {
+      throw (IOException)cause;
+    } else if (cause instanceof Exception) {
+      throw new IOException(cause.getMessage(), cause);
+    } else if (cause instanceof Error) {
+      throw (Error)cause;
+    } else {
+      throw new InternalError();
+    }
+  }
+
+  private static final boolean isClosed(final ChannelPromise channelPromise) {
+    return isClosed(channelPromise.channel());
+  }
+  
+  private static final boolean isClosed(final Channel channel) {
+    return channel == null || !channel.isOpen() || channel.closeFuture().isDone();
   }
 
 }

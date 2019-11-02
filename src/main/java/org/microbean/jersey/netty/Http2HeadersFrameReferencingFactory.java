@@ -17,34 +17,23 @@
 package org.microbean.jersey.netty;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
+import javax.inject.Provider;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
+import javax.ws.rs.core.GenericType;
 
-import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http2.Http2HeadersFrame;
 
-import io.netty.handler.codec.http.HttpRequest;
+import org.glassfish.jersey.internal.inject.ReferencingFactory;
 
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
+import org.glassfish.jersey.internal.util.collection.Ref;
 
-@Path("/hork")
-@Singleton
-public class Hork {
+final class Http2HeadersFrameReferencingFactory extends ReferencingFactory<Http2HeadersFrame> {
 
-  @Inject
-  private ChannelHandlerContext channelHandlerContext;
+  static final GenericType<Ref<Http2HeadersFrame>> genericRefType = new GenericType<Ref<Http2HeadersFrame>>() {};
   
-  public Hork() {
-    super();
+  @Inject
+  private Http2HeadersFrameReferencingFactory(final Provider<Ref<Http2HeadersFrame>> provider) {
+    super(provider);
   }
-
-  @GET
-  @Path("/")
-  public String hork() {
-    assertNotNull(channelHandlerContext);
-    return "blatz";
-  }
-
+  
 }

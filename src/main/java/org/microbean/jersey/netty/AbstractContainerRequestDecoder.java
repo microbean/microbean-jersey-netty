@@ -16,12 +16,14 @@
  */
 package org.microbean.jersey.netty;
 
+import java.lang.reflect.Type;
+
 import java.net.URI;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.ws.rs.core.SecurityContext;
@@ -37,7 +39,7 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 
 import org.glassfish.jersey.internal.PropertiesDelegate;
 
-import org.glassfish.jersey.internal.inject.Bindings;
+import org.glassfish.jersey.internal.util.collection.Ref;
 
 import org.glassfish.jersey.server.ContainerRequest;
 
@@ -80,13 +82,18 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   
   private static final Logger logger = Logger.getLogger(cn);
 
+  private static final Type channelHandlerContextRefType = ChannelHandlerContextReferencingFactory.genericRefType.getType();
+  
 
   /*
    * Instance fields.
    */
 
+  
   private final Class<H> headersClass;
 
+  private final Type headersClassRefType;
+  
   private final Class<D> dataClass;
   
   private final URI baseUri;
@@ -94,7 +101,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   private TerminableByteBufInputStream terminableByteBufInputStream;
   
   private ContainerRequest containerRequestUnderConstruction;
-
+  
 
   /*
    * Constructors.
@@ -124,6 +131,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
     this.headersClass = Objects.requireNonNull(headersClass);
+    this.headersClassRefType = new ParameterizedType(Ref.class, headersClass);
     this.dataClass = Objects.requireNonNull(dataClass);
   }
 
@@ -131,8 +139,50 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   /*
    * Instance methods.
    */
-  
 
+
+  /**
+   * Overrides the {@link
+   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}
+   * method to {@linkplain ChannelHandlerContext#read() request a
+   * read} when necessary, taking {@linkplain
+   * ChannelConfig#isAutoRead() the auto-read status of the associated
+   * <code>Channel</code>} into account.
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelHandlerContext}
+   * is {@code null}
+   */
+  @Override
+  public void channelReadComplete(final ChannelHandlerContext channelHandlerContext)
+    throws Exception {
+    super.channelReadComplete(channelHandlerContext);
+    if (this.containerRequestUnderConstruction != null &&
+        !channelHandlerContext.channel().config().isAutoRead()) {
+      channelHandlerContext.read();
+    }
+  }
+
+  /**
+   * Returns {@code true} if the supplied {@code message} is an
+   * instance of either the {@linkplain
+   * #AbstractContainerRequestDecoder(URI, Class, Class) headers type
+   * or data type supplied at construction time}, and {@code false} in
+   * all other cases.
+   *
+   * @param message the message to interrogate; may be {@code null} in
+   * which case {@code false} will be returned
+   *
+   * @return {@code true} if the supplied {@code message} is an
+   * instance of either the {@linkplain
+   * #AbstractContainerRequestDecoder(URI, Class, Class) headers type
+   * or data type supplied at construction time}; {@code false} in all
+   * other cases
+   *
+   * @see #AbstractContainerRequestDecoder(URI, Class, Class)
+   */
   @Override
   public boolean acceptInboundMessage(final Object message) {
     return this.headersClass.isInstance(message) || this.dataClass.isInstance(message);
@@ -224,7 +274,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
 
   /**
    * Installs the supplied {@code message} into the supplied {@link
-   * ContainerRequest}.
+   * ContainerRequest} in some way.
    *
    * <p>This implementation calls {@link
    * ContainerRequest#setProperty(String, Object)} with the
@@ -232,6 +282,10 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    * headers class supplied at construction time as the key, and the
    * supplied {@code message} as the value.</p>
    *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; will not be {@code null}; supplied for convenience;
+   * overrides may (and often do) ignore this parameter
+   * 
    * @param message the message to install; will not be {@code null}
    * and is guaranteed to be a {@linkplain #isHeaders(Object)
    * "headers" message}
@@ -240,7 +294,9 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    * ContainerRequest} into which to install the supplied {@code
    * message}; will not be {@code null}
    */
-  protected void installMessage(final H message, final ContainerRequest containerRequest) {
+  protected void installMessage(final ChannelHandlerContext channelHandlerContext,
+                                final H message,
+                                final ContainerRequest containerRequest) {
     containerRequest.setProperty(this.headersClass.getName(), message);
   }
 
@@ -347,10 +403,24 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                  method,
                                  securityContext == null ? new SecurityContextAdapter() : securityContext,
                                  propertiesDelegate == null ? new MapBackedPropertiesDelegate() : propertiesDelegate);
-          this.installMessage(headersMessage, containerRequest);
+          this.installMessage(channelHandlerContext, headersMessage, containerRequest);
           containerRequest.setRequestScopedInitializer(injectionManager -> {
-              injectionManager.register(Bindings.service(headersMessage).to(this.headersClass));
-              injectionManager.register(Bindings.service(channelHandlerContext).to(ChannelHandlerContext.class));
+              // See JerseyChannelInitializer, where the factories of
+              // factories that produce references of the things we're
+              // interested in are installed.  Here, in request scope
+              // itself, we set the actual target of those references.
+              // This is apparently the proper way to do this sort of
+              // thing in Jersey (!) and examples of this pattern show
+              // up throughout its codebase.  With jaw somewhat agape,
+              // we follow suit.
+              final Ref<ChannelHandlerContext> channelHandlerContextRef = injectionManager.getInstance(channelHandlerContextRefType);
+              if (channelHandlerContextRef != null) {
+                channelHandlerContextRef.set(channelHandlerContext);
+              }
+              final Ref<H> headersRef = injectionManager.getInstance(this.headersClassRefType);
+              if (headersRef != null) {
+                headersRef.set(headersMessage);
+              }
             });
           if (this.isLast(message)) {
             out.add(containerRequest);
@@ -368,22 +438,30 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
       final ByteBuf content = this.getContent(dataMessage);
       if (content == null || content.readableBytes() <= 0) {
         if (this.isLast(message)) {
-          if (this.containerRequestUnderConstruction == null) {
-            if (this.terminableByteBufInputStream != null) {
-              throw new IllegalStateException("this.containerRequestUnderConstruction == null && this.terminableByteBufInputStream != null: " + this.terminableByteBufInputStream);
+          if (this.terminableByteBufInputStream == null) {
+            if (this.containerRequestUnderConstruction == null) {
+              // Do nothing; this is a final, zero-content message and
+              // we already dealt with the previous headers message
+              // component.
+            } else {
+              out.add(this.containerRequestUnderConstruction);
+              this.containerRequestUnderConstruction = null;
             }
+          } else if (this.containerRequestUnderConstruction == null) {
+            throw new IllegalStateException("this.containerRequestUnderConstruction == null && this.terminableByteBufInputStream != null: " + this.terminableByteBufInputStream);
           } else {
             out.add(this.containerRequestUnderConstruction);
             this.containerRequestUnderConstruction = null;
-          }
-          if (this.terminableByteBufInputStream != null) {
             this.terminableByteBufInputStream.terminate();
             this.terminableByteBufInputStream = null;
           }
         } else if (this.containerRequestUnderConstruction == null) {
           throw new IllegalStateException("this.containerRequestUnderConstruction == null");
         } else {
-          // We got an empty chunk in the middle for some reason; just skip it
+          // We got an empty chunk in the middle of the stream.
+          // Ignore it.  Note that
+          // #channelReadComplete(ChannelHandlerContext) will take
+          // care of auto-read-or-not situations.
         }
       } else if (this.containerRequestUnderConstruction == null) {
         throw new IllegalStateException("this.containerRequestUnderConstruction == null");
@@ -428,6 +506,79 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    */
   protected TerminableByteBufInputStream createTerminableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
     return new TerminableByteBufInputStream(byteBufAllocator);
+  }
+
+
+  /*
+   * Inner and nested classes.
+   */
+
+  
+  private static final class ParameterizedType implements java.lang.reflect.ParameterizedType {
+
+    private final Type rawType;
+    
+    private final Type[] actualTypeArguments;
+
+    private ParameterizedType(final Type rawType, final Type... actualTypeArguments) {
+      super();
+      this.rawType = rawType;
+      this.actualTypeArguments = actualTypeArguments;
+    }
+
+    @Override
+    public final Type[] getActualTypeArguments() {
+      return this.actualTypeArguments;
+    }
+
+    @Override
+    public final Type getRawType() {
+      return this.rawType;
+    }
+
+    @Override
+    public final Type getOwnerType() {
+      return null;
+    }
+
+    @Override
+    public int hashCode() {
+      final Object rawType = this.getRawType();
+      final int actualTypeArgumentsHashCode = Arrays.hashCode(this.getActualTypeArguments());
+      return rawType == null ? actualTypeArgumentsHashCode : actualTypeArgumentsHashCode ^ rawType.hashCode();
+    }
+    
+    @Override
+    public final boolean equals(final Object other) {
+      if (other == this) {
+        return true;
+      } else if (other instanceof java.lang.reflect.ParameterizedType) {
+        final java.lang.reflect.ParameterizedType her = (java.lang.reflect.ParameterizedType)other;
+
+        final Object rawType = this.getRawType();
+        if (rawType == null) {
+          if (her.getRawType() != null) {
+            return false;
+          }
+        } else if (!rawType.equals(her.getRawType())) {
+          return false;
+        }
+
+        final Object[] actualTypeArguments = this.getActualTypeArguments();
+        if (actualTypeArguments == null) {
+          if (her.getActualTypeArguments() != null) {
+            return false;
+          }
+        } else if (!Arrays.equals(actualTypeArguments, her.getActualTypeArguments())) {
+          return false;
+        }
+        
+        return true;
+      } else {
+        return false;
+      }
+    }
+    
   }
   
 }

@@ -30,13 +30,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.UnaryOperator;
 
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundInvoker; // for javadoc only
-import io.netty.channel.ChannelPromise;
 
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerException;
@@ -104,10 +102,12 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
 
   private final ByteBufCreator byteBufCreator;
 
+  
   /*
    * Constructors.
    */
 
+  
   /**
    * Creates a new {@link
    * AbstractContainerRequestHandlingResponseWriter}.
@@ -174,11 +174,15 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    *
    * @see #createOutputStream(long, ContainerResponse)
    */
-  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
+  protected AbstractContainerRequestHandlingResponseWriter(ApplicationHandler applicationHandler,
                                                            final int flushThreshold,
                                                            final ByteBufCreator byteBufCreator) {
     super();
-    this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
+    if (applicationHandler == null) {
+      applicationHandler = new ApplicationHandler();
+    }
+    
+    this.applicationHandler = applicationHandler;    
     this.flushThreshold = Math.max(0, flushThreshold);
     this.byteBufCreator = byteBufCreator;
   }
@@ -188,6 +192,16 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * Instance methods.
    */
 
+
+  
+  public final void channelActive(final ChannelHandlerContext channelHandlerContext) throws Exception {
+    super.channelActive(channelHandlerContext);
+    // See
+    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413
+    if (!channelHandlerContext.channel().config().isAutoRead()) {
+      channelHandlerContext.read();
+    }
+  }
 
   /**
    * If the supplied {@code message} is a {@link ContainerRequest}
@@ -208,6 +222,11 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    *
    * @exception NullPointerException if {@code channelHandlerContext}
    * is {@code null}
+   *
+   * @exception Exception if {@code message} is not an instance of
+   * {@link ContainerRequest} and {@link
+   * ChannelInboundHandlerAdapter#channelRead(ChannelHandlerContext,
+   * Object)} throws an {@link Exception}
    *
    * @see ApplicationHandler#handle(ContainerRequest)
    *
@@ -254,8 +273,24 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    */
   @Override
   public final void channelReadComplete(final ChannelHandlerContext channelHandlerContext) throws Exception {
-    Objects.requireNonNull(channelHandlerContext).flush();
+    channelHandlerContext.flush();
+    // See
+    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413.
     super.channelReadComplete(channelHandlerContext);
+    if (!channelHandlerContext.channel().config().isAutoRead()) {
+      // Ultimately a read is just an idempotent call so even if other
+      // handlers do this seemingly nothing bad will happen.  See
+      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport/src/main/java/io/netty/channel/nio/AbstractNioChannel.java#L402-L416.
+      // Even in the ancient case of blocking IO it's still
+      // idempotent:
+      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport/src/main/java/io/netty/channel/oio/AbstractOioChannel.java#L101-L109
+      // Finally, Epoll is less clear:
+      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242
+      // ...but it too ultimately is idempotent:
+      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242
+      
+      channelHandlerContext.read();
+    }
   }
 
   /**
@@ -476,6 +511,14 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    */
   protected final ByteBufCreator getByteBufCreator() {
     return this.byteBufCreator;
+  }
+
+  @Override
+  public void commit() {
+    final ChannelHandlerContext channelHandlerContext = this.getChannelHandlerContext();
+    if (!channelHandlerContext.channel().config().isAutoRead()) {
+      channelHandlerContext.read();
+    }
   }
   
   @Override

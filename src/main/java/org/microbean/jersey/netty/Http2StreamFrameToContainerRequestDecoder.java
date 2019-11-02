@@ -18,11 +18,7 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
-import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 
 import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2HeadersFrame;

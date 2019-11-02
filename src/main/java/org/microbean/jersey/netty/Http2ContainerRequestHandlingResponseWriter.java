@@ -16,8 +16,6 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.OutputStream;
-
 import java.util.Objects;
 
 import javax.ws.rs.HttpMethod;
@@ -25,13 +23,9 @@ import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response.Status;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
-
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2DataFrame; // for javadoc only
@@ -40,8 +34,6 @@ import io.netty.handler.codec.http2.Http2HeadersFrame; // for javadoc only
 
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerResponse;
-
-import org.glassfish.jersey.server.spi.ContainerResponseWriter; // for javadoc only
 
 import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;
 
@@ -204,20 +196,6 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
                                                                          false,
                                                                          this.getByteBufCreator());
     return returnValue;
-  }
-
-  /**
-   * Overrides {@link ContainerResponseWriter#commit()} to do nothing
-   * when invoked since the {@link
-   * AbstractChannelOutboundInvokingOutputStream} returned by {@link
-   * #createOutputStream(long, ContainerResponse)} handles committing
-   * the response.
-   *
-   * @see #createOutputStream(long, ContainerResponse)
-   */
-  @Override
-  public final void commit() {
-    // No-op
   }
 
   /**

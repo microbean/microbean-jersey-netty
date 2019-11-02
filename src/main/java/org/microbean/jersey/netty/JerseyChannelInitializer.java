@@ -32,12 +32,11 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.SimpleChannelInboundHandler;
 
-import io.netty.handler.codec.http.HttpServerCodec;
-
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
 import io.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
@@ -49,6 +48,7 @@ import io.netty.handler.codec.http2.CleartextHttp2ServerUpgradeHandler;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2FrameCodec;
 import io.netty.handler.codec.http2.Http2FrameCodecBuilder;
+import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2MultiplexHandler;
 import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 
@@ -59,6 +59,12 @@ import io.netty.handler.ssl.SslHandler;
 
 import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
+
+import org.glassfish.jersey.internal.inject.Bindings;
+import org.glassfish.jersey.internal.inject.InjectionManager;
+import org.glassfish.jersey.internal.inject.ReferencingFactory;
+
+import org.glassfish.jersey.process.internal.RequestScoped;
 
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerRequest; // for javadoc only
@@ -552,7 +558,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                   final boolean http2Support,
                                   final long maxIncomingContentLength,
                                   final EventExecutorGroup jerseyEventExecutorGroup,
-                                  final ApplicationHandler applicationHandler,
+                                  ApplicationHandler applicationHandler,
                                   final int flushThreshold,
                                   final ByteBufCreator byteBufCreator) {
     super();
@@ -573,6 +579,41 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors()); // no idea how to size this
     } else {
       this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
+    }
+    if (applicationHandler == null) {
+      applicationHandler = new ApplicationHandler();
+    }
+    // The idiom you see before you is apparently the right and only
+    // way to install non-proxiable objects into request scope: you
+    // install a factory that makes factories of mutable references
+    // that produce the object you want, then elsewhere set the
+    // payload of those references when you're actually in request
+    // scope.  Really.  You'll find this pattern throughout the Jersey
+    // codebase.  We follow suit here.
+    final InjectionManager injectionManager = applicationHandler.getInjectionManager();
+    assert injectionManager != null;
+    injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
+                                .to(ChannelHandlerContext.class)
+                                .proxy(false)
+                                .in(RequestScoped.class));
+    injectionManager.register(Bindings.supplier(ReferencingFactory.<ChannelHandlerContext>referenceFactory())
+                                .to(ChannelHandlerContextReferencingFactory.genericRefType)
+                                .in(RequestScoped.class));    
+    injectionManager.register(Bindings.supplier(HttpRequestReferencingFactory.class)
+                                .to(HttpRequest.class)
+                                .proxy(false)
+                                .in(RequestScoped.class));
+    injectionManager.register(Bindings.supplier(ReferencingFactory.<HttpRequest>referenceFactory())
+                                .to(HttpRequestReferencingFactory.genericRefType)
+                                .in(RequestScoped.class));
+    if (http2Support) {
+      injectionManager.register(Bindings.supplier(Http2HeadersFrameReferencingFactory.class)
+                                  .to(Http2HeadersFrame.class)
+                                  .proxy(false)
+                                  .in(RequestScoped.class));
+      injectionManager.register(Bindings.supplier(ReferencingFactory.<Http2HeadersFrame>referenceFactory())
+                                  .to(Http2HeadersFrameReferencingFactory.genericRefType)
+                                  .in(RequestScoped.class));
     }
     this.applicationHandler = applicationHandler;
     this.flushThreshold = Math.max(0, flushThreshold);

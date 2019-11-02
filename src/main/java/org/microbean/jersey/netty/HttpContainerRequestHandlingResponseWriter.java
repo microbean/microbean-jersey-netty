@@ -289,6 +289,7 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
   @Override
   public final void commit() {
     this.httpVersion = null;
+    super.commit();
   }
 
   /**
