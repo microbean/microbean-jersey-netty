@@ -170,7 +170,33 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    */
   
 
-  
+  /**
+   * Writes the status and headers portion of the response present in
+   * the supplied {@link ContainerResponse} and returns {@code true}
+   * if further output is forthcoming.
+   *
+   * <p>This implementation writes an instance of either {@link
+   * DefaultHttpResponse} or {@link DefaultFullHttpResponse}.</p>
+   *
+   * @param contentLength the content length as determined by the
+   * logic encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method; a value less
+   * than zero indicates an unknown content length
+   *
+   * @param containerResponse the {@link ContainerResponse} containing
+   * status and headers information; must not be {@code null}
+   *
+   * @return {@code true} if the {@link #createOutputStream(long,
+   * ContainerResponse)} method should be invoked, <em>i.e.</em> if
+   * further output is forthcoming
+   *
+   * @exception NullPointerException if {@code containerResponse} is
+   * {@code null}
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #createOutputStream(long, ContainerResponse) 
+   */  
   @Override
   protected final boolean writeStatusAndHeaders(final long contentLength,
                                                 final ContainerResponse containerResponse) {

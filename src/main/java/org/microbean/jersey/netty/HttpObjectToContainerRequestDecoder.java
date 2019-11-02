@@ -28,6 +28,7 @@ import io.netty.buffer.ByteBufHolder;
 
 import io.netty.channel.ChannelHandlerContext; // for javadoc only
 
+import io.netty.handler.codec.http.FullHttpMessage;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpObject;
@@ -130,13 +131,15 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    *
    * <ul>
    *
-   * <li>{@code httpObject} is an instance of {@link HttpRequest} and
-   * its associated {@linkplain HttpUtil#getContentLength(HttpMessage,
-   * long) content length} is greater than {@code 0L} or its
-   * {@linkplain HttpUtil#isTransferEncodingChunked(HttpMessage)
-   * transfer encoding is chunked}, or</li>
+   * <li>{@code httpObject} is an instance of {@link FullHttpMessage},
+   * or</li>
    *
-   * <li>{@code httpObject} is an instance of {@link LastHttpContent}</li>
+   * <li>{@code httpObject} is an instance of {@link HttpMessage} and
+   * its {@linkplain HttpUtil#getContentLength(HttpMessage, long)
+   * content length} equals {@code 0L}, or</li>
+   *
+   * <li>{@code httpObject} is an instance of {@link
+   * LastHttpContent}</li>
    *
    * </ul>
    *
@@ -149,11 +152,10 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
   @Override
   protected final boolean isLast(final HttpObject httpObject) {
     final boolean returnValue;
-    if (httpObject instanceof HttpRequest) {
-      final HttpMessage message = (HttpMessage)httpObject;
-      returnValue =
-        HttpUtil.getContentLength(message, -1L) > 0L ||
-        HttpUtil.isTransferEncodingChunked(message);
+    if (httpObject instanceof FullHttpMessage) {
+      returnValue = true;
+    } else if (httpObject instanceof HttpMessage) {
+      returnValue = HttpUtil.getContentLength((HttpMessage)httpObject, -1L) == 0L;
     } else {
       returnValue = httpObject instanceof LastHttpContent;
     }

@@ -182,7 +182,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * {@code null} somewhat pathologically
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -235,7 +235,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * null} somewhat pathologically but normally is not
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -286,7 +286,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * {@code null} somewhat pathologically
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -318,6 +318,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          http2Support,
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
+         true, /* use Jersey injection */
          jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication),
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
@@ -347,7 +348,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * null} somewhat pathologically but normally is not
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -379,6 +380,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          http2Support,
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
+         true, /* use Jersey injection */
          applicationHandler,
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
@@ -470,6 +472,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          http2Support,
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
+         true, /* use Jersey injection */
          jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication),
          flushThreshold,
          byteBufCreator);
@@ -533,6 +536,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * <code>AbstractContainerRequestHandlingResponseWriter</code>}
    * implementation; may be {@code null}
    *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * @see ContainerRequest
    *
    * @see SslContext
@@ -558,6 +564,110 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                   final boolean http2Support,
                                   final long maxIncomingContentLength,
                                   final EventExecutorGroup jerseyEventExecutorGroup,
+                                  final ApplicationHandler applicationHandler,
+                                  final int flushThreshold,
+                                  final ByteBufCreator byteBufCreator) {
+    this(baseUri,
+         sslContext,
+         http2Support,
+         maxIncomingContentLength,
+         jerseyEventExecutorGroup,
+         true, /* use Jersey injection */
+         applicationHandler,
+         flushThreshold,
+         byteBufCreator);
+  }
+
+   /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param sslContext an {@link SslContext}; may be {@code null} in
+   * which case network communications will occur in plain text
+   *
+   * @param http2Support if HTTP/2 support (including upgrades, prior
+   * knowledge, h2c, etc.) should be enabled
+   *
+   * @param maxIncomingContentLength in the case of HTTP to HTTP/2
+   * upgrades, a {@code long} that governs the maximum permitted
+   * incoming entity length in bytes; if less than {@code 0} then
+   * {@link Long#MAX_VALUE} will be used instead; if exactly {@code 0}
+   * then if the HTTP message containing the upgrade header is
+   * something like a {@code POST} it will be rejected with a {@code
+   * 413} error code; ignored entirely if {@code http2Support} is
+   * {@code false}
+   *
+   * @param jerseyEventExecutorGroup an {@link EventExecutorGroup}
+   * that will manage the thread on which an {@link
+   * ApplicationHandler#handle(ContainerRequest)} call will occur; may
+   * be {@code null} in which case a new {@link
+   * DefaultEventExecutorGroup} will be used instead
+   *
+   * @param useJerseyInjection if {@code true} then certain Netty
+   * constructs like {@link ChannelHandlerContext} will be made
+   * available for dependency injection in user applications using
+   * Jersey's native dependency injection facilities; if {@code false}
+   * then these facilities will not be used or referenced
+   *
+   * @param applicationHandler an {@link ApplicationHandler}
+   * representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}
+   * returned by an implementation of the {@link
+   * AbstractContainerRequestHandlingResponseWriter#createOutputStream(long,
+   * ContainerResponse)} method must write before an automatic
+   * {@linkplain
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()
+   * flush} may take place; if less than {@code 0} {@code 0} will be
+   * used instead; if {@link Integer#MAX_VALUE} then it is suggested
+   * that no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that will be
+   * {@linkplain
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * passed to an
+   * <code>AbstractContainerRequestHandlingResponseWriter</code>}
+   * implementation; may be {@code null}
+   *
+   * @see ContainerRequest
+   *
+   * @see SslContext
+   *
+   * @see
+   * HttpServerUpgradeHandler#HttpServerUpgradeHandler(SourceCodec,
+   * UpgradeCodecFactory, int)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see AbstractContainerRequestHandlingResponseWriter
+   *
+   * @see HttpObjectToContainerRequestDecoder
+   *
+   * @see HttpContainerRequestHandlingResponseWriter
+   *
+   * @see Http2StreamFrameToContainerRequestDecoder
+   *
+   * @see Http2ContainerRequestHandlingResponseWriter
+   */
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final boolean http2Support,
+                                  final long maxIncomingContentLength,
+                                  final EventExecutorGroup jerseyEventExecutorGroup,
+                                  final boolean useJerseyInjection,
                                   ApplicationHandler applicationHandler,
                                   final int flushThreshold,
                                   final ByteBufCreator byteBufCreator) {
@@ -583,37 +693,39 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     if (applicationHandler == null) {
       applicationHandler = new ApplicationHandler();
     }
-    // The idiom you see before you is apparently the right and only
-    // way to install non-proxiable objects into request scope: you
-    // install a factory that makes factories of mutable references
-    // that produce the object you want, then elsewhere set the
-    // payload of those references when you're actually in request
-    // scope.  Really.  You'll find this pattern throughout the Jersey
-    // codebase.  We follow suit here.
-    final InjectionManager injectionManager = applicationHandler.getInjectionManager();
-    assert injectionManager != null;
-    injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
-                                .to(ChannelHandlerContext.class)
-                                .proxy(false)
-                                .in(RequestScoped.class));
-    injectionManager.register(Bindings.supplier(ReferencingFactory.<ChannelHandlerContext>referenceFactory())
-                                .to(ChannelHandlerContextReferencingFactory.genericRefType)
-                                .in(RequestScoped.class));    
-    injectionManager.register(Bindings.supplier(HttpRequestReferencingFactory.class)
-                                .to(HttpRequest.class)
-                                .proxy(false)
-                                .in(RequestScoped.class));
-    injectionManager.register(Bindings.supplier(ReferencingFactory.<HttpRequest>referenceFactory())
-                                .to(HttpRequestReferencingFactory.genericRefType)
-                                .in(RequestScoped.class));
-    if (http2Support) {
-      injectionManager.register(Bindings.supplier(Http2HeadersFrameReferencingFactory.class)
-                                  .to(Http2HeadersFrame.class)
+    if (useJerseyInjection) {
+      // The idiom you see before you is apparently the right and only
+      // way to install non-proxiable objects into request scope: you
+      // install a factory that makes factories of mutable references
+      // that produce the object you want, then elsewhere set the
+      // payload of those references when you're actually in request
+      // scope.  Really.  You'll find this pattern throughout the Jersey
+      // codebase.  We follow suit here.
+      final InjectionManager injectionManager = applicationHandler.getInjectionManager();
+      assert injectionManager != null;
+      injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
+                                  .to(ChannelHandlerContext.class)
                                   .proxy(false)
                                   .in(RequestScoped.class));
-      injectionManager.register(Bindings.supplier(ReferencingFactory.<Http2HeadersFrame>referenceFactory())
-                                  .to(Http2HeadersFrameReferencingFactory.genericRefType)
+      injectionManager.register(Bindings.supplier(ReferencingFactory.<ChannelHandlerContext>referenceFactory())
+                                  .to(ChannelHandlerContextReferencingFactory.genericRefType)
+                                  .in(RequestScoped.class));    
+      injectionManager.register(Bindings.supplier(HttpRequestReferencingFactory.class)
+                                  .to(HttpRequest.class)
+                                  .proxy(false)
                                   .in(RequestScoped.class));
+      injectionManager.register(Bindings.supplier(ReferencingFactory.<HttpRequest>referenceFactory())
+                                  .to(HttpRequestReferencingFactory.genericRefType)
+                                  .in(RequestScoped.class));
+      if (http2Support) {
+        injectionManager.register(Bindings.supplier(Http2HeadersFrameReferencingFactory.class)
+                                    .to(Http2HeadersFrame.class)
+                                    .proxy(false)
+                                    .in(RequestScoped.class));
+        injectionManager.register(Bindings.supplier(ReferencingFactory.<Http2HeadersFrame>referenceFactory())
+                                    .to(Http2HeadersFrameReferencingFactory.genericRefType)
+                                    .in(RequestScoped.class));
+      }
     }
     this.applicationHandler = applicationHandler;
     this.flushThreshold = Math.max(0, flushThreshold);

@@ -50,7 +50,8 @@ import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOu
  * An abstract {@link ChannelInboundHandlerAdapter} that is also a
  * {@link ContainerResponseWriter} that processes incoming {@link
  * ContainerRequest} events, such as those dispatched by an {@link
- * AbstractContainerRequestDecoder}.
+ * AbstractContainerRequestDecoder}, by supplying them to the {@link
+ * ApplicationHandler#handle(ContainerRequest)} method.
  *
  * <p>Instances of this class are in charge of properly invoking
  * {@link ApplicationHandler#handle(ContainerRequest)}, thus adapting
@@ -58,12 +59,20 @@ import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOu
  * target="_parent">Jersey</a> to <a href="https://netty.io/"
  * target="_parent">Netty</a>'s constraints and vice versa.</p>
  *
+ * @param <T> the type of message that will be written by instances of
+ * this class; see {@link #createOutputStream(long,
+ * ContainerResponse)}
+ *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
  *
  * @see #channelRead(ChannelHandlerContext, Object)
+ *
+ * @see #createOutputStream(long, ContainerResponse)
  * 
  * @see ChannelInboundHandlerAdapter
+ *
+ * @see ApplicationHandler#handle(ContainerRequest)
  *
  * @see ContainerResponseWriter
  */
@@ -181,7 +190,6 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
     if (applicationHandler == null) {
       applicationHandler = new ApplicationHandler();
     }
-    
     this.applicationHandler = applicationHandler;    
     this.flushThreshold = Math.max(0, flushThreshold);
     this.byteBufCreator = byteBufCreator;
@@ -191,7 +199,6 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
   /*
    * Instance methods.
    */
-
 
   
   public final void channelActive(final ChannelHandlerContext channelHandlerContext) throws Exception {
@@ -515,10 +522,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
 
   @Override
   public void commit() {
-    final ChannelHandlerContext channelHandlerContext = this.getChannelHandlerContext();
-    if (!channelHandlerContext.channel().config().isAutoRead()) {
-      channelHandlerContext.read();
-    }
+
   }
   
   @Override

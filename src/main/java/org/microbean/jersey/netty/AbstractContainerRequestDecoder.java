@@ -32,7 +32,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufHolder;
 
+import io.netty.channel.ChannelConfig; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter; // for javadoc only
 import io.netty.channel.ChannelPipeline; // for javadoc only
 
 import io.netty.handler.codec.MessageToMessageDecoder;
@@ -154,6 +156,11 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    *
    * @exception NullPointerException if {@code channelHandlerContext}
    * is {@code null}
+   *
+   * @see ChannelConfig#isAutoRead()
+   *
+   * @see
+   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)
    */
   @Override
   public void channelReadComplete(final ChannelHandlerContext channelHandlerContext)
@@ -297,6 +304,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   protected void installMessage(final ChannelHandlerContext channelHandlerContext,
                                 final H message,
                                 final ContainerRequest containerRequest) {
+    containerRequest.setProperty(ChannelHandlerContext.class.getName(), channelHandlerContext);
     containerRequest.setProperty(this.headersClass.getName(), message);
   }
 
