@@ -134,7 +134,7 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    * <li>{@code httpObject} is an instance of {@link FullHttpMessage},
    * or</li>
    *
-   * <li>{@code httpObject} is an instance of {@link HttpMessage} and
+   * <li>{@code httpObject} is an instance of {@link HttpRequest} and
    * its {@linkplain HttpUtil#getContentLength(HttpMessage, long)
    * content length} equals {@code 0L}, or</li>
    *
@@ -153,9 +153,12 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
   protected final boolean isLast(final HttpObject httpObject) {
     final boolean returnValue;
     if (httpObject instanceof FullHttpMessage) {
+      // (Also a LastHttpContent, by definition.)
       returnValue = true;
-    } else if (httpObject instanceof HttpMessage) {
-      returnValue = HttpUtil.getContentLength((HttpMessage)httpObject, -1L) == 0L;
+    } else if (httpObject instanceof HttpRequest) {
+      // (Not capable of being a FullHttpMessage or a LastHttpContent,
+      // by definition and ordering of this if/then block.)
+      returnValue = HttpUtil.getContentLength((HttpRequest)httpObject, -1L) == 0L;
     } else {
       returnValue = httpObject instanceof LastHttpContent;
     }
