@@ -20,9 +20,6 @@ import java.net.URI;
 
 import java.util.List; // for javadoc only
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 
@@ -49,16 +46,6 @@ import org.glassfish.jersey.server.ContainerRequest;
  * @see #decode(ChannelHandlerContext, Object, List)
  */
 public final class HttpObjectToContainerRequestDecoder extends AbstractContainerRequestDecoder<HttpObject, HttpRequest, HttpContent> {
-
-
-  /*
-   * Static fields.
-   */
-
-  
-  private static final String cn = HttpObjectToContainerRequestDecoder.class.getName();
-  
-  private static final Logger logger = Logger.getLogger(cn);
 
 
   /*
@@ -131,15 +118,12 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    *
    * <ul>
    *
-   * <li>{@code httpObject} is an instance of {@link FullHttpMessage},
+   * <li>{@code httpObject} is an instance of {@link LastHttpContent},
    * or</li>
    *
    * <li>{@code httpObject} is an instance of {@link HttpRequest} and
    * its {@linkplain HttpUtil#getContentLength(HttpMessage, long)
-   * content length} equals {@code 0L}, or</li>
-   *
-   * <li>{@code httpObject} is an instance of {@link
-   * LastHttpContent}</li>
+   * content length} equals {@code 0L}</li>
    *
    * </ul>
    *
@@ -151,18 +135,7 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    */
   @Override
   protected final boolean isLast(final HttpObject httpObject) {
-    final boolean returnValue;
-    if (httpObject instanceof FullHttpMessage) {
-      // (Also a LastHttpContent, by definition.)
-      returnValue = true;
-    } else if (httpObject instanceof HttpRequest) {
-      // (Not capable of being a FullHttpMessage or a LastHttpContent,
-      // by definition and ordering of this if/then block.)
-      returnValue = HttpUtil.getContentLength((HttpRequest)httpObject, -1L) == 0L;
-    } else {
-      returnValue = httpObject instanceof LastHttpContent;
-    }
-    return returnValue;
+    return httpObject instanceof LastHttpContent || (httpObject instanceof HttpRequest && HttpUtil.getContentLength((HttpRequest)httpObject, -1L) == 0L);
   }
 
 }

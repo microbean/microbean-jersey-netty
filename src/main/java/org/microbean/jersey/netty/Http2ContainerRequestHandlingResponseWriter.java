@@ -16,13 +16,20 @@
  */
 package org.microbean.jersey.netty;
 
+import java.io.IOException;
+
 import java.util.Objects;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.ws.rs.HttpMethod;
 
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response.Status;
 
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
@@ -31,6 +38,9 @@ import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2DataFrame; // for javadoc only
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersFrame; // for javadoc only
+
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerResponse;
@@ -53,14 +63,26 @@ import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOu
  *
  * @see #createOutputStream(long, ContainerResponse)
  */
-public class Http2ContainerRequestHandlingResponseWriter extends AbstractContainerRequestHandlingResponseWriter<Http2DataFrame> {
+public final class Http2ContainerRequestHandlingResponseWriter extends AbstractContainerRequestHandlingResponseWriter<Http2DataFrame> {
+
+
+  /*
+   * Static fields.
+   */
+
+
+  private static final String cn = Http2ContainerRequestHandlingResponseWriter.class.getName();
+
+  private static final Logger logger = Logger.getLogger(cn);
+
+  private static final GenericFutureListener<? extends Future<? super Void>> listener = new LoggingWriteListener(logger);
 
 
   /*
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link Http2ContainerRequestHandlingResponseWriter}.
    *
@@ -71,7 +93,7 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
    * whose {@link ApplicationHandler#handle(ContainerRequest)} method
    * will serve as the bridge between Netty and Jersey; may be {@code
    * null} somewhat pathologically but normally is not
-   * 
+   *
    * @see ApplicationHandler
    *
    * @see ApplicationHandler#handle(ContainerRequest)
@@ -90,7 +112,7 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
    * whose {@link ApplicationHandler#handle(ContainerRequest)} method
    * will serve as the bridge between Netty and Jersey; may be {@code
    * null} somewhat pathologically but normally is not
-   * 
+   *
    * @param flushThreshold the minimum number of bytes that an {@link
    * AbstractChannelOutboundInvokingOutputStream} returned by the
    * {@link #createOutputStream(long, ContainerResponse)} method must
@@ -118,7 +140,7 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
   /*
    * Instance methods.
    */
-  
+
 
   /**
    * Writes the status and headers portion of the response present in
@@ -145,15 +167,15 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
    *
    * @see ApplicationHandler#handle(ContainerRequest)
    *
-   * @see #createOutputStream(long, ContainerResponse) 
+   * @see #createOutputStream(long, ContainerResponse)
    */
   @Override
   protected final boolean writeStatusAndHeaders(final long contentLength,
                                                 final ContainerResponse containerResponse) {
     Objects.requireNonNull(containerResponse);
-    
+
     final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-    
+
     final Http2Headers nettyHeaders = new DefaultHttp2Headers();
     copyHeaders(containerResponse.getStringHeaders(), String::toLowerCase, nettyHeaders::add);
     // See https://tools.ietf.org/html/rfc7540#section-8.1.2.4
@@ -173,13 +195,15 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
     }
 
     final Object message = new DefaultHttp2HeadersFrame(nettyHeaders, !needsOutputStream /* end of stream? */);
+
     final ChannelPromise channelPromise = channelHandlerContext.newPromise();
     assert channelPromise != null;
-    if (needsOutputStream) {
-      channelHandlerContext.write(message, channelPromise);
-    } else {
-      channelHandlerContext.writeAndFlush(message, channelPromise);
-    }
+    channelPromise.addListener(listener);
+
+    // Remember that
+    // AbstractContainerRequestHandlingResponseWriter#channelReadComplete(ChannelHandlerContext)
+    // will call ChannelHandlerContext#flush() in all cases.
+    channelHandlerContext.write(message, channelPromise);
 
     return needsOutputStream;
   }
@@ -211,18 +235,24 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
    * @see ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
    */
   @Override
-  protected AbstractChannelOutboundInvokingOutputStream<? extends Http2DataFrame> createOutputStream(final long contentLength,
-                                                                                                     final ContainerResponse containerResponse) {
-    Objects.requireNonNull(containerResponse);
+  protected final AbstractChannelOutboundInvokingOutputStream<? extends Http2DataFrame> createOutputStream(final long contentLength,
+                                                                                                           final ContainerResponse containerResponse) {
     if (contentLength == 0L) {
       throw new IllegalArgumentException("contentLength == 0L");
     }
-    final AbstractChannelOutboundInvokingOutputStream<? extends Http2DataFrame> returnValue =
-      new ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(this.getChannelHandlerContext(),
-                                                                         this.getFlushThreshold(),
-                                                                         false,
-                                                                         this.getByteBufCreator());
-    return returnValue;
+    return new ByteBufBackedChannelOutboundInvokingHttp2DataFrameOutputStream(this.getChannelHandlerContext(),
+                                                                              this.getFlushThreshold(),
+                                                                              false,
+                                                                              this.getByteBufCreator()) {
+      @Override
+      protected final ChannelPromise newPromise() {
+        final ChannelPromise returnValue = super.newPromise();
+        if (returnValue != null && !returnValue.isVoid()) {
+          returnValue.addListener(listener);
+        }
+        return returnValue;
+      }
+    };
   }
 
   /**
@@ -239,7 +269,11 @@ public class Http2ContainerRequestHandlingResponseWriter extends AbstractContain
   @Override
   protected final void writeFailureMessage(final Throwable failureCause) {
     final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-    channelHandlerContext.write(new DefaultHttp2Headers().status(String.valueOf(Status.INTERNAL_SERVER_ERROR.getStatusCode())), channelHandlerContext.newPromise());
+    final ChannelPromise channelPromise = channelHandlerContext.newPromise();
+    assert channelPromise != null;
+    channelPromise.addListener(listener);
+    channelHandlerContext.write(new DefaultHttp2Headers().status(String.valueOf(Status.INTERNAL_SERVER_ERROR.getStatusCode())),
+                                channelPromise);
   }
-  
+
 }

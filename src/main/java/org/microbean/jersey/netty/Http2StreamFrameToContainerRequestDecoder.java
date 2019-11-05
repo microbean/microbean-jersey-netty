@@ -18,8 +18,6 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
-import java.util.logging.Logger;
-
 import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2StreamFrame;
@@ -37,16 +35,6 @@ import org.glassfish.jersey.server.ContainerRequest;
  * @see #decode(ChannelHandlerContext, Object, List)
  */
 public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainerRequestDecoder<Http2StreamFrame, Http2HeadersFrame, Http2DataFrame> {
-
-
-  /*
-   * Static fields.
-   */
-
-  
-  private static final String cn = Http2StreamFrameToContainerRequestDecoder.class.getName();
-  
-  private static final Logger logger = Logger.getLogger(cn);
 
 
   /*
@@ -143,8 +131,11 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
     final boolean returnValue;
     if (http2StreamFrame instanceof Http2HeadersFrame) {
       returnValue = ((Http2HeadersFrame)http2StreamFrame).isEndStream();
-    } else {
+    } else if (http2StreamFrame instanceof Http2DataFrame) {
       returnValue = ((Http2DataFrame)http2StreamFrame).isEndStream();
+    } else {
+      // Not possible in Netty 4.1 and earlier
+      returnValue = false;
     }
     return returnValue;
   }

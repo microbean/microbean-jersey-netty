@@ -16,7 +16,10 @@
  */
 package org.microbean.jersey.netty;
 
+import java.io.IOException;
 import java.io.OutputStream;
+
+import java.nio.channels.ClosedChannelException;
 
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,10 @@ import java.util.logging.Logger;
 
 import javax.ws.rs.HttpMethod;
 
+import javax.ws.rs.core.Response.StatusType;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
@@ -60,7 +67,8 @@ import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOu
  * and {@link
  * ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}s.
  *
- * @author <a href="https://about.me/lairdnelson" target="_parent">Laird Nelson</a>
+ * @author <a href="https://about.me/lairdnelson"
+ * target="_parent">Laird Nelson</a>
  *
  * @see AbstractContainerRequestHandlingResponseWriter
  *
@@ -76,24 +84,19 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
   /*
    * Static fields.
    */
-  
-  
+
+
   private static final String cn = HttpContainerRequestHandlingResponseWriter.class.getName();
-  
+
   private static final Logger logger = Logger.getLogger(cn);
 
-  private static final GenericFutureListener<? extends Future<? super Void>> listener = f -> {
-    final Throwable cause = f.cause();
-    if (cause != null && logger.isLoggable(Level.SEVERE)) {
-      logger.log(Level.SEVERE, cause.getMessage(), cause);
-    }    
-  };
+  private static final GenericFutureListener<? extends Future<? super Void>> listener = new LoggingWriteListener(logger);
 
 
   /*
    * Instance fields.
    */
-  
+
 
   /**
    * The {@link HttpVersion} currently in effect.
@@ -111,7 +114,7 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link HttpContainerRequestHandlingResponseWriter}.
    *
@@ -168,7 +171,7 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
   /*
    * Instance methods.
    */
-  
+
 
   /**
    * Writes the status and headers portion of the response present in
@@ -193,40 +196,50 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    * @exception NullPointerException if {@code containerResponse} is
    * {@code null}
    *
+   * @exception IllegalArgumentException if the supplied {@link
+   * ContainerResponse} returns {@code null} from its {@link
+   * ContainerResponse#getRequestContext()} method or if that {@link
+   * ContainerRequest} returns something that is not an {@link
+   * HttpRequest} from invoking {@link
+   * ContainerRequest#getProperty(String)
+   * getProperty("io.netty.handler.codec.http.HttpRequest")} on it
+   *
    * @see ApplicationHandler#handle(ContainerRequest)
    *
-   * @see #createOutputStream(long, ContainerResponse) 
-   */  
+   * @see #createOutputStream(long, ContainerResponse)
+   */
   @Override
   protected final boolean writeStatusAndHeaders(final long contentLength,
                                                 final ContainerResponse containerResponse) {
-    Objects.requireNonNull(containerResponse);
-    
     final ContainerRequest containerRequest = containerResponse.getRequestContext();
     if (containerRequest == null) {
       throw new IllegalArgumentException("containerResponse.getRequestContext() == null");
     }
-    
+
+    final HttpRequest httpRequest;
     final Object httpRequestValue = containerRequest.getProperty(HttpRequest.class.getName());
     if (!(httpRequestValue instanceof HttpRequest)) {
       throw new IllegalArgumentException("containerResponse; !(containerResponse.getRequestContext().getProperty(\"" +
                                          HttpRequest.class.getName() +
                                          "\") instanceof HttpRequest): " + httpRequestValue);
+    } else {
+      httpRequest = (HttpRequest)httpRequestValue;
     }
-    final HttpRequest httpRequest = (HttpRequest)httpRequestValue;
-    
-    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
 
     final HttpVersion httpVersion = httpRequest.protocolVersion();
-    assert httpVersion != null;
     this.httpVersion = httpVersion;
 
     final HttpResponseStatus status;
-    final String reasonPhrase = containerResponse.getStatusInfo().getReasonPhrase();
-    if (reasonPhrase == null) {
+    final StatusType responseStatusType = containerResponse.getStatusInfo();
+    if (responseStatusType == null) {
       status = HttpResponseStatus.valueOf(containerResponse.getStatus());
     } else {
-      status = HttpResponseStatus.valueOf(containerResponse.getStatus(), reasonPhrase);
+      final String reasonPhrase = responseStatusType.getReasonPhrase();
+      if (reasonPhrase == null) {
+        status = HttpResponseStatus.valueOf(containerResponse.getStatus());
+      } else {
+        status = HttpResponseStatus.valueOf(containerResponse.getStatus(), reasonPhrase);
+      }
     }
 
     final HttpMessage httpResponse;
@@ -250,16 +263,17 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
     if (HttpUtil.isKeepAlive(httpRequest)) {
       HttpUtil.setKeepAlive(httpResponse, true);
     }
-    
+
+    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
+
     final ChannelPromise channelPromise = channelHandlerContext.newPromise();
     assert channelPromise != null;
     channelPromise.addListener(listener);
-    
-    if (needsOutputStream) {
-      channelHandlerContext.write(httpResponse, channelPromise);
-    } else {
-      channelHandlerContext.writeAndFlush(httpResponse, channelPromise);
-    }
+
+    // Remember that
+    // AbstractContainerRequestHandlingResponseWriter#channelReadComplete(ChannelHandlerContext)
+    // will call ChannelHandlerContext#flush() in all cases.
+    channelHandlerContext.write(httpResponse, channelPromise);
 
     return needsOutputStream;
   }
@@ -267,6 +281,8 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
   /**
    * Creates and returns a new {@link
    * ByteBufBackedChannelOutboundInvokingHttpContentOutputStream}.
+   *
+   * <p>This method never returns {@code null}.</p>
    *
    * @param contentLength the content length as determined by the
    * logic encapsulated by the {@link
@@ -290,27 +306,32 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    * @see ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
    */
   @Override
-  protected AbstractChannelOutboundInvokingOutputStream<? extends HttpContent> createOutputStream(final long contentLength,
-                                                                                                  final ContainerResponse containerResponse) {
-    Objects.requireNonNull(containerResponse);
+  protected final AbstractChannelOutboundInvokingOutputStream<? extends HttpContent> createOutputStream(final long contentLength,
+                                                                                                        final ContainerResponse containerResponse) {
     if (contentLength == 0L) {
       throw new IllegalArgumentException("contentLength == 0L");
     }
-    final AbstractChannelOutboundInvokingOutputStream<? extends HttpContent> returnValue =
-      new ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(this.getChannelHandlerContext(),
-                                                                      this.getFlushThreshold(),
-                                                                      false,
-                                                                      this.getByteBufCreator());
-    return returnValue;
+    return new ByteBufBackedChannelOutboundInvokingHttpContentOutputStream(this.getChannelHandlerContext(),
+                                                                           this.getFlushThreshold(),
+                                                                           false,
+                                                                           this.getByteBufCreator()) {
+      @Override
+      protected final ChannelPromise newPromise() {
+        final ChannelPromise returnValue = super.newPromise();
+        if (returnValue != null && !returnValue.isVoid()) {
+          returnValue.addListener(listener);
+        }
+        return returnValue;
+      }
+    };
   }
 
   /**
-   * Overrides {@link ContainerResponseWriter#commit()} to effectively
-   * do nothing when invoked since the {@link OutputStream} returned
-   * by {@link #createOutputStream(long, ContainerResponse)} handles
-   * committing the response.
+   * Overrides {@link
+   * AbstractContainerRequestHandlingResponseWriter#commit()} to still
+   * effectively do nothing, but clean up some internal state.
    *
-   * @see #createOutputStream(long, ContainerResponse)
+   * @see AbstractContainerRequestHandlingResponseWriter#commit()
    */
   @Override
   public final void commit() {
@@ -331,22 +352,30 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    */
   @Override
   protected final void writeFailureMessage(final Throwable failureCause) {
-    try {
-      final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
-      final ChannelPromise channelPromise = channelHandlerContext.newPromise();
-      assert channelPromise != null;
-      channelPromise.addListener(listener);
-      final HttpMessage failureMessage = new DefaultFullHttpResponse(this.httpVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR);
-      HttpUtil.setContentLength(failureMessage, 0L);
-      channelHandlerContext.write(failureMessage, channelPromise);
-    } finally {
-      this.httpVersion = null;
-    }
+    final HttpVersion httpVersion = this.httpVersion;
+    this.httpVersion = null;
+
+    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());
+
+    final ChannelPromise channelPromise = channelHandlerContext.newPromise();
+    assert channelPromise != null;
+    channelPromise.addListener(listener);
+
+    final HttpMessage failureMessage = new DefaultFullHttpResponse(httpVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+    HttpUtil.setContentLength(failureMessage, 0L);
+
+    channelHandlerContext.write(failureMessage, channelPromise);
   }
 
+
+  /*
+   * Static methods.
+   */
+
+
   private static final void copyHeaders(final Map<? extends String, ? extends List<String>> headersSource,
-                                        final HttpHeaders nettyHeaders) {    
+                                        final HttpHeaders nettyHeaders) {
     AbstractContainerRequestHandlingResponseWriter.copyHeaders(headersSource, UnaryOperator.identity(), nettyHeaders::add);
   }
-  
+
 }

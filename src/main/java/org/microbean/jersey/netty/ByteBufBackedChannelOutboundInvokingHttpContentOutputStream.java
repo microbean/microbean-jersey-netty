@@ -35,8 +35,7 @@ import io.netty.handler.codec.http.HttpContent;
  *
  * @see #createLastMessage()
  */
-public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
-  extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
+public class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream extends AbstractByteBufBackedChannelOutboundInvokingOutputStream<HttpContent> {
 
 
   /*
@@ -118,7 +117,7 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
    * supplied {@link ByteBuf}; never {@code null}
    */
   @Override
-  protected final HttpContent createMessage(final ByteBuf content) {
+  protected HttpContent createMessage(final ByteBuf content) {
     return new DefaultHttpContent(content);
   }
 
@@ -133,7 +132,7 @@ public final class ByteBufBackedChannelOutboundInvokingHttpContentOutputStream
    * @see #close()
    */
   @Override
-  protected final HttpContent createLastMessage() {
+  protected HttpContent createLastMessage() {
     return new DefaultLastHttpContent();
   }
 

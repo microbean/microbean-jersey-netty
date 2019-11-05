@@ -36,6 +36,10 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundInvoker; // for javadoc only
 
+import org.glassfish.jersey.CommonProperties; // for javadoc only
+
+import org.glassfish.jersey.message.internal.CommittingOutputStream; // for javadoc only
+
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerException;
 import org.glassfish.jersey.server.ContainerRequest;
@@ -291,11 +295,10 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
       // Even in the ancient case of blocking IO it's still
       // idempotent:
       // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport/src/main/java/io/netty/channel/oio/AbstractOioChannel.java#L101-L109
-      // Finally, Epoll is less clear:
+      // Finally, transports like Epoll are less clear:
       // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242
-      // ...but it too ultimately is idempotent:
+      // ...but Epoll too ultimately is idempotent:
       // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242
-      
       channelHandlerContext.read();
     }
   }
@@ -318,15 +321,41 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    */
 
   /**
-   * Returns {@code true} when invoked.
+   * Returns {@code true} when invoked to indicate that buffering of
+   * entity content is supported and can be configured to be on or
+   * off.
    *
-   * <p>Note that this is a default value.  Response buffering <a
+   * <p>Note that the return value of this method is a default value
+   * indicating that the <em>concept</em> of response buffering is
+   * enabled.  The actual <em>configuration</em> of response buffering
+   * is a property of the application.  Specifically, an application's
+   * response buffering policy <a
    * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"
-   * target="_parent">can be configured</a>.</p>
+   * target="_parent">can be configured</a>: if the application's
+   * configuration sets the {@link
+   * CommonProperties#OUTBOUND_CONTENT_LENGTH_BUFFER
+   * jersey.config.contentLength.buffer} property to a positive {@code
+   * int}, then buffering will occur, and if the application's
+   * configuration sets the {@link
+   * CommonProperties#OUTBOUND_CONTENT_LENGTH_BUFFER
+   * jersey.config.contentLength.buffer} property to a negative {@code
+   * int}, then buffering will not occur.  If the application's
+   * configuration does nothing in this regard, response buffering
+   * will be enabled with a default buffer size of {@link
+   * CommittingOutputStream#DEFAULT_BUFFER_SIZE 8192}.</p>
    *
-   * @return {@code true} when invoked
+   * <p>(If, instead, this method had been written to return {@code
+   * false}, then no matter what configuration settings an application
+   * might specify in the realm of response buffering settings,
+   * response buffering of any kind would never be possible.)</p>
+   *
+   * @return {@code true} when invoked; never {@code false}
    *
    * @see ContainerResponseWriter#enableResponseBuffering()
+   *
+   * @see <a
+   * href="https://github.com/eclipse-ee4j/jersey/blob/8dcbaf4b5cb0fb345eb949acfa66b1fbe09d1ffb/core-server/src/main/java/org/glassfish/jersey/server/ServerRuntime.java#L634"
+   * target="_parent"><code>ServerRuntime.java</code></a>
    *
    * @see <a
    * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"
@@ -337,7 +366,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * target="_parent"><code>OutboundMessageContext.java</code></a>
    */
   @Override
-  public boolean enableResponseBuffering() {
+  public final boolean enableResponseBuffering() {
     return true;
   }
 
@@ -520,6 +549,23 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
     return this.byteBufCreator;
   }
 
+  /**
+   * Invoked by Jersey when a {@link ContainerRequest} has been fully
+   * {@linkplain ApplicationHandler#handle(ContainerRequest) handled}
+   * successfully.
+   *
+   * <p>Either {@link #commit()} or {@link #failure(Throwable)} will
+   * be called by Jersey as the logically final operation in the logic
+   * encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method, but not
+   * both.</p>
+   *
+   * <p>This implementation does nothing.</p>
+   *
+   * @see ContainerResponseWriter#commit()
+   *
+   * @see #failure(Throwable)
+   */
   @Override
   public void commit() {
 
@@ -536,7 +582,6 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
     } else {
       this.suspendTimeoutHandler = () -> {
         timeoutHandler.onTimeout(this);
-        // TODO: not sure about this
         this.suspendTimeoutHandler = null;
       };
       if (timeout > 0L) {
@@ -553,7 +598,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
   public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {
     // Lifted from Jersey's supplied Netty integration, with repairs.
     if (this.suspendTimeoutHandler == null) {
-      throw new IllegalStateException();
+      throw new IllegalStateException("this.suspendTimeoutHandler == null");
     }
     if (this.suspendTimeoutFuture != null) {
       this.suspendTimeoutFuture.cancel(true);
@@ -570,6 +615,12 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * Handles any failure case encountered by the logic encapsulated by
    * the {@link ApplicationHandler#handle(ContainerRequest)} method.
    *
+   * <p>Either {@link #commit()} or {@link #failure(Throwable)} will
+   * be called by Jersey as the logically final operation in the logic
+   * encapsulated by the {@link
+   * ApplicationHandler#handle(ContainerRequest)} method, but not
+   * both.</p>
+   *
    * <p>This method calls the {@link #writeFailureMessage(Throwable)}
    * method and takes great care to ensure that any {@link Throwable}s
    * encountered along the way are properly recorded and {@linkplain
@@ -585,6 +636,10 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * @exception ContainerException when this method is invoked; it
    * will have the supplied {@code failureCause} as its {@linkplain
    * Throwable#getCause() cause}
+   *
+   * @see #commit()
+   *
+   * @see ContainerResponseWriter#failure(Throwable)
    */
   @Override
   public final void failure(final Throwable failureCause) {

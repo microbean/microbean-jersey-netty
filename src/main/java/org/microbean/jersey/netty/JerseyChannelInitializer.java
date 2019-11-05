@@ -165,7 +165,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
@@ -213,7 +213,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          true,
          jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication));
   }
-  
+
   /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
@@ -266,7 +266,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          true,
          applicationHandler);
   }
-  
+
   /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
@@ -323,7 +323,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
   }
-  
+
   /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
@@ -477,7 +477,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          flushThreshold,
          byteBufCreator);
   }
-  
+
   /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
@@ -699,32 +699,33 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       // install a factory that makes factories of mutable references
       // that produce the object you want, then elsewhere set the
       // payload of those references when you're actually in request
-      // scope.  Really.  You'll find this pattern throughout the Jersey
-      // codebase.  We follow suit here.
+      // scope.  Really.  You'll find this pattern throughout the
+      // Jersey codebase.  We follow suit here.
       final InjectionManager injectionManager = applicationHandler.getInjectionManager();
-      assert injectionManager != null;
-      injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
-                                  .to(ChannelHandlerContext.class)
-                                  .proxy(false)
-                                  .in(RequestScoped.class));
-      injectionManager.register(Bindings.supplier(ReferencingFactory.<ChannelHandlerContext>referenceFactory())
-                                  .to(ChannelHandlerContextReferencingFactory.genericRefType)
-                                  .in(RequestScoped.class));    
-      injectionManager.register(Bindings.supplier(HttpRequestReferencingFactory.class)
-                                  .to(HttpRequest.class)
-                                  .proxy(false)
-                                  .in(RequestScoped.class));
-      injectionManager.register(Bindings.supplier(ReferencingFactory.<HttpRequest>referenceFactory())
-                                  .to(HttpRequestReferencingFactory.genericRefType)
-                                  .in(RequestScoped.class));
-      if (http2Support) {
-        injectionManager.register(Bindings.supplier(Http2HeadersFrameReferencingFactory.class)
-                                    .to(Http2HeadersFrame.class)
+      if (injectionManager != null) {
+        injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
+                                    .to(ChannelHandlerContext.class)
                                     .proxy(false)
                                     .in(RequestScoped.class));
-        injectionManager.register(Bindings.supplier(ReferencingFactory.<Http2HeadersFrame>referenceFactory())
-                                    .to(Http2HeadersFrameReferencingFactory.genericRefType)
+        injectionManager.register(Bindings.supplier(ReferencingFactory.<ChannelHandlerContext>referenceFactory())
+                                    .to(ChannelHandlerContextReferencingFactory.genericRefType)
                                     .in(RequestScoped.class));
+        injectionManager.register(Bindings.supplier(HttpRequestReferencingFactory.class)
+                                    .to(HttpRequest.class)
+                                    .proxy(false)
+                                    .in(RequestScoped.class));
+        injectionManager.register(Bindings.supplier(ReferencingFactory.<HttpRequest>referenceFactory())
+                                    .to(HttpRequestReferencingFactory.genericRefType)
+                                    .in(RequestScoped.class));
+        if (http2Support) {
+          injectionManager.register(Bindings.supplier(Http2HeadersFrameReferencingFactory.class)
+                                      .to(Http2HeadersFrame.class)
+                                      .proxy(false)
+                                      .in(RequestScoped.class));
+          injectionManager.register(Bindings.supplier(ReferencingFactory.<Http2HeadersFrame>referenceFactory())
+                                      .to(Http2HeadersFrameReferencingFactory.genericRefType)
+                                      .in(RequestScoped.class));
+        }
       }
     }
     this.applicationHandler = applicationHandler;
@@ -737,6 +738,23 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Instance methods.
    */
 
+
+  /**
+   * Returns the {@link EventExecutorGroup} that this {@link
+   * JerseyChannelInitializer} will use to offload blocking work from
+   * the Netty event loop.
+   *
+   * <p>This method never returns {@code null}.</p>
+   *
+   * @return a non-{@code null} {@link EventExecutorGroup}
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   */
+  public final EventExecutorGroup getJerseyEventExecutorGroup() {
+    return this.jerseyEventExecutorGroup;
+  }
 
   /**
    * Initializes the supplied {@link Channel} using an appropriate
@@ -826,7 +844,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               } else {
                 returnValue =
                   new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
-                                              new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
+                                              new Http2MultiplexHandler(new Http2JerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                                                           baseUri,
                                                                                                           applicationHandler,
                                                                                                           flushThreshold,
@@ -887,13 +905,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                                      // knowledge" is in
                                                      // effect.  See
                                                      // https://http2.github.io/http2-spec/#known-http.
-                                                     assert channel != null;
                                                      final ChannelPipeline channelPipeline = channel.pipeline();
-                                                     assert channelPipeline != null;
                                                      channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(),
                                                                              Http2FrameCodecBuilder.forServer().build());
                                                      channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
-                                                                             new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
+                                                                             new Http2MultiplexHandler(new Http2JerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                                                                                          baseUri,
                                                                                                                                          applicationHandler,
                                                                                                                                          flushThreshold,
@@ -914,9 +930,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
             protected final void channelRead0(final ChannelHandlerContext channelHandlerContext,
                                               final HttpMessage httpMessage)
               throws Exception {
-              assert channelHandlerContext != null;
               final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
-              assert channelPipeline != null;
 
               // If we're actually called then we know that in "front"
               // of us is an HttpServerCodec because otherwise we
@@ -935,7 +949,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               // ChunkedWriteHandler followed by the main Jersey
               // integration.
               channelPipeline.addLast("HttpJerseyChannelInitializer",
-                                      new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
+                                      new HttpJerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                        baseUri,
                                                                        applicationHandler,
                                                                        flushThreshold,
@@ -951,7 +965,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         channelPipeline.addLast(HttpServerExpectContinueHandler.class.getSimpleName(),
                                 new HttpServerExpectContinueHandler());
         channelPipeline.addLast("HttpJerseyChannelInitializer",
-                                new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
+                                new HttpJerseyChannelInitializer(this.getJerseyEventExecutorGroup(),
                                                                  baseUri,
                                                                  applicationHandler,
                                                                  flushThreshold,
@@ -970,7 +984,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       // whether it's HTTP 1.1 or HTTP/2; see the private inner
       // class below for details.
       channelPipeline.addLast(HttpNegotiationHandler.class.getSimpleName(),
-                              new HttpNegotiationHandler(jerseyEventExecutorGroup,
+                              new HttpNegotiationHandler(this.getJerseyEventExecutorGroup(),
                                                          baseUri,
                                                          applicationHandler,
                                                          flushThreshold,
@@ -1032,13 +1046,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     private final EventExecutorGroup jerseyEventExecutorGroup;
 
     private final URI baseUri;
-    
+
     private final ApplicationHandler applicationHandler;
 
     private final int flushThreshold;
 
     private final ByteBufCreator byteBufCreator;
-    
+
     /**
      * Creates a new {@link HttpJerseyChannelInitializer}.
      */
@@ -1048,11 +1062,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                          final int flushThreshold,
                                          final ByteBufCreator byteBufCreator) {
       super();
-      if (jerseyEventExecutorGroup == null) {
-        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
-      } else {
-        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
-      }
+      this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandler = applicationHandler;
       this.flushThreshold = Math.max(0, flushThreshold);
@@ -1072,9 +1082,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      */
     @Override
     protected final void initChannel(final Channel channel) {
-      assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
-      assert channelPipeline != null;
       channelPipeline.addLast(HttpObjectToContainerRequestDecoder.class.getSimpleName(),
                               new HttpObjectToContainerRequestDecoder(baseUri));
       channelPipeline.addLast(jerseyEventExecutorGroup,
@@ -1104,13 +1112,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     private final EventExecutorGroup jerseyEventExecutorGroup;
 
     private final URI baseUri;
-    
+
     private final ApplicationHandler applicationHandler;
 
     private final int flushThreshold;
 
     private final ByteBufCreator byteBufCreator;
-    
+
     /**
      * Creates a new {@link Http2JerseyChannelInitializer}.
      */
@@ -1120,11 +1128,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                           final int flushThreshold,
                                           final ByteBufCreator byteBufCreator) {
       super();
-      if (jerseyEventExecutorGroup == null) {
-        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
-      } else {
-        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
-      }
+      this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandler = applicationHandler;
       this.flushThreshold = Math.max(0, flushThreshold);
@@ -1140,12 +1144,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      *
      * @param channel the {@link Channel} being configured; must
      * not be {@code null}
+     *
+     * @exception NullPointerException if {@code channel} is {@code
+     * null}
      */
     @Override
     protected final void initChannel(final Channel channel) {
-      assert channel != null;
       final ChannelPipeline channelPipeline = channel.pipeline();
-      assert channelPipeline != null;
       channelPipeline.addLast(Http2StreamFrameToContainerRequestDecoder.class.getSimpleName(),
                               new Http2StreamFrameToContainerRequestDecoder(baseUri));
       channelPipeline.addLast(jerseyEventExecutorGroup,
@@ -1170,7 +1175,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     private final EventExecutorGroup jerseyEventExecutorGroup;
 
     private final URI baseUri;
-    
+
     private final ApplicationHandler applicationHandler;
 
     private final int flushThreshold;
@@ -1185,11 +1190,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                    final int flushThreshold,
                                    final ByteBufCreator byteBufCreator) {
       super(ApplicationProtocolNames.HTTP_1_1);
-      if (jerseyEventExecutorGroup == null) {
-        this.jerseyEventExecutorGroup = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors());
-      } else {
-        this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
-      }
+      this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandler = applicationHandler;
       this.flushThreshold = Math.max(0, flushThreshold);
@@ -1208,13 +1209,18 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      * @param protocol the protocol that was negotiated; must be equal
      * to either {@link ApplicationProtocolNames#HTTP_2} or {@link
      * ApplicationProtocolNames#HTTP_1_1}
+     *
+     * @exception NullPointerException if {@code
+     * channelHandlerContext} or {@code protocol} is {@code null}
+     *
+     * @exception IllegalArgumentException if {@code protocol} is not
+     * equal to the value of either the {@link
+     * ApplicationProtocolNames#HTTP_1_1} or {@link
+     * ApplicationProtocolNames#HTTP_2} constants
      */
     @Override
     protected final void configurePipeline(final ChannelHandlerContext channelHandlerContext, final String protocol) {
-      assert channelHandlerContext != null;
-      assert protocol != null;
       final ChannelPipeline channelPipeline = channelHandlerContext.pipeline();
-      assert channelPipeline != null;
       switch (protocol) {
       case ApplicationProtocolNames.HTTP_2:
         channelPipeline.addLast(Http2FrameCodec.class.getSimpleName(),

@@ -28,7 +28,8 @@ import io.netty.channel.ChannelOutboundInvoker;
  * {@linkplain #createMessage(ByteBuf) creates its messages} from
  * {@link ByteBuf} instances.
  *
- * @param <T> the type of message that will be written
+ * @param <T> the type of message that will be written; see {@link
+ * #createMessage(ByteBuf)}
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
@@ -68,7 +69,7 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * int, boolean, ByteBufCreator)
    */
   protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                             final boolean closeChannelOutboundInvoker) {
+                                                                     final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, Integer.MAX_VALUE, closeChannelOutboundInvoker, null);
   }
 
@@ -95,8 +96,8 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * int, boolean, ByteBufCreator)
    */
   protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                             final int flushThreshold,
-                                                             final boolean closeChannelOutboundInvoker) {
+                                                                     final int flushThreshold,
+                                                                     final boolean closeChannelOutboundInvoker) {
     this(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker, null);
   }
 
@@ -129,9 +130,9 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * @see Unpooled#wrappedBuffer(byte[], int, int)
    */
   protected AbstractByteBufBackedChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker,
-                                                             final int flushThreshold,
-                                                             final boolean closeChannelOutboundInvoker,
-                                                             final ByteBufCreator byteBufCreator) {
+                                                                     final int flushThreshold,
+                                                                     final boolean closeChannelOutboundInvoker,
+                                                                     final ByteBufCreator byteBufCreator) {
     super(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker);
     if (byteBufCreator == null) {
       this.byteBufCreator = Unpooled::wrappedBuffer;
@@ -160,6 +161,10 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * @param length {@inheritDoc}
    *
    * @return {@inheritDoc}
+   *
+   * @exception IndexOutOfBoundsException if {@code offset} is
+   * negative, or {@code length} is negative, or {@code offset +
+   * length} is greater than the length of {@code bytes}
    *
    * @exception IOException if the {@link #createMessage(ByteBuf)}
    * method throws an {@link IOException}
@@ -230,6 +235,12 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
      * offset}
      *
      * @return a non-{@code null} {@link ByteBuf}
+     *
+     * @exception NullPointerException if {@code bytes} is {@code null}
+     *
+     * @exception IndexOutOfBoundsException if {@code offset} is
+     * negative, or {@code length} is negative, or {@code offset +
+     * length} is greater than the length of {@code bytes}
      *
      * @see Unpooled#wrappedBuffer(byte[], int, int)
      */

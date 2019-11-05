@@ -34,7 +34,8 @@ import io.netty.channel.ChannelPromise;
  * <p>Instances of this class are safe for concurrent use by multiple
  * threads.</p>
  *
- * @param <T> the type of message that will be written
+ * @param <T> the type of message that will be written; see {@link
+ * #createMessage(byte[], int, int)}
  *
  * @author <a href="https://about.me/lairdnelson"
  * target="_parent">Laird Nelson</a>
@@ -86,6 +87,28 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
 
   /**
    * Creates a new {@link AbstractChannelOutboundInvokingOutputStream}
+   * that does not automatically flush and that does not ever
+   * {@linkplain ChannelOutboundInvoker#close() close} the supplied
+   * {@link ChannelOutboundInvoker}.
+   *
+   * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
+   * to which operations are adapted; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelOutboundInvoker}
+   * is {@code null}
+   *
+   * @see
+   * #AbstractChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean)
+   *
+   * @see ChannelOutboundInvoker
+   */
+  protected AbstractChannelOutboundInvokingOutputStream(final ChannelOutboundInvoker channelOutboundInvoker) {
+    this(channelOutboundInvoker, Integer.MAX_VALUE, false);
+  }
+
+  /**
+   * Creates a new {@link AbstractChannelOutboundInvokingOutputStream}
    * that does not automatically flush.
    *
    * @param channelOutboundInvoker the {@link ChannelOutboundInvoker}
@@ -104,8 +127,6 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * int, boolean)
    *
    * @see ChannelOutboundInvoker
-   *
-   * @see #getFlushThreshold()
    *
    * @see #close()
    */
@@ -298,7 +319,14 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * @return a new, non-{@code null} message to {@linkplain
    * ChannelOutboundInvoker#write(Object, ChannelPromise) write}
    *
-   * @exception IOException if an error occurs
+   * @exception NullPointerException if {@code bytes} is {@code null}
+   *
+   * @exception IndexOutOfBoundsException if {@code offset} is
+   * negative, or {@code length} is negative, or {@code offset +
+   * length} is greater than the length of {@code bytes}
+   *
+   * @exception IOException if an error occurs during the actual
+   * creation of the message
    *
    * @see #write(byte[], int, int)
    *
@@ -420,6 +448,12 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
     }
   }
 
+
+  /*
+   * Static methods.
+   */
+
+  
   private static final void maybeThrow(final Throwable cause) throws IOException {
     if (cause == null) {
       return;
@@ -439,7 +473,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
   private static final boolean isClosed(final ChannelPromise channelPromise) {
     return isClosed(channelPromise.channel());
   }
-  
+
   private static final boolean isClosed(final Channel channel) {
     return channel == null || !channel.isOpen() || channel.closeFuture().isDone();
   }
