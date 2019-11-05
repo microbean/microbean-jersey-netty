@@ -33,7 +33,7 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.20.0</version>
+  <version>0.21.0</version>
 </dependency>
 ```
 
@@ -46,9 +46,15 @@ handler](https://netty.io/4.1/api/io/netty/bootstrap/ServerBootstrap.html#childH
 of a Netty
 [`ServerBootstrap`](https://netty.io/4.1/api/io/netty/bootstrap/ServerBootstrap.html):
 
-    serverBootstrap.childHandler(new JerseyChannelInitializer(baseUri,
-        sslContext,
-        yourJaxRsApplication));
+    serverBootstrap.childHandler(new JerseyChannelInitializer(baseUri, // e.g. URI.create("/")
+        sslContext, // an SslContext, or null if you don't want TLS support
+        true, // yes, HTTP/2 support please
+        20971520L, // 20MB maximum incoming payload (arbitrary)
+        new DefaultEventExecutorGroup(8), // a DefaultEventExecutorGroup with 8 threads (arbitrary) to run your application
+        true, // yes, use Jersey's native dependency injection facilities
+        new ApplicationHandler(yourJaxRsApplication), // the ApplicationHandler wrapping your application
+        8192, // write in 8K chunks (arbitrary)
+        Unpooled::new /* how to create those chunks */));
 
 ## Background and Motivation
 
