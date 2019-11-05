@@ -38,629 +38,731 @@
 <span class="sourceLineNo">030</span>import java.util.function.BiConsumer;<a name="line.30"></a>
 <span class="sourceLineNo">031</span>import java.util.function.UnaryOperator;<a name="line.31"></a>
 <span class="sourceLineNo">032</span><a name="line.32"></a>
-<span class="sourceLineNo">033</span>import java.util.logging.Level;<a name="line.33"></a>
-<span class="sourceLineNo">034</span>import java.util.logging.Logger;<a name="line.34"></a>
-<span class="sourceLineNo">035</span><a name="line.35"></a>
-<span class="sourceLineNo">036</span>import io.netty.channel.ChannelHandlerContext;<a name="line.36"></a>
-<span class="sourceLineNo">037</span>import io.netty.channel.ChannelInboundHandlerAdapter;<a name="line.37"></a>
-<span class="sourceLineNo">038</span>import io.netty.channel.ChannelOutboundInvoker; // for javadoc only<a name="line.38"></a>
-<span class="sourceLineNo">039</span>import io.netty.channel.ChannelPromise;<a name="line.39"></a>
+<span class="sourceLineNo">033</span>import java.util.logging.Logger;<a name="line.33"></a>
+<span class="sourceLineNo">034</span><a name="line.34"></a>
+<span class="sourceLineNo">035</span>import io.netty.channel.ChannelHandlerContext;<a name="line.35"></a>
+<span class="sourceLineNo">036</span>import io.netty.channel.ChannelInboundHandlerAdapter;<a name="line.36"></a>
+<span class="sourceLineNo">037</span>import io.netty.channel.ChannelOutboundInvoker; // for javadoc only<a name="line.37"></a>
+<span class="sourceLineNo">038</span><a name="line.38"></a>
+<span class="sourceLineNo">039</span>import org.glassfish.jersey.CommonProperties; // for javadoc only<a name="line.39"></a>
 <span class="sourceLineNo">040</span><a name="line.40"></a>
-<span class="sourceLineNo">041</span>import org.glassfish.jersey.server.ApplicationHandler;<a name="line.41"></a>
-<span class="sourceLineNo">042</span>import org.glassfish.jersey.server.ContainerException;<a name="line.42"></a>
-<span class="sourceLineNo">043</span>import org.glassfish.jersey.server.ContainerRequest;<a name="line.43"></a>
-<span class="sourceLineNo">044</span>import org.glassfish.jersey.server.ContainerResponse;<a name="line.44"></a>
-<span class="sourceLineNo">045</span><a name="line.45"></a>
-<span class="sourceLineNo">046</span>import org.glassfish.jersey.server.spi.ContainerResponseWriter;<a name="line.46"></a>
-<span class="sourceLineNo">047</span>import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;<a name="line.47"></a>
-<span class="sourceLineNo">048</span><a name="line.48"></a>
-<span class="sourceLineNo">049</span>import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;<a name="line.49"></a>
+<span class="sourceLineNo">041</span>import org.glassfish.jersey.message.internal.CommittingOutputStream; // for javadoc only<a name="line.41"></a>
+<span class="sourceLineNo">042</span><a name="line.42"></a>
+<span class="sourceLineNo">043</span>import org.glassfish.jersey.server.ApplicationHandler;<a name="line.43"></a>
+<span class="sourceLineNo">044</span>import org.glassfish.jersey.server.ContainerException;<a name="line.44"></a>
+<span class="sourceLineNo">045</span>import org.glassfish.jersey.server.ContainerRequest;<a name="line.45"></a>
+<span class="sourceLineNo">046</span>import org.glassfish.jersey.server.ContainerResponse;<a name="line.46"></a>
+<span class="sourceLineNo">047</span><a name="line.47"></a>
+<span class="sourceLineNo">048</span>import org.glassfish.jersey.server.spi.ContainerResponseWriter;<a name="line.48"></a>
+<span class="sourceLineNo">049</span>import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;<a name="line.49"></a>
 <span class="sourceLineNo">050</span><a name="line.50"></a>
-<span class="sourceLineNo">051</span>/**<a name="line.51"></a>
-<span class="sourceLineNo">052</span> * An abstract {@link ChannelInboundHandlerAdapter} that is also a<a name="line.52"></a>
-<span class="sourceLineNo">053</span> * {@link ContainerResponseWriter} that processes incoming {@link<a name="line.53"></a>
-<span class="sourceLineNo">054</span> * ContainerRequest} events, such as those dispatched by an {@link<a name="line.54"></a>
-<span class="sourceLineNo">055</span> * AbstractContainerRequestDecoder}.<a name="line.55"></a>
-<span class="sourceLineNo">056</span> *<a name="line.56"></a>
-<span class="sourceLineNo">057</span> * &lt;p&gt;Instances of this class are in charge of properly invoking<a name="line.57"></a>
-<span class="sourceLineNo">058</span> * {@link ApplicationHandler#handle(ContainerRequest)}, thus adapting<a name="line.58"></a>
-<span class="sourceLineNo">059</span> * &lt;a href="https://eclipse-ee4j.github.io/jersey/"<a name="line.59"></a>
-<span class="sourceLineNo">060</span> * target="_parent"&gt;Jersey&lt;/a&gt; to &lt;a href="https://netty.io/"<a name="line.60"></a>
-<span class="sourceLineNo">061</span> * target="_parent"&gt;Netty&lt;/a&gt;'s constraints and vice versa.&lt;/p&gt;<a name="line.61"></a>
-<span class="sourceLineNo">062</span> *<a name="line.62"></a>
-<span class="sourceLineNo">063</span> * @author &lt;a href="https://about.me/lairdnelson"<a name="line.63"></a>
-<span class="sourceLineNo">064</span> * target="_parent"&gt;Laird Nelson&lt;/a&gt;<a name="line.64"></a>
+<span class="sourceLineNo">051</span>import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;<a name="line.51"></a>
+<span class="sourceLineNo">052</span><a name="line.52"></a>
+<span class="sourceLineNo">053</span>/**<a name="line.53"></a>
+<span class="sourceLineNo">054</span> * An abstract {@link ChannelInboundHandlerAdapter} that is also a<a name="line.54"></a>
+<span class="sourceLineNo">055</span> * {@link ContainerResponseWriter} that processes incoming {@link<a name="line.55"></a>
+<span class="sourceLineNo">056</span> * ContainerRequest} events, such as those dispatched by an {@link<a name="line.56"></a>
+<span class="sourceLineNo">057</span> * AbstractContainerRequestDecoder}, by supplying them to the {@link<a name="line.57"></a>
+<span class="sourceLineNo">058</span> * ApplicationHandler#handle(ContainerRequest)} method.<a name="line.58"></a>
+<span class="sourceLineNo">059</span> *<a name="line.59"></a>
+<span class="sourceLineNo">060</span> * &lt;p&gt;Instances of this class are in charge of properly invoking<a name="line.60"></a>
+<span class="sourceLineNo">061</span> * {@link ApplicationHandler#handle(ContainerRequest)}, thus adapting<a name="line.61"></a>
+<span class="sourceLineNo">062</span> * &lt;a href="https://eclipse-ee4j.github.io/jersey/"<a name="line.62"></a>
+<span class="sourceLineNo">063</span> * target="_parent"&gt;Jersey&lt;/a&gt; to &lt;a href="https://netty.io/"<a name="line.63"></a>
+<span class="sourceLineNo">064</span> * target="_parent"&gt;Netty&lt;/a&gt;'s constraints and vice versa.&lt;/p&gt;<a name="line.64"></a>
 <span class="sourceLineNo">065</span> *<a name="line.65"></a>
-<span class="sourceLineNo">066</span> * @see #channelRead(ChannelHandlerContext, Object)<a name="line.66"></a>
-<span class="sourceLineNo">067</span> * <a name="line.67"></a>
-<span class="sourceLineNo">068</span> * @see ChannelInboundHandlerAdapter<a name="line.68"></a>
+<span class="sourceLineNo">066</span> * @param &lt;T&gt; the type of message that will be written by instances of<a name="line.66"></a>
+<span class="sourceLineNo">067</span> * this class; see {@link #createOutputStream(long,<a name="line.67"></a>
+<span class="sourceLineNo">068</span> * ContainerResponse)}<a name="line.68"></a>
 <span class="sourceLineNo">069</span> *<a name="line.69"></a>
-<span class="sourceLineNo">070</span> * @see ContainerResponseWriter<a name="line.70"></a>
-<span class="sourceLineNo">071</span> */<a name="line.71"></a>
-<span class="sourceLineNo">072</span>public abstract class AbstractContainerRequestHandlingResponseWriter&lt;T&gt; extends ChannelInboundHandlerAdapter implements ContainerResponseWriter {<a name="line.72"></a>
-<span class="sourceLineNo">073</span><a name="line.73"></a>
-<span class="sourceLineNo">074</span><a name="line.74"></a>
-<span class="sourceLineNo">075</span>  /*<a name="line.75"></a>
-<span class="sourceLineNo">076</span>   * Static fields.<a name="line.76"></a>
-<span class="sourceLineNo">077</span>   */<a name="line.77"></a>
-<span class="sourceLineNo">078</span><a name="line.78"></a>
-<span class="sourceLineNo">079</span><a name="line.79"></a>
-<span class="sourceLineNo">080</span>  private static final String cn = AbstractContainerRequestHandlingResponseWriter.class.getName();<a name="line.80"></a>
-<span class="sourceLineNo">081</span><a name="line.81"></a>
-<span class="sourceLineNo">082</span>  private static final Logger logger = Logger.getLogger(cn);<a name="line.82"></a>
-<span class="sourceLineNo">083</span><a name="line.83"></a>
+<span class="sourceLineNo">070</span> * @author &lt;a href="https://about.me/lairdnelson"<a name="line.70"></a>
+<span class="sourceLineNo">071</span> * target="_parent"&gt;Laird Nelson&lt;/a&gt;<a name="line.71"></a>
+<span class="sourceLineNo">072</span> *<a name="line.72"></a>
+<span class="sourceLineNo">073</span> * @see #channelRead(ChannelHandlerContext, Object)<a name="line.73"></a>
+<span class="sourceLineNo">074</span> *<a name="line.74"></a>
+<span class="sourceLineNo">075</span> * @see #createOutputStream(long, ContainerResponse)<a name="line.75"></a>
+<span class="sourceLineNo">076</span> * <a name="line.76"></a>
+<span class="sourceLineNo">077</span> * @see ChannelInboundHandlerAdapter<a name="line.77"></a>
+<span class="sourceLineNo">078</span> *<a name="line.78"></a>
+<span class="sourceLineNo">079</span> * @see ApplicationHandler#handle(ContainerRequest)<a name="line.79"></a>
+<span class="sourceLineNo">080</span> *<a name="line.80"></a>
+<span class="sourceLineNo">081</span> * @see ContainerResponseWriter<a name="line.81"></a>
+<span class="sourceLineNo">082</span> */<a name="line.82"></a>
+<span class="sourceLineNo">083</span>public abstract class AbstractContainerRequestHandlingResponseWriter&lt;T&gt; extends ChannelInboundHandlerAdapter implements ContainerResponseWriter {<a name="line.83"></a>
 <span class="sourceLineNo">084</span><a name="line.84"></a>
-<span class="sourceLineNo">085</span>  /*<a name="line.85"></a>
-<span class="sourceLineNo">086</span>   * Instance fields.<a name="line.86"></a>
-<span class="sourceLineNo">087</span>   */<a name="line.87"></a>
-<span class="sourceLineNo">088</span><a name="line.88"></a>
+<span class="sourceLineNo">085</span><a name="line.85"></a>
+<span class="sourceLineNo">086</span>  /*<a name="line.86"></a>
+<span class="sourceLineNo">087</span>   * Static fields.<a name="line.87"></a>
+<span class="sourceLineNo">088</span>   */<a name="line.88"></a>
 <span class="sourceLineNo">089</span><a name="line.89"></a>
-<span class="sourceLineNo">090</span>  /**<a name="line.90"></a>
-<span class="sourceLineNo">091</span>   * The {@link ApplicationHandler} that represents Jersey.<a name="line.91"></a>
-<span class="sourceLineNo">092</span>   *<a name="line.92"></a>
-<span class="sourceLineNo">093</span>   * &lt;p&gt;This field is never {@code null}.&lt;/p&gt;<a name="line.93"></a>
-<span class="sourceLineNo">094</span>   */<a name="line.94"></a>
-<span class="sourceLineNo">095</span>  private final ApplicationHandler applicationHandler;<a name="line.95"></a>
-<span class="sourceLineNo">096</span><a name="line.96"></a>
-<span class="sourceLineNo">097</span>  private ScheduledFuture&lt;?&gt; suspendTimeoutFuture;<a name="line.97"></a>
-<span class="sourceLineNo">098</span><a name="line.98"></a>
-<span class="sourceLineNo">099</span>  private Runnable suspendTimeoutHandler;<a name="line.99"></a>
+<span class="sourceLineNo">090</span><a name="line.90"></a>
+<span class="sourceLineNo">091</span>  private static final String cn = AbstractContainerRequestHandlingResponseWriter.class.getName();<a name="line.91"></a>
+<span class="sourceLineNo">092</span><a name="line.92"></a>
+<span class="sourceLineNo">093</span>  private static final Logger logger = Logger.getLogger(cn);<a name="line.93"></a>
+<span class="sourceLineNo">094</span><a name="line.94"></a>
+<span class="sourceLineNo">095</span><a name="line.95"></a>
+<span class="sourceLineNo">096</span>  /*<a name="line.96"></a>
+<span class="sourceLineNo">097</span>   * Instance fields.<a name="line.97"></a>
+<span class="sourceLineNo">098</span>   */<a name="line.98"></a>
+<span class="sourceLineNo">099</span><a name="line.99"></a>
 <span class="sourceLineNo">100</span><a name="line.100"></a>
-<span class="sourceLineNo">101</span>  private ChannelHandlerContext channelHandlerContext;<a name="line.101"></a>
-<span class="sourceLineNo">102</span><a name="line.102"></a>
-<span class="sourceLineNo">103</span>  private final int flushThreshold;<a name="line.103"></a>
-<span class="sourceLineNo">104</span><a name="line.104"></a>
-<span class="sourceLineNo">105</span>  private final ByteBufCreator byteBufCreator;<a name="line.105"></a>
-<span class="sourceLineNo">106</span><a name="line.106"></a>
-<span class="sourceLineNo">107</span>  /*<a name="line.107"></a>
-<span class="sourceLineNo">108</span>   * Constructors.<a name="line.108"></a>
-<span class="sourceLineNo">109</span>   */<a name="line.109"></a>
-<span class="sourceLineNo">110</span><a name="line.110"></a>
-<span class="sourceLineNo">111</span>  /**<a name="line.111"></a>
-<span class="sourceLineNo">112</span>   * Creates a new {@link<a name="line.112"></a>
-<span class="sourceLineNo">113</span>   * AbstractContainerRequestHandlingResponseWriter}.<a name="line.113"></a>
-<span class="sourceLineNo">114</span>   *<a name="line.114"></a>
-<span class="sourceLineNo">115</span>   * @param applicationHandler an {@link ApplicationHandler}<a name="line.115"></a>
-<span class="sourceLineNo">116</span>   * representing a &lt;a<a name="line.116"></a>
-<span class="sourceLineNo">117</span>   * href="https://jakarta.ee/specifications/restful-ws/"<a name="line.117"></a>
-<span class="sourceLineNo">118</span>   * target="_parent"&gt;Jakarta RESTful Web Services application&lt;/a&gt;<a name="line.118"></a>
-<span class="sourceLineNo">119</span>   * whose {@link ApplicationHandler#handle(ContainerRequest)} method<a name="line.119"></a>
-<span class="sourceLineNo">120</span>   * will serve as the bridge between Netty and Jersey; may be {@code<a name="line.120"></a>
-<span class="sourceLineNo">121</span>   * null} somewhat pathologically but normally is not<a name="line.121"></a>
-<span class="sourceLineNo">122</span>   *<a name="line.122"></a>
-<span class="sourceLineNo">123</span>   * @see<a name="line.123"></a>
-<span class="sourceLineNo">124</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.124"></a>
-<span class="sourceLineNo">125</span>   * int,<a name="line.125"></a>
-<span class="sourceLineNo">126</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.126"></a>
-<span class="sourceLineNo">127</span>   * <a name="line.127"></a>
-<span class="sourceLineNo">128</span>   * @see ApplicationHandler<a name="line.128"></a>
-<span class="sourceLineNo">129</span>   *<a name="line.129"></a>
-<span class="sourceLineNo">130</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.130"></a>
-<span class="sourceLineNo">131</span>   *<a name="line.131"></a>
-<span class="sourceLineNo">132</span>   * @see #channelRead(ChannelHandlerContext, Object)<a name="line.132"></a>
-<span class="sourceLineNo">133</span>   */<a name="line.133"></a>
-<span class="sourceLineNo">134</span>  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {<a name="line.134"></a>
-<span class="sourceLineNo">135</span>    this(applicationHandler, 8192, null);<a name="line.135"></a>
-<span class="sourceLineNo">136</span>  }<a name="line.136"></a>
-<span class="sourceLineNo">137</span>  <a name="line.137"></a>
-<span class="sourceLineNo">138</span>  /**<a name="line.138"></a>
-<span class="sourceLineNo">139</span>   * Creates a new {@link<a name="line.139"></a>
-<span class="sourceLineNo">140</span>   * AbstractContainerRequestHandlingResponseWriter}.<a name="line.140"></a>
-<span class="sourceLineNo">141</span>   *<a name="line.141"></a>
-<span class="sourceLineNo">142</span>   * @param applicationHandler an {@link ApplicationHandler}<a name="line.142"></a>
-<span class="sourceLineNo">143</span>   * representing a &lt;a<a name="line.143"></a>
-<span class="sourceLineNo">144</span>   * href="https://jakarta.ee/specifications/restful-ws/"<a name="line.144"></a>
-<span class="sourceLineNo">145</span>   * target="_parent"&gt;Jakarta RESTful Web Services application&lt;/a&gt;<a name="line.145"></a>
-<span class="sourceLineNo">146</span>   * whose {@link ApplicationHandler#handle(ContainerRequest)} method<a name="line.146"></a>
-<span class="sourceLineNo">147</span>   * will serve as the bridge between Netty and Jersey; may be {@code<a name="line.147"></a>
-<span class="sourceLineNo">148</span>   * null} somewhat pathologically but normally is not<a name="line.148"></a>
-<span class="sourceLineNo">149</span>   *<a name="line.149"></a>
-<span class="sourceLineNo">150</span>   * @param flushThreshold the minimum number of bytes that an {@link<a name="line.150"></a>
-<span class="sourceLineNo">151</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}<a name="line.151"></a>
-<span class="sourceLineNo">152</span>   * returned by the {@link #createOutputStream(long,<a name="line.152"></a>
-<span class="sourceLineNo">153</span>   * ContainerResponse)} method must write before an automatic<a name="line.153"></a>
-<span class="sourceLineNo">154</span>   * {@linkplain<a name="line.154"></a>
-<span class="sourceLineNo">155</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()<a name="line.155"></a>
-<span class="sourceLineNo">156</span>   * flush} may take place; if less than {@code 0} {@code 0} will be<a name="line.156"></a>
-<span class="sourceLineNo">157</span>   * used instead; if {@code Integer#MAX_VALUE} then it is suggested<a name="line.157"></a>
-<span class="sourceLineNo">158</span>   * that no automatic flushing will occur<a name="line.158"></a>
-<span class="sourceLineNo">159</span>   *<a name="line.159"></a>
-<span class="sourceLineNo">160</span>   * @param byteBufCreator a {@link ByteBufCreator} that may be used<a name="line.160"></a>
-<span class="sourceLineNo">161</span>   * (but does not have to be used) by the implementation of the<a name="line.161"></a>
-<span class="sourceLineNo">162</span>   * {@link #createOutputStream(long, ContainerResponse)} method; may<a name="line.162"></a>
-<span class="sourceLineNo">163</span>   * be {@code null}<a name="line.163"></a>
-<span class="sourceLineNo">164</span>   *<a name="line.164"></a>
-<span class="sourceLineNo">165</span>   * @see ApplicationHandler<a name="line.165"></a>
-<span class="sourceLineNo">166</span>   *<a name="line.166"></a>
-<span class="sourceLineNo">167</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.167"></a>
-<span class="sourceLineNo">168</span>   *<a name="line.168"></a>
-<span class="sourceLineNo">169</span>   * @see #channelRead(ChannelHandlerContext, Object)<a name="line.169"></a>
-<span class="sourceLineNo">170</span>   *<a name="line.170"></a>
-<span class="sourceLineNo">171</span>   * @see #getFlushThreshold()<a name="line.171"></a>
+<span class="sourceLineNo">101</span>  /**<a name="line.101"></a>
+<span class="sourceLineNo">102</span>   * The {@link ApplicationHandler} that represents Jersey.<a name="line.102"></a>
+<span class="sourceLineNo">103</span>   *<a name="line.103"></a>
+<span class="sourceLineNo">104</span>   * &lt;p&gt;This field is never {@code null}.&lt;/p&gt;<a name="line.104"></a>
+<span class="sourceLineNo">105</span>   */<a name="line.105"></a>
+<span class="sourceLineNo">106</span>  private final ApplicationHandler applicationHandler;<a name="line.106"></a>
+<span class="sourceLineNo">107</span><a name="line.107"></a>
+<span class="sourceLineNo">108</span>  private ScheduledFuture&lt;?&gt; suspendTimeoutFuture;<a name="line.108"></a>
+<span class="sourceLineNo">109</span><a name="line.109"></a>
+<span class="sourceLineNo">110</span>  private Runnable suspendTimeoutHandler;<a name="line.110"></a>
+<span class="sourceLineNo">111</span><a name="line.111"></a>
+<span class="sourceLineNo">112</span>  private ChannelHandlerContext channelHandlerContext;<a name="line.112"></a>
+<span class="sourceLineNo">113</span><a name="line.113"></a>
+<span class="sourceLineNo">114</span>  private final int flushThreshold;<a name="line.114"></a>
+<span class="sourceLineNo">115</span><a name="line.115"></a>
+<span class="sourceLineNo">116</span>  private final ByteBufCreator byteBufCreator;<a name="line.116"></a>
+<span class="sourceLineNo">117</span><a name="line.117"></a>
+<span class="sourceLineNo">118</span>  <a name="line.118"></a>
+<span class="sourceLineNo">119</span>  /*<a name="line.119"></a>
+<span class="sourceLineNo">120</span>   * Constructors.<a name="line.120"></a>
+<span class="sourceLineNo">121</span>   */<a name="line.121"></a>
+<span class="sourceLineNo">122</span><a name="line.122"></a>
+<span class="sourceLineNo">123</span>  <a name="line.123"></a>
+<span class="sourceLineNo">124</span>  /**<a name="line.124"></a>
+<span class="sourceLineNo">125</span>   * Creates a new {@link<a name="line.125"></a>
+<span class="sourceLineNo">126</span>   * AbstractContainerRequestHandlingResponseWriter}.<a name="line.126"></a>
+<span class="sourceLineNo">127</span>   *<a name="line.127"></a>
+<span class="sourceLineNo">128</span>   * @param applicationHandler an {@link ApplicationHandler}<a name="line.128"></a>
+<span class="sourceLineNo">129</span>   * representing a &lt;a<a name="line.129"></a>
+<span class="sourceLineNo">130</span>   * href="https://jakarta.ee/specifications/restful-ws/"<a name="line.130"></a>
+<span class="sourceLineNo">131</span>   * target="_parent"&gt;Jakarta RESTful Web Services application&lt;/a&gt;<a name="line.131"></a>
+<span class="sourceLineNo">132</span>   * whose {@link ApplicationHandler#handle(ContainerRequest)} method<a name="line.132"></a>
+<span class="sourceLineNo">133</span>   * will serve as the bridge between Netty and Jersey; may be {@code<a name="line.133"></a>
+<span class="sourceLineNo">134</span>   * null} somewhat pathologically but normally is not<a name="line.134"></a>
+<span class="sourceLineNo">135</span>   *<a name="line.135"></a>
+<span class="sourceLineNo">136</span>   * @see<a name="line.136"></a>
+<span class="sourceLineNo">137</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.137"></a>
+<span class="sourceLineNo">138</span>   * int,<a name="line.138"></a>
+<span class="sourceLineNo">139</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.139"></a>
+<span class="sourceLineNo">140</span>   * <a name="line.140"></a>
+<span class="sourceLineNo">141</span>   * @see ApplicationHandler<a name="line.141"></a>
+<span class="sourceLineNo">142</span>   *<a name="line.142"></a>
+<span class="sourceLineNo">143</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.143"></a>
+<span class="sourceLineNo">144</span>   *<a name="line.144"></a>
+<span class="sourceLineNo">145</span>   * @see #channelRead(ChannelHandlerContext, Object)<a name="line.145"></a>
+<span class="sourceLineNo">146</span>   */<a name="line.146"></a>
+<span class="sourceLineNo">147</span>  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {<a name="line.147"></a>
+<span class="sourceLineNo">148</span>    this(applicationHandler, 8192, null);<a name="line.148"></a>
+<span class="sourceLineNo">149</span>  }<a name="line.149"></a>
+<span class="sourceLineNo">150</span>  <a name="line.150"></a>
+<span class="sourceLineNo">151</span>  /**<a name="line.151"></a>
+<span class="sourceLineNo">152</span>   * Creates a new {@link<a name="line.152"></a>
+<span class="sourceLineNo">153</span>   * AbstractContainerRequestHandlingResponseWriter}.<a name="line.153"></a>
+<span class="sourceLineNo">154</span>   *<a name="line.154"></a>
+<span class="sourceLineNo">155</span>   * @param applicationHandler an {@link ApplicationHandler}<a name="line.155"></a>
+<span class="sourceLineNo">156</span>   * representing a &lt;a<a name="line.156"></a>
+<span class="sourceLineNo">157</span>   * href="https://jakarta.ee/specifications/restful-ws/"<a name="line.157"></a>
+<span class="sourceLineNo">158</span>   * target="_parent"&gt;Jakarta RESTful Web Services application&lt;/a&gt;<a name="line.158"></a>
+<span class="sourceLineNo">159</span>   * whose {@link ApplicationHandler#handle(ContainerRequest)} method<a name="line.159"></a>
+<span class="sourceLineNo">160</span>   * will serve as the bridge between Netty and Jersey; may be {@code<a name="line.160"></a>
+<span class="sourceLineNo">161</span>   * null} somewhat pathologically but normally is not<a name="line.161"></a>
+<span class="sourceLineNo">162</span>   *<a name="line.162"></a>
+<span class="sourceLineNo">163</span>   * @param flushThreshold the minimum number of bytes that an {@link<a name="line.163"></a>
+<span class="sourceLineNo">164</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}<a name="line.164"></a>
+<span class="sourceLineNo">165</span>   * returned by the {@link #createOutputStream(long,<a name="line.165"></a>
+<span class="sourceLineNo">166</span>   * ContainerResponse)} method must write before an automatic<a name="line.166"></a>
+<span class="sourceLineNo">167</span>   * {@linkplain<a name="line.167"></a>
+<span class="sourceLineNo">168</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()<a name="line.168"></a>
+<span class="sourceLineNo">169</span>   * flush} may take place; if less than {@code 0} {@code 0} will be<a name="line.169"></a>
+<span class="sourceLineNo">170</span>   * used instead; if {@code Integer#MAX_VALUE} then it is suggested<a name="line.170"></a>
+<span class="sourceLineNo">171</span>   * that no automatic flushing will occur<a name="line.171"></a>
 <span class="sourceLineNo">172</span>   *<a name="line.172"></a>
-<span class="sourceLineNo">173</span>   * @see #getByteBufCreator()<a name="line.173"></a>
-<span class="sourceLineNo">174</span>   *<a name="line.174"></a>
-<span class="sourceLineNo">175</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.175"></a>
-<span class="sourceLineNo">176</span>   */<a name="line.176"></a>
-<span class="sourceLineNo">177</span>  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,<a name="line.177"></a>
-<span class="sourceLineNo">178</span>                                                           final int flushThreshold,<a name="line.178"></a>
-<span class="sourceLineNo">179</span>                                                           final ByteBufCreator byteBufCreator) {<a name="line.179"></a>
-<span class="sourceLineNo">180</span>    super();<a name="line.180"></a>
-<span class="sourceLineNo">181</span>    this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;<a name="line.181"></a>
-<span class="sourceLineNo">182</span>    this.flushThreshold = Math.max(0, flushThreshold);<a name="line.182"></a>
-<span class="sourceLineNo">183</span>    this.byteBufCreator = byteBufCreator;<a name="line.183"></a>
-<span class="sourceLineNo">184</span>  }<a name="line.184"></a>
-<span class="sourceLineNo">185</span><a name="line.185"></a>
-<span class="sourceLineNo">186</span><a name="line.186"></a>
-<span class="sourceLineNo">187</span>  /*<a name="line.187"></a>
-<span class="sourceLineNo">188</span>   * Instance methods.<a name="line.188"></a>
+<span class="sourceLineNo">173</span>   * @param byteBufCreator a {@link ByteBufCreator} that may be used<a name="line.173"></a>
+<span class="sourceLineNo">174</span>   * (but does not have to be used) by the implementation of the<a name="line.174"></a>
+<span class="sourceLineNo">175</span>   * {@link #createOutputStream(long, ContainerResponse)} method; may<a name="line.175"></a>
+<span class="sourceLineNo">176</span>   * be {@code null}<a name="line.176"></a>
+<span class="sourceLineNo">177</span>   *<a name="line.177"></a>
+<span class="sourceLineNo">178</span>   * @see ApplicationHandler<a name="line.178"></a>
+<span class="sourceLineNo">179</span>   *<a name="line.179"></a>
+<span class="sourceLineNo">180</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.180"></a>
+<span class="sourceLineNo">181</span>   *<a name="line.181"></a>
+<span class="sourceLineNo">182</span>   * @see #channelRead(ChannelHandlerContext, Object)<a name="line.182"></a>
+<span class="sourceLineNo">183</span>   *<a name="line.183"></a>
+<span class="sourceLineNo">184</span>   * @see #getFlushThreshold()<a name="line.184"></a>
+<span class="sourceLineNo">185</span>   *<a name="line.185"></a>
+<span class="sourceLineNo">186</span>   * @see #getByteBufCreator()<a name="line.186"></a>
+<span class="sourceLineNo">187</span>   *<a name="line.187"></a>
+<span class="sourceLineNo">188</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.188"></a>
 <span class="sourceLineNo">189</span>   */<a name="line.189"></a>
-<span class="sourceLineNo">190</span><a name="line.190"></a>
-<span class="sourceLineNo">191</span><a name="line.191"></a>
-<span class="sourceLineNo">192</span>  /**<a name="line.192"></a>
-<span class="sourceLineNo">193</span>   * If the supplied {@code message} is a {@link ContainerRequest}<a name="line.193"></a>
-<span class="sourceLineNo">194</span>   * then this method will {@linkplain<a name="line.194"></a>
-<span class="sourceLineNo">195</span>   * ContainerRequest#setWriter(ContainerResponseWriter) install<a name="line.195"></a>
-<span class="sourceLineNo">196</span>   * itself as that request's &lt;code&gt;ContainerResponseWriter&lt;/code&gt;}<a name="line.196"></a>
-<span class="sourceLineNo">197</span>   * and will invoke {@link<a name="line.197"></a>
-<span class="sourceLineNo">198</span>   * ApplicationHandler#handle(ContainerRequest)}.<a name="line.198"></a>
-<span class="sourceLineNo">199</span>   *<a name="line.199"></a>
-<span class="sourceLineNo">200</span>   * &lt;p&gt;In all other cases this method will simply call {@link<a name="line.200"></a>
-<span class="sourceLineNo">201</span>   * ChannelInboundHandlerAdapter#channelRead(ChannelHandlerContext,<a name="line.201"></a>
-<span class="sourceLineNo">202</span>   * Object)} with the supplied {@code message}.&lt;/p&gt;<a name="line.202"></a>
-<span class="sourceLineNo">203</span>   *<a name="line.203"></a>
-<span class="sourceLineNo">204</span>   * @param channelHandlerContext the {@link ChannelHandlerContext} in<a name="line.204"></a>
-<span class="sourceLineNo">205</span>   * effect; must not be {@code null}<a name="line.205"></a>
-<span class="sourceLineNo">206</span>   *<a name="line.206"></a>
-<span class="sourceLineNo">207</span>   * @param message the incoming message, or event; may be {@code null}<a name="line.207"></a>
-<span class="sourceLineNo">208</span>   *<a name="line.208"></a>
-<span class="sourceLineNo">209</span>   * @exception NullPointerException if {@code channelHandlerContext}<a name="line.209"></a>
-<span class="sourceLineNo">210</span>   * is {@code null}<a name="line.210"></a>
-<span class="sourceLineNo">211</span>   *<a name="line.211"></a>
-<span class="sourceLineNo">212</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.212"></a>
-<span class="sourceLineNo">213</span>   *<a name="line.213"></a>
-<span class="sourceLineNo">214</span>   * @see ContainerResponseWriter<a name="line.214"></a>
-<span class="sourceLineNo">215</span>   *<a name="line.215"></a>
-<span class="sourceLineNo">216</span>   * @see ContainerRequest#setWriter(ContainerResponseWriter)<a name="line.216"></a>
-<span class="sourceLineNo">217</span>   */<a name="line.217"></a>
-<span class="sourceLineNo">218</span>  @Override<a name="line.218"></a>
-<span class="sourceLineNo">219</span>  public final void channelRead(final ChannelHandlerContext channelHandlerContext,<a name="line.219"></a>
-<span class="sourceLineNo">220</span>                                final Object message)<a name="line.220"></a>
-<span class="sourceLineNo">221</span>    throws Exception {<a name="line.221"></a>
-<span class="sourceLineNo">222</span>    if (this.getChannelHandlerContext() != null) {<a name="line.222"></a>
-<span class="sourceLineNo">223</span>      throw new IllegalStateException("this.getChannelHandlerContext() != null: " + this.getChannelHandlerContext());<a name="line.223"></a>
-<span class="sourceLineNo">224</span>    }<a name="line.224"></a>
-<span class="sourceLineNo">225</span>    this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);<a name="line.225"></a>
-<span class="sourceLineNo">226</span>    try {<a name="line.226"></a>
-<span class="sourceLineNo">227</span>      if (message instanceof ContainerRequest) {<a name="line.227"></a>
-<span class="sourceLineNo">228</span>        final ContainerRequest containerRequest = (ContainerRequest)message;<a name="line.228"></a>
-<span class="sourceLineNo">229</span>        containerRequest.setWriter(this);<a name="line.229"></a>
-<span class="sourceLineNo">230</span>        this.applicationHandler.handle(containerRequest);<a name="line.230"></a>
-<span class="sourceLineNo">231</span>      } else {<a name="line.231"></a>
-<span class="sourceLineNo">232</span>        super.channelRead(channelHandlerContext, message);<a name="line.232"></a>
-<span class="sourceLineNo">233</span>      }<a name="line.233"></a>
-<span class="sourceLineNo">234</span>    } finally {<a name="line.234"></a>
-<span class="sourceLineNo">235</span>      this.channelHandlerContext = null;<a name="line.235"></a>
-<span class="sourceLineNo">236</span>    }<a name="line.236"></a>
-<span class="sourceLineNo">237</span>  }<a name="line.237"></a>
-<span class="sourceLineNo">238</span><a name="line.238"></a>
-<span class="sourceLineNo">239</span>  /**<a name="line.239"></a>
-<span class="sourceLineNo">240</span>   * Overrides the {@link<a name="line.240"></a>
-<span class="sourceLineNo">241</span>   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}<a name="line.241"></a>
-<span class="sourceLineNo">242</span>   * method to call {@link ChannelHandlerContext#flush()<a name="line.242"></a>
-<span class="sourceLineNo">243</span>   * channelHandlerContext.flush()} before calling the superclass<a name="line.243"></a>
-<span class="sourceLineNo">244</span>   * implementation.<a name="line.244"></a>
+<span class="sourceLineNo">190</span>  protected AbstractContainerRequestHandlingResponseWriter(ApplicationHandler applicationHandler,<a name="line.190"></a>
+<span class="sourceLineNo">191</span>                                                           final int flushThreshold,<a name="line.191"></a>
+<span class="sourceLineNo">192</span>                                                           final ByteBufCreator byteBufCreator) {<a name="line.192"></a>
+<span class="sourceLineNo">193</span>    super();<a name="line.193"></a>
+<span class="sourceLineNo">194</span>    if (applicationHandler == null) {<a name="line.194"></a>
+<span class="sourceLineNo">195</span>      applicationHandler = new ApplicationHandler();<a name="line.195"></a>
+<span class="sourceLineNo">196</span>    }<a name="line.196"></a>
+<span class="sourceLineNo">197</span>    this.applicationHandler = applicationHandler;    <a name="line.197"></a>
+<span class="sourceLineNo">198</span>    this.flushThreshold = Math.max(0, flushThreshold);<a name="line.198"></a>
+<span class="sourceLineNo">199</span>    this.byteBufCreator = byteBufCreator;<a name="line.199"></a>
+<span class="sourceLineNo">200</span>  }<a name="line.200"></a>
+<span class="sourceLineNo">201</span><a name="line.201"></a>
+<span class="sourceLineNo">202</span><a name="line.202"></a>
+<span class="sourceLineNo">203</span>  /*<a name="line.203"></a>
+<span class="sourceLineNo">204</span>   * Instance methods.<a name="line.204"></a>
+<span class="sourceLineNo">205</span>   */<a name="line.205"></a>
+<span class="sourceLineNo">206</span><a name="line.206"></a>
+<span class="sourceLineNo">207</span>  <a name="line.207"></a>
+<span class="sourceLineNo">208</span>  public final void channelActive(final ChannelHandlerContext channelHandlerContext) throws Exception {<a name="line.208"></a>
+<span class="sourceLineNo">209</span>    super.channelActive(channelHandlerContext);<a name="line.209"></a>
+<span class="sourceLineNo">210</span>    // See<a name="line.210"></a>
+<span class="sourceLineNo">211</span>    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413<a name="line.211"></a>
+<span class="sourceLineNo">212</span>    if (!channelHandlerContext.channel().config().isAutoRead()) {<a name="line.212"></a>
+<span class="sourceLineNo">213</span>      channelHandlerContext.read();<a name="line.213"></a>
+<span class="sourceLineNo">214</span>    }<a name="line.214"></a>
+<span class="sourceLineNo">215</span>  }<a name="line.215"></a>
+<span class="sourceLineNo">216</span><a name="line.216"></a>
+<span class="sourceLineNo">217</span>  /**<a name="line.217"></a>
+<span class="sourceLineNo">218</span>   * If the supplied {@code message} is a {@link ContainerRequest}<a name="line.218"></a>
+<span class="sourceLineNo">219</span>   * then this method will {@linkplain<a name="line.219"></a>
+<span class="sourceLineNo">220</span>   * ContainerRequest#setWriter(ContainerResponseWriter) install<a name="line.220"></a>
+<span class="sourceLineNo">221</span>   * itself as that request's &lt;code&gt;ContainerResponseWriter&lt;/code&gt;}<a name="line.221"></a>
+<span class="sourceLineNo">222</span>   * and will invoke {@link<a name="line.222"></a>
+<span class="sourceLineNo">223</span>   * ApplicationHandler#handle(ContainerRequest)}.<a name="line.223"></a>
+<span class="sourceLineNo">224</span>   *<a name="line.224"></a>
+<span class="sourceLineNo">225</span>   * &lt;p&gt;In all other cases this method will simply call {@link<a name="line.225"></a>
+<span class="sourceLineNo">226</span>   * ChannelInboundHandlerAdapter#channelRead(ChannelHandlerContext,<a name="line.226"></a>
+<span class="sourceLineNo">227</span>   * Object)} with the supplied {@code message}.&lt;/p&gt;<a name="line.227"></a>
+<span class="sourceLineNo">228</span>   *<a name="line.228"></a>
+<span class="sourceLineNo">229</span>   * @param channelHandlerContext the {@link ChannelHandlerContext} in<a name="line.229"></a>
+<span class="sourceLineNo">230</span>   * effect; must not be {@code null}<a name="line.230"></a>
+<span class="sourceLineNo">231</span>   *<a name="line.231"></a>
+<span class="sourceLineNo">232</span>   * @param message the incoming message, or event; may be {@code null}<a name="line.232"></a>
+<span class="sourceLineNo">233</span>   *<a name="line.233"></a>
+<span class="sourceLineNo">234</span>   * @exception NullPointerException if {@code channelHandlerContext}<a name="line.234"></a>
+<span class="sourceLineNo">235</span>   * is {@code null}<a name="line.235"></a>
+<span class="sourceLineNo">236</span>   *<a name="line.236"></a>
+<span class="sourceLineNo">237</span>   * @exception Exception if {@code message} is not an instance of<a name="line.237"></a>
+<span class="sourceLineNo">238</span>   * {@link ContainerRequest} and {@link<a name="line.238"></a>
+<span class="sourceLineNo">239</span>   * ChannelInboundHandlerAdapter#channelRead(ChannelHandlerContext,<a name="line.239"></a>
+<span class="sourceLineNo">240</span>   * Object)} throws an {@link Exception}<a name="line.240"></a>
+<span class="sourceLineNo">241</span>   *<a name="line.241"></a>
+<span class="sourceLineNo">242</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.242"></a>
+<span class="sourceLineNo">243</span>   *<a name="line.243"></a>
+<span class="sourceLineNo">244</span>   * @see ContainerResponseWriter<a name="line.244"></a>
 <span class="sourceLineNo">245</span>   *<a name="line.245"></a>
-<span class="sourceLineNo">246</span>   * @param channelHandlerContext the {@link ChannelHandlerContext} in<a name="line.246"></a>
-<span class="sourceLineNo">247</span>   * effect; must not be {@code null}<a name="line.247"></a>
-<span class="sourceLineNo">248</span>   *<a name="line.248"></a>
-<span class="sourceLineNo">249</span>   * @exception NullPointerException if {@code channelHandlerContext} is {@code null}<a name="line.249"></a>
-<span class="sourceLineNo">250</span>   *<a name="line.250"></a>
-<span class="sourceLineNo">251</span>   * @exception Exception if {@link<a name="line.251"></a>
-<span class="sourceLineNo">252</span>   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}<a name="line.252"></a>
-<span class="sourceLineNo">253</span>   * throws an {@link Exception}<a name="line.253"></a>
-<span class="sourceLineNo">254</span>   */<a name="line.254"></a>
-<span class="sourceLineNo">255</span>  @Override<a name="line.255"></a>
-<span class="sourceLineNo">256</span>  public final void channelReadComplete(final ChannelHandlerContext channelHandlerContext) throws Exception {<a name="line.256"></a>
-<span class="sourceLineNo">257</span>    Objects.requireNonNull(channelHandlerContext).flush();<a name="line.257"></a>
-<span class="sourceLineNo">258</span>    super.channelReadComplete(channelHandlerContext);<a name="line.258"></a>
-<span class="sourceLineNo">259</span>  }<a name="line.259"></a>
-<span class="sourceLineNo">260</span><a name="line.260"></a>
-<span class="sourceLineNo">261</span>  /**<a name="line.261"></a>
-<span class="sourceLineNo">262</span>   * Returns the {@link ChannelHandlerContext} in effect, or {@code<a name="line.262"></a>
-<span class="sourceLineNo">263</span>   * null} if there is no such {@link ChannelHandlerContext}.<a name="line.263"></a>
-<span class="sourceLineNo">264</span>   *<a name="line.264"></a>
-<span class="sourceLineNo">265</span>   * &lt;p&gt;This method may return {@code null}.&lt;/p&gt;<a name="line.265"></a>
-<span class="sourceLineNo">266</span>   *<a name="line.266"></a>
-<span class="sourceLineNo">267</span>   * @return the {@link ChannelHandlerContext} in effect, or {@code<a name="line.267"></a>
-<span class="sourceLineNo">268</span>   * null} if there is no such {@link ChannelHandlerContext}<a name="line.268"></a>
-<span class="sourceLineNo">269</span>   */<a name="line.269"></a>
-<span class="sourceLineNo">270</span>  protected final ChannelHandlerContext getChannelHandlerContext() {<a name="line.270"></a>
-<span class="sourceLineNo">271</span>    return this.channelHandlerContext;<a name="line.271"></a>
-<span class="sourceLineNo">272</span>  }<a name="line.272"></a>
-<span class="sourceLineNo">273</span><a name="line.273"></a>
-<span class="sourceLineNo">274</span>  /*<a name="line.274"></a>
-<span class="sourceLineNo">275</span>   * ContainerResponseWriter overrides.<a name="line.275"></a>
-<span class="sourceLineNo">276</span>   */<a name="line.276"></a>
-<span class="sourceLineNo">277</span><a name="line.277"></a>
-<span class="sourceLineNo">278</span>  /**<a name="line.278"></a>
-<span class="sourceLineNo">279</span>   * Returns {@code true} when invoked.<a name="line.279"></a>
+<span class="sourceLineNo">246</span>   * @see ContainerRequest#setWriter(ContainerResponseWriter)<a name="line.246"></a>
+<span class="sourceLineNo">247</span>   */<a name="line.247"></a>
+<span class="sourceLineNo">248</span>  @Override<a name="line.248"></a>
+<span class="sourceLineNo">249</span>  public final void channelRead(final ChannelHandlerContext channelHandlerContext,<a name="line.249"></a>
+<span class="sourceLineNo">250</span>                                final Object message)<a name="line.250"></a>
+<span class="sourceLineNo">251</span>    throws Exception {<a name="line.251"></a>
+<span class="sourceLineNo">252</span>    if (this.getChannelHandlerContext() != null) {<a name="line.252"></a>
+<span class="sourceLineNo">253</span>      throw new IllegalStateException("this.getChannelHandlerContext() != null: " + this.getChannelHandlerContext());<a name="line.253"></a>
+<span class="sourceLineNo">254</span>    }<a name="line.254"></a>
+<span class="sourceLineNo">255</span>    this.channelHandlerContext = Objects.requireNonNull(channelHandlerContext);<a name="line.255"></a>
+<span class="sourceLineNo">256</span>    try {<a name="line.256"></a>
+<span class="sourceLineNo">257</span>      if (message instanceof ContainerRequest) {<a name="line.257"></a>
+<span class="sourceLineNo">258</span>        final ContainerRequest containerRequest = (ContainerRequest)message;<a name="line.258"></a>
+<span class="sourceLineNo">259</span>        containerRequest.setWriter(this);<a name="line.259"></a>
+<span class="sourceLineNo">260</span>        this.applicationHandler.handle(containerRequest);<a name="line.260"></a>
+<span class="sourceLineNo">261</span>      } else {<a name="line.261"></a>
+<span class="sourceLineNo">262</span>        super.channelRead(channelHandlerContext, message);<a name="line.262"></a>
+<span class="sourceLineNo">263</span>      }<a name="line.263"></a>
+<span class="sourceLineNo">264</span>    } finally {<a name="line.264"></a>
+<span class="sourceLineNo">265</span>      this.channelHandlerContext = null;<a name="line.265"></a>
+<span class="sourceLineNo">266</span>    }<a name="line.266"></a>
+<span class="sourceLineNo">267</span>  }<a name="line.267"></a>
+<span class="sourceLineNo">268</span><a name="line.268"></a>
+<span class="sourceLineNo">269</span>  /**<a name="line.269"></a>
+<span class="sourceLineNo">270</span>   * Overrides the {@link<a name="line.270"></a>
+<span class="sourceLineNo">271</span>   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}<a name="line.271"></a>
+<span class="sourceLineNo">272</span>   * method to call {@link ChannelHandlerContext#flush()<a name="line.272"></a>
+<span class="sourceLineNo">273</span>   * channelHandlerContext.flush()} before calling the superclass<a name="line.273"></a>
+<span class="sourceLineNo">274</span>   * implementation.<a name="line.274"></a>
+<span class="sourceLineNo">275</span>   *<a name="line.275"></a>
+<span class="sourceLineNo">276</span>   * @param channelHandlerContext the {@link ChannelHandlerContext} in<a name="line.276"></a>
+<span class="sourceLineNo">277</span>   * effect; must not be {@code null}<a name="line.277"></a>
+<span class="sourceLineNo">278</span>   *<a name="line.278"></a>
+<span class="sourceLineNo">279</span>   * @exception NullPointerException if {@code channelHandlerContext} is {@code null}<a name="line.279"></a>
 <span class="sourceLineNo">280</span>   *<a name="line.280"></a>
-<span class="sourceLineNo">281</span>   * &lt;p&gt;Note that this is a default value.  Response buffering &lt;a<a name="line.281"></a>
-<span class="sourceLineNo">282</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.282"></a>
-<span class="sourceLineNo">283</span>   * target="_parent"&gt;can be configured&lt;/a&gt;.&lt;/p&gt;<a name="line.283"></a>
-<span class="sourceLineNo">284</span>   *<a name="line.284"></a>
-<span class="sourceLineNo">285</span>   * @return {@code true} when invoked<a name="line.285"></a>
-<span class="sourceLineNo">286</span>   *<a name="line.286"></a>
-<span class="sourceLineNo">287</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.287"></a>
-<span class="sourceLineNo">288</span>   *<a name="line.288"></a>
-<span class="sourceLineNo">289</span>   * @see &lt;a<a name="line.289"></a>
-<span class="sourceLineNo">290</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.290"></a>
-<span class="sourceLineNo">291</span>   * target="_parent"&gt;&lt;code&gt;ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.291"></a>
-<span class="sourceLineNo">292</span>   *<a name="line.292"></a>
-<span class="sourceLineNo">293</span>   * @see &lt;a<a name="line.293"></a>
-<span class="sourceLineNo">294</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.294"></a>
-<span class="sourceLineNo">295</span>   * target="_parent"&gt;&lt;code&gt;OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.295"></a>
-<span class="sourceLineNo">296</span>   */<a name="line.296"></a>
-<span class="sourceLineNo">297</span>  @Override<a name="line.297"></a>
-<span class="sourceLineNo">298</span>  public boolean enableResponseBuffering() {<a name="line.298"></a>
-<span class="sourceLineNo">299</span>    return true;<a name="line.299"></a>
-<span class="sourceLineNo">300</span>  }<a name="line.300"></a>
-<span class="sourceLineNo">301</span><a name="line.301"></a>
-<span class="sourceLineNo">302</span>  /**<a name="line.302"></a>
-<span class="sourceLineNo">303</span>   * Writes the status and headers portion of the response present in<a name="line.303"></a>
-<span class="sourceLineNo">304</span>   * the supplied {@link ContainerResponse} by calling the {@link<a name="line.304"></a>
-<span class="sourceLineNo">305</span>   * #writeStatusAndHeaders(long, ContainerResponse)} method, and, if<a name="line.305"></a>
-<span class="sourceLineNo">306</span>   * the supplied {@code contentLength} is not {@code 0L} and that<a name="line.306"></a>
-<span class="sourceLineNo">307</span>   * method returns {@code true} indicating that output will be<a name="line.307"></a>
-<span class="sourceLineNo">308</span>   * forthcoming, returns the result of invoking {@link<a name="line.308"></a>
-<span class="sourceLineNo">309</span>   * #createOutputStream(long, ContainerResponse)}.<a name="line.309"></a>
-<span class="sourceLineNo">310</span>   *<a name="line.310"></a>
-<span class="sourceLineNo">311</span>   * &lt;p&gt;In all other cases, this method returns {@code null}.&lt;/p&gt;<a name="line.311"></a>
-<span class="sourceLineNo">312</span>   *<a name="line.312"></a>
-<span class="sourceLineNo">313</span>   * @param contentLength the content length as determined by the<a name="line.313"></a>
-<span class="sourceLineNo">314</span>   * logic encapsulated by the {@link<a name="line.314"></a>
-<span class="sourceLineNo">315</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.315"></a>
-<span class="sourceLineNo">316</span>   * than zero indicates an unknown content length<a name="line.316"></a>
-<span class="sourceLineNo">317</span>   *<a name="line.317"></a>
-<span class="sourceLineNo">318</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.318"></a>
-<span class="sourceLineNo">319</span>   * status and headers information; must not be {@code null}<a name="line.319"></a>
-<span class="sourceLineNo">320</span>   *<a name="line.320"></a>
-<span class="sourceLineNo">321</span>   * @return the {@link OutputStream} returned by the {@link<a name="line.321"></a>
-<span class="sourceLineNo">322</span>   * #createOutputStream(long, ContainerResponse)} method, or {@code<a name="line.322"></a>
-<span class="sourceLineNo">323</span>   * null}<a name="line.323"></a>
-<span class="sourceLineNo">324</span>   *<a name="line.324"></a>
-<span class="sourceLineNo">325</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.325"></a>
-<span class="sourceLineNo">326</span>   * {@code null}<a name="line.326"></a>
+<span class="sourceLineNo">281</span>   * @exception Exception if {@link<a name="line.281"></a>
+<span class="sourceLineNo">282</span>   * ChannelInboundHandlerAdapter#channelReadComplete(ChannelHandlerContext)}<a name="line.282"></a>
+<span class="sourceLineNo">283</span>   * throws an {@link Exception}<a name="line.283"></a>
+<span class="sourceLineNo">284</span>   */<a name="line.284"></a>
+<span class="sourceLineNo">285</span>  @Override<a name="line.285"></a>
+<span class="sourceLineNo">286</span>  public final void channelReadComplete(final ChannelHandlerContext channelHandlerContext) throws Exception {<a name="line.286"></a>
+<span class="sourceLineNo">287</span>    channelHandlerContext.flush();<a name="line.287"></a>
+<span class="sourceLineNo">288</span>    // See<a name="line.288"></a>
+<span class="sourceLineNo">289</span>    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413.<a name="line.289"></a>
+<span class="sourceLineNo">290</span>    super.channelReadComplete(channelHandlerContext);<a name="line.290"></a>
+<span class="sourceLineNo">291</span>    if (!channelHandlerContext.channel().config().isAutoRead()) {<a name="line.291"></a>
+<span class="sourceLineNo">292</span>      // Ultimately a read is just an idempotent call so even if other<a name="line.292"></a>
+<span class="sourceLineNo">293</span>      // handlers do this seemingly nothing bad will happen.  See<a name="line.293"></a>
+<span class="sourceLineNo">294</span>      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport/src/main/java/io/netty/channel/nio/AbstractNioChannel.java#L402-L416.<a name="line.294"></a>
+<span class="sourceLineNo">295</span>      // Even in the ancient case of blocking IO it's still<a name="line.295"></a>
+<span class="sourceLineNo">296</span>      // idempotent:<a name="line.296"></a>
+<span class="sourceLineNo">297</span>      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport/src/main/java/io/netty/channel/oio/AbstractOioChannel.java#L101-L109<a name="line.297"></a>
+<span class="sourceLineNo">298</span>      // Finally, transports like Epoll are less clear:<a name="line.298"></a>
+<span class="sourceLineNo">299</span>      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242<a name="line.299"></a>
+<span class="sourceLineNo">300</span>      // ...but Epoll too ultimately is idempotent:<a name="line.300"></a>
+<span class="sourceLineNo">301</span>      // https://github.com/netty/netty/blob/9976ab7fe86e052d29ca7accf528c885e93dcb4c/transport-native-epoll/src/main/java/io/netty/channel/epoll/AbstractEpollChannel.java#L226-L242<a name="line.301"></a>
+<span class="sourceLineNo">302</span>      channelHandlerContext.read();<a name="line.302"></a>
+<span class="sourceLineNo">303</span>    }<a name="line.303"></a>
+<span class="sourceLineNo">304</span>  }<a name="line.304"></a>
+<span class="sourceLineNo">305</span><a name="line.305"></a>
+<span class="sourceLineNo">306</span>  /**<a name="line.306"></a>
+<span class="sourceLineNo">307</span>   * Returns the {@link ChannelHandlerContext} in effect, or {@code<a name="line.307"></a>
+<span class="sourceLineNo">308</span>   * null} if there is no such {@link ChannelHandlerContext}.<a name="line.308"></a>
+<span class="sourceLineNo">309</span>   *<a name="line.309"></a>
+<span class="sourceLineNo">310</span>   * &lt;p&gt;This method may return {@code null}.&lt;/p&gt;<a name="line.310"></a>
+<span class="sourceLineNo">311</span>   *<a name="line.311"></a>
+<span class="sourceLineNo">312</span>   * @return the {@link ChannelHandlerContext} in effect, or {@code<a name="line.312"></a>
+<span class="sourceLineNo">313</span>   * null} if there is no such {@link ChannelHandlerContext}<a name="line.313"></a>
+<span class="sourceLineNo">314</span>   */<a name="line.314"></a>
+<span class="sourceLineNo">315</span>  protected final ChannelHandlerContext getChannelHandlerContext() {<a name="line.315"></a>
+<span class="sourceLineNo">316</span>    return this.channelHandlerContext;<a name="line.316"></a>
+<span class="sourceLineNo">317</span>  }<a name="line.317"></a>
+<span class="sourceLineNo">318</span><a name="line.318"></a>
+<span class="sourceLineNo">319</span>  /*<a name="line.319"></a>
+<span class="sourceLineNo">320</span>   * ContainerResponseWriter overrides.<a name="line.320"></a>
+<span class="sourceLineNo">321</span>   */<a name="line.321"></a>
+<span class="sourceLineNo">322</span><a name="line.322"></a>
+<span class="sourceLineNo">323</span>  /**<a name="line.323"></a>
+<span class="sourceLineNo">324</span>   * Returns {@code true} when invoked to indicate that buffering of<a name="line.324"></a>
+<span class="sourceLineNo">325</span>   * entity content is supported and can be configured to be on or<a name="line.325"></a>
+<span class="sourceLineNo">326</span>   * off.<a name="line.326"></a>
 <span class="sourceLineNo">327</span>   *<a name="line.327"></a>
-<span class="sourceLineNo">328</span>   * @see #writeStatusAndHeaders(long, ContainerResponse)<a name="line.328"></a>
-<span class="sourceLineNo">329</span>   *<a name="line.329"></a>
-<span class="sourceLineNo">330</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.330"></a>
-<span class="sourceLineNo">331</span>   *<a name="line.331"></a>
-<span class="sourceLineNo">332</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.332"></a>
-<span class="sourceLineNo">333</span>   */<a name="line.333"></a>
-<span class="sourceLineNo">334</span>  @Override<a name="line.334"></a>
-<span class="sourceLineNo">335</span>  public final OutputStream writeResponseStatusAndHeaders(final long contentLength,<a name="line.335"></a>
-<span class="sourceLineNo">336</span>                                                          final ContainerResponse containerResponse) {<a name="line.336"></a>
-<span class="sourceLineNo">337</span>    final OutputStream returnValue;<a name="line.337"></a>
-<span class="sourceLineNo">338</span>    if (this.writeStatusAndHeaders(contentLength, Objects.requireNonNull(containerResponse)) &amp;&amp; contentLength != 0L) {<a name="line.338"></a>
-<span class="sourceLineNo">339</span>      returnValue = this.createOutputStream(contentLength, containerResponse);<a name="line.339"></a>
-<span class="sourceLineNo">340</span>    } else {<a name="line.340"></a>
-<span class="sourceLineNo">341</span>      returnValue = null;<a name="line.341"></a>
-<span class="sourceLineNo">342</span>    }<a name="line.342"></a>
-<span class="sourceLineNo">343</span>    return returnValue;<a name="line.343"></a>
-<span class="sourceLineNo">344</span>  }<a name="line.344"></a>
-<span class="sourceLineNo">345</span><a name="line.345"></a>
-<span class="sourceLineNo">346</span>  /**<a name="line.346"></a>
-<span class="sourceLineNo">347</span>   * Writes the status and headers portion of the response present in<a name="line.347"></a>
-<span class="sourceLineNo">348</span>   * the supplied {@link ContainerResponse} and returns {@code true}<a name="line.348"></a>
-<span class="sourceLineNo">349</span>   * if further output is forthcoming.<a name="line.349"></a>
-<span class="sourceLineNo">350</span>   *<a name="line.350"></a>
-<span class="sourceLineNo">351</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.351"></a>
-<span class="sourceLineNo">352</span>   * #writeResponseStatusAndHeaders(long, ContainerResponse)} method<a name="line.352"></a>
-<span class="sourceLineNo">353</span>   * or an infinite loop may result.&lt;/p&gt;<a name="line.353"></a>
-<span class="sourceLineNo">354</span>   *<a name="line.354"></a>
-<span class="sourceLineNo">355</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.355"></a>
-<span class="sourceLineNo">356</span>   * #createOutputStream(long, ContainerResponse)} method or undefined<a name="line.356"></a>
-<span class="sourceLineNo">357</span>   * behavior may result.&lt;/p&gt;<a name="line.357"></a>
-<span class="sourceLineNo">358</span>   *<a name="line.358"></a>
-<span class="sourceLineNo">359</span>   * @param contentLength the content length as determined by the<a name="line.359"></a>
-<span class="sourceLineNo">360</span>   * logic encapsulated by the {@link<a name="line.360"></a>
-<span class="sourceLineNo">361</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.361"></a>
-<span class="sourceLineNo">362</span>   * than zero indicates an unknown content length<a name="line.362"></a>
+<span class="sourceLineNo">328</span>   * &lt;p&gt;Note that the return value of this method is a default value<a name="line.328"></a>
+<span class="sourceLineNo">329</span>   * indicating that the &lt;em&gt;concept&lt;/em&gt; of response buffering is<a name="line.329"></a>
+<span class="sourceLineNo">330</span>   * enabled.  The actual &lt;em&gt;configuration&lt;/em&gt; of response buffering<a name="line.330"></a>
+<span class="sourceLineNo">331</span>   * is a property of the application.  Specifically, an application's<a name="line.331"></a>
+<span class="sourceLineNo">332</span>   * response buffering policy &lt;a<a name="line.332"></a>
+<span class="sourceLineNo">333</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.333"></a>
+<span class="sourceLineNo">334</span>   * target="_parent"&gt;can be configured&lt;/a&gt;: if the application's<a name="line.334"></a>
+<span class="sourceLineNo">335</span>   * configuration sets the {@link<a name="line.335"></a>
+<span class="sourceLineNo">336</span>   * CommonProperties#OUTBOUND_CONTENT_LENGTH_BUFFER<a name="line.336"></a>
+<span class="sourceLineNo">337</span>   * jersey.config.contentLength.buffer} property to a positive {@code<a name="line.337"></a>
+<span class="sourceLineNo">338</span>   * int}, then buffering will occur, and if the application's<a name="line.338"></a>
+<span class="sourceLineNo">339</span>   * configuration sets the {@link<a name="line.339"></a>
+<span class="sourceLineNo">340</span>   * CommonProperties#OUTBOUND_CONTENT_LENGTH_BUFFER<a name="line.340"></a>
+<span class="sourceLineNo">341</span>   * jersey.config.contentLength.buffer} property to a negative {@code<a name="line.341"></a>
+<span class="sourceLineNo">342</span>   * int}, then buffering will not occur.  If the application's<a name="line.342"></a>
+<span class="sourceLineNo">343</span>   * configuration does nothing in this regard, response buffering<a name="line.343"></a>
+<span class="sourceLineNo">344</span>   * will be enabled with a default buffer size of {@link<a name="line.344"></a>
+<span class="sourceLineNo">345</span>   * CommittingOutputStream#DEFAULT_BUFFER_SIZE 8192}.&lt;/p&gt;<a name="line.345"></a>
+<span class="sourceLineNo">346</span>   *<a name="line.346"></a>
+<span class="sourceLineNo">347</span>   * &lt;p&gt;(If, instead, this method had been written to return {@code<a name="line.347"></a>
+<span class="sourceLineNo">348</span>   * false}, then no matter what configuration settings an application<a name="line.348"></a>
+<span class="sourceLineNo">349</span>   * might specify in the realm of response buffering settings,<a name="line.349"></a>
+<span class="sourceLineNo">350</span>   * response buffering of any kind would never be possible.)&lt;/p&gt;<a name="line.350"></a>
+<span class="sourceLineNo">351</span>   *<a name="line.351"></a>
+<span class="sourceLineNo">352</span>   * @return {@code true} when invoked; never {@code false}<a name="line.352"></a>
+<span class="sourceLineNo">353</span>   *<a name="line.353"></a>
+<span class="sourceLineNo">354</span>   * @see ContainerResponseWriter#enableResponseBuffering()<a name="line.354"></a>
+<span class="sourceLineNo">355</span>   *<a name="line.355"></a>
+<span class="sourceLineNo">356</span>   * @see &lt;a<a name="line.356"></a>
+<span class="sourceLineNo">357</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/8dcbaf4b5cb0fb345eb949acfa66b1fbe09d1ffb/core-server/src/main/java/org/glassfish/jersey/server/ServerRuntime.java#L634"<a name="line.357"></a>
+<span class="sourceLineNo">358</span>   * target="_parent"&gt;&lt;code&gt;ServerRuntime.java&lt;/code&gt;&lt;/a&gt;<a name="line.358"></a>
+<span class="sourceLineNo">359</span>   *<a name="line.359"></a>
+<span class="sourceLineNo">360</span>   * @see &lt;a<a name="line.360"></a>
+<span class="sourceLineNo">361</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-server/src/main/java/org/glassfish/jersey/server/ContainerResponse.java#L352-L363"<a name="line.361"></a>
+<span class="sourceLineNo">362</span>   * target="_parent"&gt;&lt;code&gt;ContainerResponse.java&lt;/code&gt;&lt;/a&gt;<a name="line.362"></a>
 <span class="sourceLineNo">363</span>   *<a name="line.363"></a>
-<span class="sourceLineNo">364</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.364"></a>
-<span class="sourceLineNo">365</span>   * status and headers information; must not be {@code null}<a name="line.365"></a>
-<span class="sourceLineNo">366</span>   *<a name="line.366"></a>
-<span class="sourceLineNo">367</span>   * @return {@code true} if the {@link #createOutputStream(long,<a name="line.367"></a>
-<span class="sourceLineNo">368</span>   * ContainerResponse)} method should be invoked, &lt;em&gt;i.e.&lt;/em&gt; if<a name="line.368"></a>
-<span class="sourceLineNo">369</span>   * further output is forthcoming<a name="line.369"></a>
-<span class="sourceLineNo">370</span>   *<a name="line.370"></a>
-<span class="sourceLineNo">371</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.371"></a>
-<span class="sourceLineNo">372</span>   * {@code null}<a name="line.372"></a>
-<span class="sourceLineNo">373</span>   *<a name="line.373"></a>
-<span class="sourceLineNo">374</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.374"></a>
-<span class="sourceLineNo">375</span>   *<a name="line.375"></a>
-<span class="sourceLineNo">376</span>   * @see #createOutputStream(long, ContainerResponse) <a name="line.376"></a>
-<span class="sourceLineNo">377</span>   */<a name="line.377"></a>
-<span class="sourceLineNo">378</span>  protected abstract boolean writeStatusAndHeaders(final long contentLength,<a name="line.378"></a>
-<span class="sourceLineNo">379</span>                                                   final ContainerResponse containerResponse);<a name="line.379"></a>
-<span class="sourceLineNo">380</span><a name="line.380"></a>
-<span class="sourceLineNo">381</span>  /**<a name="line.381"></a>
-<span class="sourceLineNo">382</span>   * Creates and returns a new {@link<a name="line.382"></a>
-<span class="sourceLineNo">383</span>   * AbstractChannelOutboundInvokingOutputStream}, or returns {@code<a name="line.383"></a>
-<span class="sourceLineNo">384</span>   * null} if it is determined that no {@link<a name="line.384"></a>
-<span class="sourceLineNo">385</span>   * AbstractChannelOutboundInvokingOutputStream} is required given<a name="line.385"></a>
-<span class="sourceLineNo">386</span>   * the supplied {@code contentLength} parameter value.<a name="line.386"></a>
-<span class="sourceLineNo">387</span>   *<a name="line.387"></a>
-<span class="sourceLineNo">388</span>   * &lt;p&gt;Implementations of this method may return {@code null}.&lt;/p&gt;<a name="line.388"></a>
-<span class="sourceLineNo">389</span>   *<a name="line.389"></a>
-<span class="sourceLineNo">390</span>   * @param contentLength the content length as determined by the<a name="line.390"></a>
-<span class="sourceLineNo">391</span>   * logic encapsulated by the {@link<a name="line.391"></a>
-<span class="sourceLineNo">392</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.392"></a>
-<span class="sourceLineNo">393</span>   * than zero indicates an unknown content length; must not be equal<a name="line.393"></a>
-<span class="sourceLineNo">394</span>   * to {@code 0L}<a name="line.394"></a>
+<span class="sourceLineNo">364</span>   * @see &lt;a<a name="line.364"></a>
+<span class="sourceLineNo">365</span>   * href="https://github.com/eclipse-ee4j/jersey/blob/a40169547a602a582f5fed1fd8ebe595ff2b83f7/core-common/src/main/java/org/glassfish/jersey/message/internal/OutboundMessageContext.java#L761-L778"<a name="line.365"></a>
+<span class="sourceLineNo">366</span>   * target="_parent"&gt;&lt;code&gt;OutboundMessageContext.java&lt;/code&gt;&lt;/a&gt;<a name="line.366"></a>
+<span class="sourceLineNo">367</span>   */<a name="line.367"></a>
+<span class="sourceLineNo">368</span>  @Override<a name="line.368"></a>
+<span class="sourceLineNo">369</span>  public final boolean enableResponseBuffering() {<a name="line.369"></a>
+<span class="sourceLineNo">370</span>    return true;<a name="line.370"></a>
+<span class="sourceLineNo">371</span>  }<a name="line.371"></a>
+<span class="sourceLineNo">372</span><a name="line.372"></a>
+<span class="sourceLineNo">373</span>  /**<a name="line.373"></a>
+<span class="sourceLineNo">374</span>   * Writes the status and headers portion of the response present in<a name="line.374"></a>
+<span class="sourceLineNo">375</span>   * the supplied {@link ContainerResponse} by calling the {@link<a name="line.375"></a>
+<span class="sourceLineNo">376</span>   * #writeStatusAndHeaders(long, ContainerResponse)} method, and, if<a name="line.376"></a>
+<span class="sourceLineNo">377</span>   * the supplied {@code contentLength} is not {@code 0L} and that<a name="line.377"></a>
+<span class="sourceLineNo">378</span>   * method returns {@code true} indicating that output will be<a name="line.378"></a>
+<span class="sourceLineNo">379</span>   * forthcoming, returns the result of invoking {@link<a name="line.379"></a>
+<span class="sourceLineNo">380</span>   * #createOutputStream(long, ContainerResponse)}.<a name="line.380"></a>
+<span class="sourceLineNo">381</span>   *<a name="line.381"></a>
+<span class="sourceLineNo">382</span>   * &lt;p&gt;In all other cases, this method returns {@code null}.&lt;/p&gt;<a name="line.382"></a>
+<span class="sourceLineNo">383</span>   *<a name="line.383"></a>
+<span class="sourceLineNo">384</span>   * @param contentLength the content length as determined by the<a name="line.384"></a>
+<span class="sourceLineNo">385</span>   * logic encapsulated by the {@link<a name="line.385"></a>
+<span class="sourceLineNo">386</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.386"></a>
+<span class="sourceLineNo">387</span>   * than zero indicates an unknown content length<a name="line.387"></a>
+<span class="sourceLineNo">388</span>   *<a name="line.388"></a>
+<span class="sourceLineNo">389</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.389"></a>
+<span class="sourceLineNo">390</span>   * status and headers information; must not be {@code null}<a name="line.390"></a>
+<span class="sourceLineNo">391</span>   *<a name="line.391"></a>
+<span class="sourceLineNo">392</span>   * @return the {@link OutputStream} returned by the {@link<a name="line.392"></a>
+<span class="sourceLineNo">393</span>   * #createOutputStream(long, ContainerResponse)} method, or {@code<a name="line.393"></a>
+<span class="sourceLineNo">394</span>   * null}<a name="line.394"></a>
 <span class="sourceLineNo">395</span>   *<a name="line.395"></a>
-<span class="sourceLineNo">396</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.396"></a>
-<span class="sourceLineNo">397</span>   * status and headers information; must not be {@code null}; may be<a name="line.397"></a>
-<span class="sourceLineNo">398</span>   * (and often is) ignored by implementations<a name="line.398"></a>
-<span class="sourceLineNo">399</span>   *<a name="line.399"></a>
-<span class="sourceLineNo">400</span>   * @return a new {@link AbstractChannelOutboundInvokingOutputStream}<a name="line.400"></a>
-<span class="sourceLineNo">401</span>   * implementation, or {@code null}<a name="line.401"></a>
+<span class="sourceLineNo">396</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.396"></a>
+<span class="sourceLineNo">397</span>   * {@code null}<a name="line.397"></a>
+<span class="sourceLineNo">398</span>   *<a name="line.398"></a>
+<span class="sourceLineNo">399</span>   * @see #writeStatusAndHeaders(long, ContainerResponse)<a name="line.399"></a>
+<span class="sourceLineNo">400</span>   *<a name="line.400"></a>
+<span class="sourceLineNo">401</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.401"></a>
 <span class="sourceLineNo">402</span>   *<a name="line.402"></a>
-<span class="sourceLineNo">403</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.403"></a>
-<span class="sourceLineNo">404</span>   * {@code null}<a name="line.404"></a>
-<span class="sourceLineNo">405</span>   *<a name="line.405"></a>
-<span class="sourceLineNo">406</span>   * @exception IllegalArgumentException if {@code contentLength} is<a name="line.406"></a>
-<span class="sourceLineNo">407</span>   * equal to {@code 0L}<a name="line.407"></a>
-<span class="sourceLineNo">408</span>   */<a name="line.408"></a>
-<span class="sourceLineNo">409</span>  protected abstract AbstractChannelOutboundInvokingOutputStream&lt;? extends T&gt; createOutputStream(final long contentLength,<a name="line.409"></a>
-<span class="sourceLineNo">410</span>                                                                                                 final ContainerResponse containerResponse);<a name="line.410"></a>
-<span class="sourceLineNo">411</span><a name="line.411"></a>
-<span class="sourceLineNo">412</span>  /**<a name="line.412"></a>
-<span class="sourceLineNo">413</span>   * Returns the minimum number of bytes that an {@link<a name="line.413"></a>
-<span class="sourceLineNo">414</span>   * AbstractChannelOutboundInvokingOutputStream} returned by the<a name="line.414"></a>
-<span class="sourceLineNo">415</span>   * {@link #createOutputStream(long, ContainerResponse)} method must<a name="line.415"></a>
-<span class="sourceLineNo">416</span>   * write before an automatic {@linkplain<a name="line.416"></a>
-<span class="sourceLineNo">417</span>   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may<a name="line.417"></a>
-<span class="sourceLineNo">418</span>   * take place.<a name="line.418"></a>
-<span class="sourceLineNo">419</span>   *<a name="line.419"></a>
-<span class="sourceLineNo">420</span>   * &lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; Implementations of the {@link<a name="line.420"></a>
-<span class="sourceLineNo">421</span>   * #createOutputStream(long, ContainerResponse)} method may choose<a name="line.421"></a>
-<span class="sourceLineNo">422</span>   * to ignore the return value of this method.  It is supplied for<a name="line.422"></a>
-<span class="sourceLineNo">423</span>   * convenience only in implementing the {@link<a name="line.423"></a>
-<span class="sourceLineNo">424</span>   * #createOutputStream(long, ContainerResponse)} method.&lt;/p&gt;<a name="line.424"></a>
+<span class="sourceLineNo">403</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.403"></a>
+<span class="sourceLineNo">404</span>   */<a name="line.404"></a>
+<span class="sourceLineNo">405</span>  @Override<a name="line.405"></a>
+<span class="sourceLineNo">406</span>  public final OutputStream writeResponseStatusAndHeaders(final long contentLength,<a name="line.406"></a>
+<span class="sourceLineNo">407</span>                                                          final ContainerResponse containerResponse) {<a name="line.407"></a>
+<span class="sourceLineNo">408</span>    final OutputStream returnValue;<a name="line.408"></a>
+<span class="sourceLineNo">409</span>    if (this.writeStatusAndHeaders(contentLength, Objects.requireNonNull(containerResponse)) &amp;&amp; contentLength != 0L) {<a name="line.409"></a>
+<span class="sourceLineNo">410</span>      returnValue = this.createOutputStream(contentLength, containerResponse);<a name="line.410"></a>
+<span class="sourceLineNo">411</span>    } else {<a name="line.411"></a>
+<span class="sourceLineNo">412</span>      returnValue = null;<a name="line.412"></a>
+<span class="sourceLineNo">413</span>    }<a name="line.413"></a>
+<span class="sourceLineNo">414</span>    return returnValue;<a name="line.414"></a>
+<span class="sourceLineNo">415</span>  }<a name="line.415"></a>
+<span class="sourceLineNo">416</span><a name="line.416"></a>
+<span class="sourceLineNo">417</span>  /**<a name="line.417"></a>
+<span class="sourceLineNo">418</span>   * Writes the status and headers portion of the response present in<a name="line.418"></a>
+<span class="sourceLineNo">419</span>   * the supplied {@link ContainerResponse} and returns {@code true}<a name="line.419"></a>
+<span class="sourceLineNo">420</span>   * if further output is forthcoming.<a name="line.420"></a>
+<span class="sourceLineNo">421</span>   *<a name="line.421"></a>
+<span class="sourceLineNo">422</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.422"></a>
+<span class="sourceLineNo">423</span>   * #writeResponseStatusAndHeaders(long, ContainerResponse)} method<a name="line.423"></a>
+<span class="sourceLineNo">424</span>   * or an infinite loop may result.&lt;/p&gt;<a name="line.424"></a>
 <span class="sourceLineNo">425</span>   *<a name="line.425"></a>
-<span class="sourceLineNo">426</span>   * @return the minimum number of bytes that an {@link<a name="line.426"></a>
-<span class="sourceLineNo">427</span>   * AbstractChannelOutboundInvokingOutputStream} returned by the<a name="line.427"></a>
-<span class="sourceLineNo">428</span>   * {@link #createOutputStream(long, ContainerResponse)} method must<a name="line.428"></a>
-<span class="sourceLineNo">429</span>   * write before an automatic {@linkplain<a name="line.429"></a>
-<span class="sourceLineNo">430</span>   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may<a name="line.430"></a>
-<span class="sourceLineNo">431</span>   * take place; always {@code 0L} or a positive {@code int}; if<a name="line.431"></a>
-<span class="sourceLineNo">432</span>   * {@code 0} it is suggested that automatic flushing occur after<a name="line.432"></a>
-<span class="sourceLineNo">433</span>   * every write; if {@code Integer#MAX_VALUE} it is suggested that no<a name="line.433"></a>
-<span class="sourceLineNo">434</span>   * automatic flushing should occur<a name="line.434"></a>
-<span class="sourceLineNo">435</span>   *<a name="line.435"></a>
-<span class="sourceLineNo">436</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.436"></a>
+<span class="sourceLineNo">426</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.426"></a>
+<span class="sourceLineNo">427</span>   * #createOutputStream(long, ContainerResponse)} method or undefined<a name="line.427"></a>
+<span class="sourceLineNo">428</span>   * behavior may result.&lt;/p&gt;<a name="line.428"></a>
+<span class="sourceLineNo">429</span>   *<a name="line.429"></a>
+<span class="sourceLineNo">430</span>   * @param contentLength the content length as determined by the<a name="line.430"></a>
+<span class="sourceLineNo">431</span>   * logic encapsulated by the {@link<a name="line.431"></a>
+<span class="sourceLineNo">432</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.432"></a>
+<span class="sourceLineNo">433</span>   * than zero indicates an unknown content length<a name="line.433"></a>
+<span class="sourceLineNo">434</span>   *<a name="line.434"></a>
+<span class="sourceLineNo">435</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.435"></a>
+<span class="sourceLineNo">436</span>   * status and headers information; must not be {@code null}<a name="line.436"></a>
 <span class="sourceLineNo">437</span>   *<a name="line.437"></a>
-<span class="sourceLineNo">438</span>   * @see<a name="line.438"></a>
-<span class="sourceLineNo">439</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.439"></a>
-<span class="sourceLineNo">440</span>   * int,<a name="line.440"></a>
-<span class="sourceLineNo">441</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.441"></a>
-<span class="sourceLineNo">442</span>   *<a name="line.442"></a>
-<span class="sourceLineNo">443</span>   * @see<a name="line.443"></a>
-<span class="sourceLineNo">444</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,<a name="line.444"></a>
-<span class="sourceLineNo">445</span>   * int, boolean, ByteBufCreator)<a name="line.445"></a>
-<span class="sourceLineNo">446</span>   */<a name="line.446"></a>
-<span class="sourceLineNo">447</span>  protected final int getFlushThreshold() {<a name="line.447"></a>
-<span class="sourceLineNo">448</span>    return this.flushThreshold;<a name="line.448"></a>
-<span class="sourceLineNo">449</span>  }<a name="line.449"></a>
-<span class="sourceLineNo">450</span><a name="line.450"></a>
-<span class="sourceLineNo">451</span>  /**<a name="line.451"></a>
-<span class="sourceLineNo">452</span>   * Returns a {@link ByteBufCreator} that may be used to create the<a name="line.452"></a>
-<span class="sourceLineNo">453</span>   * {@link AbstractChannelOutboundInvokingOutputStream}<a name="line.453"></a>
-<span class="sourceLineNo">454</span>   * implementation that must be returned by an implementation of the<a name="line.454"></a>
-<span class="sourceLineNo">455</span>   * {@link #createOutputStream(long, ContainerResponse)} method.<a name="line.455"></a>
-<span class="sourceLineNo">456</span>   *<a name="line.456"></a>
-<span class="sourceLineNo">457</span>   * &lt;p&gt;This method may return {@code null}.&lt;/p&gt;<a name="line.457"></a>
+<span class="sourceLineNo">438</span>   * @return {@code true} if the {@link #createOutputStream(long,<a name="line.438"></a>
+<span class="sourceLineNo">439</span>   * ContainerResponse)} method should be invoked, &lt;em&gt;i.e.&lt;/em&gt; if<a name="line.439"></a>
+<span class="sourceLineNo">440</span>   * further output is forthcoming<a name="line.440"></a>
+<span class="sourceLineNo">441</span>   *<a name="line.441"></a>
+<span class="sourceLineNo">442</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.442"></a>
+<span class="sourceLineNo">443</span>   * {@code null}<a name="line.443"></a>
+<span class="sourceLineNo">444</span>   *<a name="line.444"></a>
+<span class="sourceLineNo">445</span>   * @see ApplicationHandler#handle(ContainerRequest)<a name="line.445"></a>
+<span class="sourceLineNo">446</span>   *<a name="line.446"></a>
+<span class="sourceLineNo">447</span>   * @see #createOutputStream(long, ContainerResponse) <a name="line.447"></a>
+<span class="sourceLineNo">448</span>   */<a name="line.448"></a>
+<span class="sourceLineNo">449</span>  protected abstract boolean writeStatusAndHeaders(final long contentLength,<a name="line.449"></a>
+<span class="sourceLineNo">450</span>                                                   final ContainerResponse containerResponse);<a name="line.450"></a>
+<span class="sourceLineNo">451</span><a name="line.451"></a>
+<span class="sourceLineNo">452</span>  /**<a name="line.452"></a>
+<span class="sourceLineNo">453</span>   * Creates and returns a new {@link<a name="line.453"></a>
+<span class="sourceLineNo">454</span>   * AbstractChannelOutboundInvokingOutputStream}, or returns {@code<a name="line.454"></a>
+<span class="sourceLineNo">455</span>   * null} if it is determined that no {@link<a name="line.455"></a>
+<span class="sourceLineNo">456</span>   * AbstractChannelOutboundInvokingOutputStream} is required given<a name="line.456"></a>
+<span class="sourceLineNo">457</span>   * the supplied {@code contentLength} parameter value.<a name="line.457"></a>
 <span class="sourceLineNo">458</span>   *<a name="line.458"></a>
-<span class="sourceLineNo">459</span>   * &lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; Implementations of the {@link<a name="line.459"></a>
-<span class="sourceLineNo">460</span>   * #createOutputStream(long, ContainerResponse)} method may choose<a name="line.460"></a>
-<span class="sourceLineNo">461</span>   * to ignore the return value of this method.  It is supplied for<a name="line.461"></a>
-<span class="sourceLineNo">462</span>   * convenience only in implementing the {@link<a name="line.462"></a>
-<span class="sourceLineNo">463</span>   * #createOutputStream(long, ContainerResponse)} method.&lt;/p&gt;<a name="line.463"></a>
-<span class="sourceLineNo">464</span>   *<a name="line.464"></a>
-<span class="sourceLineNo">465</span>   * @return a {@link ByteBufCreator}, or {@code null}<a name="line.465"></a>
+<span class="sourceLineNo">459</span>   * &lt;p&gt;Implementations of this method may return {@code null}.&lt;/p&gt;<a name="line.459"></a>
+<span class="sourceLineNo">460</span>   *<a name="line.460"></a>
+<span class="sourceLineNo">461</span>   * @param contentLength the content length as determined by the<a name="line.461"></a>
+<span class="sourceLineNo">462</span>   * logic encapsulated by the {@link<a name="line.462"></a>
+<span class="sourceLineNo">463</span>   * ApplicationHandler#handle(ContainerRequest)} method; a value less<a name="line.463"></a>
+<span class="sourceLineNo">464</span>   * than zero indicates an unknown content length; must not be equal<a name="line.464"></a>
+<span class="sourceLineNo">465</span>   * to {@code 0L}<a name="line.465"></a>
 <span class="sourceLineNo">466</span>   *<a name="line.466"></a>
-<span class="sourceLineNo">467</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.467"></a>
-<span class="sourceLineNo">468</span>   *<a name="line.468"></a>
-<span class="sourceLineNo">469</span>   * @see<a name="line.469"></a>
-<span class="sourceLineNo">470</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.470"></a>
-<span class="sourceLineNo">471</span>   * int, AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.471"></a>
-<span class="sourceLineNo">472</span>   *<a name="line.472"></a>
-<span class="sourceLineNo">473</span>   * @see<a name="line.473"></a>
-<span class="sourceLineNo">474</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,<a name="line.474"></a>
-<span class="sourceLineNo">475</span>   * int, boolean, ByteBufCreator)<a name="line.475"></a>
-<span class="sourceLineNo">476</span>   */<a name="line.476"></a>
-<span class="sourceLineNo">477</span>  protected final ByteBufCreator getByteBufCreator() {<a name="line.477"></a>
-<span class="sourceLineNo">478</span>    return this.byteBufCreator;<a name="line.478"></a>
-<span class="sourceLineNo">479</span>  }<a name="line.479"></a>
-<span class="sourceLineNo">480</span>  <a name="line.480"></a>
-<span class="sourceLineNo">481</span>  @Override<a name="line.481"></a>
-<span class="sourceLineNo">482</span>  public final boolean suspend(final long timeout,<a name="line.482"></a>
-<span class="sourceLineNo">483</span>                               final TimeUnit timeUnit,<a name="line.483"></a>
-<span class="sourceLineNo">484</span>                               final TimeoutHandler timeoutHandler) {<a name="line.484"></a>
-<span class="sourceLineNo">485</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.485"></a>
-<span class="sourceLineNo">486</span>    final boolean returnValue;<a name="line.486"></a>
-<span class="sourceLineNo">487</span>    if (timeoutHandler == null || this.suspendTimeoutHandler != null) {<a name="line.487"></a>
-<span class="sourceLineNo">488</span>      returnValue = false;<a name="line.488"></a>
-<span class="sourceLineNo">489</span>    } else {<a name="line.489"></a>
-<span class="sourceLineNo">490</span>      this.suspendTimeoutHandler = () -&gt; {<a name="line.490"></a>
-<span class="sourceLineNo">491</span>        timeoutHandler.onTimeout(this);<a name="line.491"></a>
-<span class="sourceLineNo">492</span>        // TODO: not sure about this<a name="line.492"></a>
-<span class="sourceLineNo">493</span>        this.suspendTimeoutHandler = null;<a name="line.493"></a>
-<span class="sourceLineNo">494</span>      };<a name="line.494"></a>
-<span class="sourceLineNo">495</span>      if (timeout &gt; 0L) {<a name="line.495"></a>
-<span class="sourceLineNo">496</span>        final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.496"></a>
-<span class="sourceLineNo">497</span>        this.suspendTimeoutFuture =<a name="line.497"></a>
-<span class="sourceLineNo">498</span>          channelHandlerContext.executor().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.498"></a>
-<span class="sourceLineNo">499</span>      }<a name="line.499"></a>
-<span class="sourceLineNo">500</span>      returnValue = true;<a name="line.500"></a>
-<span class="sourceLineNo">501</span>    }<a name="line.501"></a>
-<span class="sourceLineNo">502</span>    return returnValue;<a name="line.502"></a>
-<span class="sourceLineNo">503</span>  }<a name="line.503"></a>
-<span class="sourceLineNo">504</span><a name="line.504"></a>
-<span class="sourceLineNo">505</span>  @Override<a name="line.505"></a>
-<span class="sourceLineNo">506</span>  public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {<a name="line.506"></a>
-<span class="sourceLineNo">507</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.507"></a>
-<span class="sourceLineNo">508</span>    if (this.suspendTimeoutHandler == null) {<a name="line.508"></a>
-<span class="sourceLineNo">509</span>      throw new IllegalStateException();<a name="line.509"></a>
-<span class="sourceLineNo">510</span>    }<a name="line.510"></a>
-<span class="sourceLineNo">511</span>    if (this.suspendTimeoutFuture != null) {<a name="line.511"></a>
-<span class="sourceLineNo">512</span>      this.suspendTimeoutFuture.cancel(true);<a name="line.512"></a>
-<span class="sourceLineNo">513</span>      this.suspendTimeoutFuture = null;<a name="line.513"></a>
-<span class="sourceLineNo">514</span>    }<a name="line.514"></a>
-<span class="sourceLineNo">515</span>    if (timeout &gt; 0L) {<a name="line.515"></a>
-<span class="sourceLineNo">516</span>      final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.516"></a>
-<span class="sourceLineNo">517</span>      this.suspendTimeoutFuture =<a name="line.517"></a>
-<span class="sourceLineNo">518</span>        channelHandlerContext.executor().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.518"></a>
-<span class="sourceLineNo">519</span>    }<a name="line.519"></a>
+<span class="sourceLineNo">467</span>   * @param containerResponse the {@link ContainerResponse} containing<a name="line.467"></a>
+<span class="sourceLineNo">468</span>   * status and headers information; must not be {@code null}; may be<a name="line.468"></a>
+<span class="sourceLineNo">469</span>   * (and often is) ignored by implementations<a name="line.469"></a>
+<span class="sourceLineNo">470</span>   *<a name="line.470"></a>
+<span class="sourceLineNo">471</span>   * @return a new {@link AbstractChannelOutboundInvokingOutputStream}<a name="line.471"></a>
+<span class="sourceLineNo">472</span>   * implementation, or {@code null}<a name="line.472"></a>
+<span class="sourceLineNo">473</span>   *<a name="line.473"></a>
+<span class="sourceLineNo">474</span>   * @exception NullPointerException if {@code containerResponse} is<a name="line.474"></a>
+<span class="sourceLineNo">475</span>   * {@code null}<a name="line.475"></a>
+<span class="sourceLineNo">476</span>   *<a name="line.476"></a>
+<span class="sourceLineNo">477</span>   * @exception IllegalArgumentException if {@code contentLength} is<a name="line.477"></a>
+<span class="sourceLineNo">478</span>   * equal to {@code 0L}<a name="line.478"></a>
+<span class="sourceLineNo">479</span>   */<a name="line.479"></a>
+<span class="sourceLineNo">480</span>  protected abstract AbstractChannelOutboundInvokingOutputStream&lt;? extends T&gt; createOutputStream(final long contentLength,<a name="line.480"></a>
+<span class="sourceLineNo">481</span>                                                                                                 final ContainerResponse containerResponse);<a name="line.481"></a>
+<span class="sourceLineNo">482</span><a name="line.482"></a>
+<span class="sourceLineNo">483</span>  /**<a name="line.483"></a>
+<span class="sourceLineNo">484</span>   * Returns the minimum number of bytes that an {@link<a name="line.484"></a>
+<span class="sourceLineNo">485</span>   * AbstractChannelOutboundInvokingOutputStream} returned by the<a name="line.485"></a>
+<span class="sourceLineNo">486</span>   * {@link #createOutputStream(long, ContainerResponse)} method must<a name="line.486"></a>
+<span class="sourceLineNo">487</span>   * write before an automatic {@linkplain<a name="line.487"></a>
+<span class="sourceLineNo">488</span>   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may<a name="line.488"></a>
+<span class="sourceLineNo">489</span>   * take place.<a name="line.489"></a>
+<span class="sourceLineNo">490</span>   *<a name="line.490"></a>
+<span class="sourceLineNo">491</span>   * &lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; Implementations of the {@link<a name="line.491"></a>
+<span class="sourceLineNo">492</span>   * #createOutputStream(long, ContainerResponse)} method may choose<a name="line.492"></a>
+<span class="sourceLineNo">493</span>   * to ignore the return value of this method.  It is supplied for<a name="line.493"></a>
+<span class="sourceLineNo">494</span>   * convenience only in implementing the {@link<a name="line.494"></a>
+<span class="sourceLineNo">495</span>   * #createOutputStream(long, ContainerResponse)} method.&lt;/p&gt;<a name="line.495"></a>
+<span class="sourceLineNo">496</span>   *<a name="line.496"></a>
+<span class="sourceLineNo">497</span>   * @return the minimum number of bytes that an {@link<a name="line.497"></a>
+<span class="sourceLineNo">498</span>   * AbstractChannelOutboundInvokingOutputStream} returned by the<a name="line.498"></a>
+<span class="sourceLineNo">499</span>   * {@link #createOutputStream(long, ContainerResponse)} method must<a name="line.499"></a>
+<span class="sourceLineNo">500</span>   * write before an automatic {@linkplain<a name="line.500"></a>
+<span class="sourceLineNo">501</span>   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may<a name="line.501"></a>
+<span class="sourceLineNo">502</span>   * take place; always {@code 0L} or a positive {@code int}; if<a name="line.502"></a>
+<span class="sourceLineNo">503</span>   * {@code 0} it is suggested that automatic flushing occur after<a name="line.503"></a>
+<span class="sourceLineNo">504</span>   * every write; if {@code Integer#MAX_VALUE} it is suggested that no<a name="line.504"></a>
+<span class="sourceLineNo">505</span>   * automatic flushing should occur<a name="line.505"></a>
+<span class="sourceLineNo">506</span>   *<a name="line.506"></a>
+<span class="sourceLineNo">507</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.507"></a>
+<span class="sourceLineNo">508</span>   *<a name="line.508"></a>
+<span class="sourceLineNo">509</span>   * @see<a name="line.509"></a>
+<span class="sourceLineNo">510</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.510"></a>
+<span class="sourceLineNo">511</span>   * int,<a name="line.511"></a>
+<span class="sourceLineNo">512</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.512"></a>
+<span class="sourceLineNo">513</span>   *<a name="line.513"></a>
+<span class="sourceLineNo">514</span>   * @see<a name="line.514"></a>
+<span class="sourceLineNo">515</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,<a name="line.515"></a>
+<span class="sourceLineNo">516</span>   * int, boolean, ByteBufCreator)<a name="line.516"></a>
+<span class="sourceLineNo">517</span>   */<a name="line.517"></a>
+<span class="sourceLineNo">518</span>  protected final int getFlushThreshold() {<a name="line.518"></a>
+<span class="sourceLineNo">519</span>    return this.flushThreshold;<a name="line.519"></a>
 <span class="sourceLineNo">520</span>  }<a name="line.520"></a>
 <span class="sourceLineNo">521</span><a name="line.521"></a>
 <span class="sourceLineNo">522</span>  /**<a name="line.522"></a>
-<span class="sourceLineNo">523</span>   * Handles any failure case encountered by the logic encapsulated by<a name="line.523"></a>
-<span class="sourceLineNo">524</span>   * the {@link ApplicationHandler#handle(ContainerRequest)} method.<a name="line.524"></a>
-<span class="sourceLineNo">525</span>   *<a name="line.525"></a>
-<span class="sourceLineNo">526</span>   * &lt;p&gt;This method calls the {@link #writeFailureMessage(Throwable)}<a name="line.526"></a>
-<span class="sourceLineNo">527</span>   * method and takes great care to ensure that any {@link Throwable}s<a name="line.527"></a>
-<span class="sourceLineNo">528</span>   * encountered along the way are properly recorded and {@linkplain<a name="line.528"></a>
-<span class="sourceLineNo">529</span>   * Throwable#addSuppressed(Throwable) suppressed}.&lt;/p&gt;<a name="line.529"></a>
-<span class="sourceLineNo">530</span>   *<a name="line.530"></a>
-<span class="sourceLineNo">531</span>   * &lt;p&gt;&lt;strong&gt;This implementation never returns.&lt;/strong&gt; A {@link<a name="line.531"></a>
-<span class="sourceLineNo">532</span>   * ContainerException} is always thrown by this method.&lt;/p&gt;<a name="line.532"></a>
-<span class="sourceLineNo">533</span>   *<a name="line.533"></a>
-<span class="sourceLineNo">534</span>   * @param failureCause the {@link Throwable} encountered by the<a name="line.534"></a>
-<span class="sourceLineNo">535</span>   * {@link ApplicationHandler#handle(ContainerRequest)} method; may<a name="line.535"></a>
-<span class="sourceLineNo">536</span>   * be {@code null}<a name="line.536"></a>
+<span class="sourceLineNo">523</span>   * Returns a {@link ByteBufCreator} that may be used to create the<a name="line.523"></a>
+<span class="sourceLineNo">524</span>   * {@link AbstractChannelOutboundInvokingOutputStream}<a name="line.524"></a>
+<span class="sourceLineNo">525</span>   * implementation that must be returned by an implementation of the<a name="line.525"></a>
+<span class="sourceLineNo">526</span>   * {@link #createOutputStream(long, ContainerResponse)} method.<a name="line.526"></a>
+<span class="sourceLineNo">527</span>   *<a name="line.527"></a>
+<span class="sourceLineNo">528</span>   * &lt;p&gt;This method may return {@code null}.&lt;/p&gt;<a name="line.528"></a>
+<span class="sourceLineNo">529</span>   *<a name="line.529"></a>
+<span class="sourceLineNo">530</span>   * &lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; Implementations of the {@link<a name="line.530"></a>
+<span class="sourceLineNo">531</span>   * #createOutputStream(long, ContainerResponse)} method may choose<a name="line.531"></a>
+<span class="sourceLineNo">532</span>   * to ignore the return value of this method.  It is supplied for<a name="line.532"></a>
+<span class="sourceLineNo">533</span>   * convenience only in implementing the {@link<a name="line.533"></a>
+<span class="sourceLineNo">534</span>   * #createOutputStream(long, ContainerResponse)} method.&lt;/p&gt;<a name="line.534"></a>
+<span class="sourceLineNo">535</span>   *<a name="line.535"></a>
+<span class="sourceLineNo">536</span>   * @return a {@link ByteBufCreator}, or {@code null}<a name="line.536"></a>
 <span class="sourceLineNo">537</span>   *<a name="line.537"></a>
-<span class="sourceLineNo">538</span>   * @exception ContainerException when this method is invoked; it<a name="line.538"></a>
-<span class="sourceLineNo">539</span>   * will have the supplied {@code failureCause} as its {@linkplain<a name="line.539"></a>
-<span class="sourceLineNo">540</span>   * Throwable#getCause() cause}<a name="line.540"></a>
-<span class="sourceLineNo">541</span>   */<a name="line.541"></a>
-<span class="sourceLineNo">542</span>  @Override<a name="line.542"></a>
-<span class="sourceLineNo">543</span>  public final void failure(final Throwable failureCause) {<a name="line.543"></a>
-<span class="sourceLineNo">544</span>    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.544"></a>
-<span class="sourceLineNo">545</span>    Throwable outerWriteProblem = null;<a name="line.545"></a>
-<span class="sourceLineNo">546</span>    try {<a name="line.546"></a>
-<span class="sourceLineNo">547</span>      this.writeFailureMessage(failureCause);<a name="line.547"></a>
-<span class="sourceLineNo">548</span>    } catch (final RuntimeException | Error writeProblem) {<a name="line.548"></a>
-<span class="sourceLineNo">549</span>      outerWriteProblem = writeProblem;<a name="line.549"></a>
-<span class="sourceLineNo">550</span>      if (failureCause != null) {<a name="line.550"></a>
-<span class="sourceLineNo">551</span>        boolean foundFailureCauseInSuppressedThrowables = false;<a name="line.551"></a>
-<span class="sourceLineNo">552</span>        final Object[] suppressedThrowables = writeProblem.getSuppressed();<a name="line.552"></a>
-<span class="sourceLineNo">553</span>        if (suppressedThrowables != null &amp;&amp; suppressedThrowables.length &gt; 0) {<a name="line.553"></a>
-<span class="sourceLineNo">554</span>          for (final Object suppressedThrowable : suppressedThrowables) {<a name="line.554"></a>
-<span class="sourceLineNo">555</span>            if (suppressedThrowable == failureCause) {<a name="line.555"></a>
-<span class="sourceLineNo">556</span>              foundFailureCauseInSuppressedThrowables = true;<a name="line.556"></a>
-<span class="sourceLineNo">557</span>              break;<a name="line.557"></a>
-<span class="sourceLineNo">558</span>            }<a name="line.558"></a>
-<span class="sourceLineNo">559</span>          }<a name="line.559"></a>
-<span class="sourceLineNo">560</span>        }<a name="line.560"></a>
-<span class="sourceLineNo">561</span>        if (!foundFailureCauseInSuppressedThrowables) {<a name="line.561"></a>
-<span class="sourceLineNo">562</span>          writeProblem.addSuppressed(failureCause);<a name="line.562"></a>
-<span class="sourceLineNo">563</span>        }<a name="line.563"></a>
-<span class="sourceLineNo">564</span>      }<a name="line.564"></a>
-<span class="sourceLineNo">565</span>      throw writeProblem;<a name="line.565"></a>
-<span class="sourceLineNo">566</span>    } finally {<a name="line.566"></a>
-<span class="sourceLineNo">567</span>      Throwable outerFlushProblem = null;<a name="line.567"></a>
-<span class="sourceLineNo">568</span>      try {<a name="line.568"></a>
-<span class="sourceLineNo">569</span>        channelHandlerContext.flush();<a name="line.569"></a>
-<span class="sourceLineNo">570</span>      } catch (final RuntimeException | Error flushProblem) {<a name="line.570"></a>
-<span class="sourceLineNo">571</span>        outerFlushProblem = flushProblem;<a name="line.571"></a>
-<span class="sourceLineNo">572</span>        if (outerWriteProblem != null) {<a name="line.572"></a>
-<span class="sourceLineNo">573</span>          flushProblem.addSuppressed(outerWriteProblem);<a name="line.573"></a>
-<span class="sourceLineNo">574</span>        } else if (failureCause != null) {<a name="line.574"></a>
-<span class="sourceLineNo">575</span>          flushProblem.addSuppressed(failureCause);<a name="line.575"></a>
-<span class="sourceLineNo">576</span>        }<a name="line.576"></a>
-<span class="sourceLineNo">577</span>        throw flushProblem;<a name="line.577"></a>
-<span class="sourceLineNo">578</span>      } finally {<a name="line.578"></a>
-<span class="sourceLineNo">579</span>        try {<a name="line.579"></a>
-<span class="sourceLineNo">580</span>          channelHandlerContext.close();<a name="line.580"></a>
-<span class="sourceLineNo">581</span>        } catch (final RuntimeException | Error closeProblem) {<a name="line.581"></a>
-<span class="sourceLineNo">582</span>          if (outerFlushProblem != null) {<a name="line.582"></a>
-<span class="sourceLineNo">583</span>            closeProblem.addSuppressed(outerFlushProblem);<a name="line.583"></a>
-<span class="sourceLineNo">584</span>          } else if (failureCause != null) {<a name="line.584"></a>
-<span class="sourceLineNo">585</span>            closeProblem.addSuppressed(failureCause);<a name="line.585"></a>
-<span class="sourceLineNo">586</span>          }<a name="line.586"></a>
-<span class="sourceLineNo">587</span>          throw closeProblem;<a name="line.587"></a>
-<span class="sourceLineNo">588</span>        }<a name="line.588"></a>
-<span class="sourceLineNo">589</span>      }<a name="line.589"></a>
-<span class="sourceLineNo">590</span>    }<a name="line.590"></a>
-<span class="sourceLineNo">591</span>    if (failureCause == null) {<a name="line.591"></a>
-<span class="sourceLineNo">592</span>      throw new ContainerException("failure");<a name="line.592"></a>
-<span class="sourceLineNo">593</span>    } else if (failureCause instanceof RuntimeException) {<a name="line.593"></a>
-<span class="sourceLineNo">594</span>      throw (RuntimeException)failureCause;<a name="line.594"></a>
-<span class="sourceLineNo">595</span>    } else if (failureCause instanceof Exception) {<a name="line.595"></a>
-<span class="sourceLineNo">596</span>      throw new ContainerException(failureCause.getMessage(), failureCause);<a name="line.596"></a>
-<span class="sourceLineNo">597</span>    } else {<a name="line.597"></a>
-<span class="sourceLineNo">598</span>      throw (Error)failureCause;<a name="line.598"></a>
-<span class="sourceLineNo">599</span>    }<a name="line.599"></a>
-<span class="sourceLineNo">600</span>  }<a name="line.600"></a>
-<span class="sourceLineNo">601</span><a name="line.601"></a>
-<span class="sourceLineNo">602</span>  /**<a name="line.602"></a>
-<span class="sourceLineNo">603</span>   * Writes an appropriate message, possibly using the {@link<a name="line.603"></a>
-<span class="sourceLineNo">604</span>   * #getChannelHandlerContext() ChannelHandlerContext} to do so.<a name="line.604"></a>
-<span class="sourceLineNo">605</span>   *<a name="line.605"></a>
-<span class="sourceLineNo">606</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.606"></a>
-<span class="sourceLineNo">607</span>   * #failure(Throwable)} method or an infinite loop may result.&lt;/p&gt;<a name="line.607"></a>
-<span class="sourceLineNo">608</span>   *<a name="line.608"></a>
-<span class="sourceLineNo">609</span>   * @param failureCause the {@link Throwable} responsible for this<a name="line.609"></a>
-<span class="sourceLineNo">610</span>   * method's invocation; may be {@code null} in pathological cases<a name="line.610"></a>
-<span class="sourceLineNo">611</span>   */<a name="line.611"></a>
-<span class="sourceLineNo">612</span>  protected abstract void writeFailureMessage(final Throwable failureCause);<a name="line.612"></a>
+<span class="sourceLineNo">538</span>   * @see #createOutputStream(long, ContainerResponse)<a name="line.538"></a>
+<span class="sourceLineNo">539</span>   *<a name="line.539"></a>
+<span class="sourceLineNo">540</span>   * @see<a name="line.540"></a>
+<span class="sourceLineNo">541</span>   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,<a name="line.541"></a>
+<span class="sourceLineNo">542</span>   * int, AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)<a name="line.542"></a>
+<span class="sourceLineNo">543</span>   *<a name="line.543"></a>
+<span class="sourceLineNo">544</span>   * @see<a name="line.544"></a>
+<span class="sourceLineNo">545</span>   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,<a name="line.545"></a>
+<span class="sourceLineNo">546</span>   * int, boolean, ByteBufCreator)<a name="line.546"></a>
+<span class="sourceLineNo">547</span>   */<a name="line.547"></a>
+<span class="sourceLineNo">548</span>  protected final ByteBufCreator getByteBufCreator() {<a name="line.548"></a>
+<span class="sourceLineNo">549</span>    return this.byteBufCreator;<a name="line.549"></a>
+<span class="sourceLineNo">550</span>  }<a name="line.550"></a>
+<span class="sourceLineNo">551</span><a name="line.551"></a>
+<span class="sourceLineNo">552</span>  /**<a name="line.552"></a>
+<span class="sourceLineNo">553</span>   * Invoked by Jersey when a {@link ContainerRequest} has been fully<a name="line.553"></a>
+<span class="sourceLineNo">554</span>   * {@linkplain ApplicationHandler#handle(ContainerRequest) handled}<a name="line.554"></a>
+<span class="sourceLineNo">555</span>   * successfully.<a name="line.555"></a>
+<span class="sourceLineNo">556</span>   *<a name="line.556"></a>
+<span class="sourceLineNo">557</span>   * &lt;p&gt;Either {@link #commit()} or {@link #failure(Throwable)} will<a name="line.557"></a>
+<span class="sourceLineNo">558</span>   * be called by Jersey as the logically final operation in the logic<a name="line.558"></a>
+<span class="sourceLineNo">559</span>   * encapsulated by the {@link<a name="line.559"></a>
+<span class="sourceLineNo">560</span>   * ApplicationHandler#handle(ContainerRequest)} method, but not<a name="line.560"></a>
+<span class="sourceLineNo">561</span>   * both.&lt;/p&gt;<a name="line.561"></a>
+<span class="sourceLineNo">562</span>   *<a name="line.562"></a>
+<span class="sourceLineNo">563</span>   * &lt;p&gt;This implementation does nothing.&lt;/p&gt;<a name="line.563"></a>
+<span class="sourceLineNo">564</span>   *<a name="line.564"></a>
+<span class="sourceLineNo">565</span>   * @see ContainerResponseWriter#commit()<a name="line.565"></a>
+<span class="sourceLineNo">566</span>   *<a name="line.566"></a>
+<span class="sourceLineNo">567</span>   * @see #failure(Throwable)<a name="line.567"></a>
+<span class="sourceLineNo">568</span>   */<a name="line.568"></a>
+<span class="sourceLineNo">569</span>  @Override<a name="line.569"></a>
+<span class="sourceLineNo">570</span>  public void commit() {<a name="line.570"></a>
+<span class="sourceLineNo">571</span><a name="line.571"></a>
+<span class="sourceLineNo">572</span>  }<a name="line.572"></a>
+<span class="sourceLineNo">573</span>  <a name="line.573"></a>
+<span class="sourceLineNo">574</span>  @Override<a name="line.574"></a>
+<span class="sourceLineNo">575</span>  public final boolean suspend(final long timeout,<a name="line.575"></a>
+<span class="sourceLineNo">576</span>                               final TimeUnit timeUnit,<a name="line.576"></a>
+<span class="sourceLineNo">577</span>                               final TimeoutHandler timeoutHandler) {<a name="line.577"></a>
+<span class="sourceLineNo">578</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.578"></a>
+<span class="sourceLineNo">579</span>    final boolean returnValue;<a name="line.579"></a>
+<span class="sourceLineNo">580</span>    if (timeoutHandler == null || this.suspendTimeoutHandler != null) {<a name="line.580"></a>
+<span class="sourceLineNo">581</span>      returnValue = false;<a name="line.581"></a>
+<span class="sourceLineNo">582</span>    } else {<a name="line.582"></a>
+<span class="sourceLineNo">583</span>      this.suspendTimeoutHandler = () -&gt; {<a name="line.583"></a>
+<span class="sourceLineNo">584</span>        timeoutHandler.onTimeout(this);<a name="line.584"></a>
+<span class="sourceLineNo">585</span>        this.suspendTimeoutHandler = null;<a name="line.585"></a>
+<span class="sourceLineNo">586</span>      };<a name="line.586"></a>
+<span class="sourceLineNo">587</span>      if (timeout &gt; 0L) {<a name="line.587"></a>
+<span class="sourceLineNo">588</span>        final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.588"></a>
+<span class="sourceLineNo">589</span>        this.suspendTimeoutFuture =<a name="line.589"></a>
+<span class="sourceLineNo">590</span>          channelHandlerContext.executor().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.590"></a>
+<span class="sourceLineNo">591</span>      }<a name="line.591"></a>
+<span class="sourceLineNo">592</span>      returnValue = true;<a name="line.592"></a>
+<span class="sourceLineNo">593</span>    }<a name="line.593"></a>
+<span class="sourceLineNo">594</span>    return returnValue;<a name="line.594"></a>
+<span class="sourceLineNo">595</span>  }<a name="line.595"></a>
+<span class="sourceLineNo">596</span><a name="line.596"></a>
+<span class="sourceLineNo">597</span>  @Override<a name="line.597"></a>
+<span class="sourceLineNo">598</span>  public final void setSuspendTimeout(final long timeout, final TimeUnit timeUnit) {<a name="line.598"></a>
+<span class="sourceLineNo">599</span>    // Lifted from Jersey's supplied Netty integration, with repairs.<a name="line.599"></a>
+<span class="sourceLineNo">600</span>    if (this.suspendTimeoutHandler == null) {<a name="line.600"></a>
+<span class="sourceLineNo">601</span>      throw new IllegalStateException("this.suspendTimeoutHandler == null");<a name="line.601"></a>
+<span class="sourceLineNo">602</span>    }<a name="line.602"></a>
+<span class="sourceLineNo">603</span>    if (this.suspendTimeoutFuture != null) {<a name="line.603"></a>
+<span class="sourceLineNo">604</span>      this.suspendTimeoutFuture.cancel(true);<a name="line.604"></a>
+<span class="sourceLineNo">605</span>      this.suspendTimeoutFuture = null;<a name="line.605"></a>
+<span class="sourceLineNo">606</span>    }<a name="line.606"></a>
+<span class="sourceLineNo">607</span>    if (timeout &gt; 0L) {<a name="line.607"></a>
+<span class="sourceLineNo">608</span>      final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.608"></a>
+<span class="sourceLineNo">609</span>      this.suspendTimeoutFuture =<a name="line.609"></a>
+<span class="sourceLineNo">610</span>        channelHandlerContext.executor().schedule(this.suspendTimeoutHandler, timeout, timeUnit);<a name="line.610"></a>
+<span class="sourceLineNo">611</span>    }<a name="line.611"></a>
+<span class="sourceLineNo">612</span>  }<a name="line.612"></a>
 <span class="sourceLineNo">613</span><a name="line.613"></a>
-<span class="sourceLineNo">614</span><a name="line.614"></a>
-<span class="sourceLineNo">615</span>  /*<a name="line.615"></a>
-<span class="sourceLineNo">616</span>   * Static utility methods.<a name="line.616"></a>
-<span class="sourceLineNo">617</span>   */<a name="line.617"></a>
-<span class="sourceLineNo">618</span><a name="line.618"></a>
-<span class="sourceLineNo">619</span><a name="line.619"></a>
-<span class="sourceLineNo">620</span>  /**<a name="line.620"></a>
-<span class="sourceLineNo">621</span>   * A utility function that copies entries from a source {@link Map}<a name="line.621"></a>
-<span class="sourceLineNo">622</span>   * by passing each entry to the supplied {@link BiConsumer},<a name="line.622"></a>
-<span class="sourceLineNo">623</span>   * transforming the keys beforehand using the supplied {@link<a name="line.623"></a>
-<span class="sourceLineNo">624</span>   * UnaryOperator} and that is intended in this framework to be used<a name="line.624"></a>
-<span class="sourceLineNo">625</span>   * to copy HTTP or HTTP/2 headers to and from the proper places.<a name="line.625"></a>
-<span class="sourceLineNo">626</span>   *<a name="line.626"></a>
-<span class="sourceLineNo">627</span>   * @param headersSource the source of the headers to copy; may be<a name="line.627"></a>
-<span class="sourceLineNo">628</span>   * {@code null} in which case no action will be taken<a name="line.628"></a>
-<span class="sourceLineNo">629</span>   *<a name="line.629"></a>
-<span class="sourceLineNo">630</span>   * @param keyTransformer a {@link UnaryOperator} that transforms a<a name="line.630"></a>
-<span class="sourceLineNo">631</span>   * header name; if {@code null} then the return value of {@link<a name="line.631"></a>
-<span class="sourceLineNo">632</span>   * UnaryOperator#identity()} will be used instead<a name="line.632"></a>
-<span class="sourceLineNo">633</span>   *<a name="line.633"></a>
-<span class="sourceLineNo">634</span>   * @param headersTarget where the headers will be copied to; may be<a name="line.634"></a>
-<span class="sourceLineNo">635</span>   * {@code null} in which case no action will be taken<a name="line.635"></a>
-<span class="sourceLineNo">636</span>   */<a name="line.636"></a>
-<span class="sourceLineNo">637</span>  protected static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.637"></a>
-<span class="sourceLineNo">638</span>                                          UnaryOperator&lt;String&gt; keyTransformer,<a name="line.638"></a>
-<span class="sourceLineNo">639</span>                                          final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.639"></a>
-<span class="sourceLineNo">640</span>    if (headersTarget != null &amp;&amp; headersSource != null &amp;&amp; !headersSource.isEmpty()) {<a name="line.640"></a>
-<span class="sourceLineNo">641</span>      final Collection&lt;? extends Entry&lt;? extends String, ? extends List&lt;String&gt;&gt;&gt; entrySet = headersSource.entrySet();<a name="line.641"></a>
-<span class="sourceLineNo">642</span>      if (entrySet != null &amp;&amp; !entrySet.isEmpty()) {<a name="line.642"></a>
-<span class="sourceLineNo">643</span>        if (keyTransformer == null) {<a name="line.643"></a>
-<span class="sourceLineNo">644</span>          keyTransformer = UnaryOperator.identity();<a name="line.644"></a>
-<span class="sourceLineNo">645</span>        }<a name="line.645"></a>
-<span class="sourceLineNo">646</span>        for (final Entry&lt;? extends String, ? extends List&lt;String&gt;&gt; entry : entrySet) {<a name="line.646"></a>
-<span class="sourceLineNo">647</span>          if (entry != null) {<a name="line.647"></a>
-<span class="sourceLineNo">648</span>            headersTarget.accept(keyTransformer.apply(entry.getKey()), entry.getValue());<a name="line.648"></a>
-<span class="sourceLineNo">649</span>          }<a name="line.649"></a>
-<span class="sourceLineNo">650</span>        }<a name="line.650"></a>
-<span class="sourceLineNo">651</span>      }<a name="line.651"></a>
-<span class="sourceLineNo">652</span>    }<a name="line.652"></a>
-<span class="sourceLineNo">653</span>  }<a name="line.653"></a>
-<span class="sourceLineNo">654</span><a name="line.654"></a>
-<span class="sourceLineNo">655</span>}<a name="line.655"></a>
+<span class="sourceLineNo">614</span>  /**<a name="line.614"></a>
+<span class="sourceLineNo">615</span>   * Handles any failure case encountered by the logic encapsulated by<a name="line.615"></a>
+<span class="sourceLineNo">616</span>   * the {@link ApplicationHandler#handle(ContainerRequest)} method.<a name="line.616"></a>
+<span class="sourceLineNo">617</span>   *<a name="line.617"></a>
+<span class="sourceLineNo">618</span>   * &lt;p&gt;Either {@link #commit()} or {@link #failure(Throwable)} will<a name="line.618"></a>
+<span class="sourceLineNo">619</span>   * be called by Jersey as the logically final operation in the logic<a name="line.619"></a>
+<span class="sourceLineNo">620</span>   * encapsulated by the {@link<a name="line.620"></a>
+<span class="sourceLineNo">621</span>   * ApplicationHandler#handle(ContainerRequest)} method, but not<a name="line.621"></a>
+<span class="sourceLineNo">622</span>   * both.&lt;/p&gt;<a name="line.622"></a>
+<span class="sourceLineNo">623</span>   *<a name="line.623"></a>
+<span class="sourceLineNo">624</span>   * &lt;p&gt;This method calls the {@link #writeFailureMessage(Throwable)}<a name="line.624"></a>
+<span class="sourceLineNo">625</span>   * method and takes great care to ensure that any {@link Throwable}s<a name="line.625"></a>
+<span class="sourceLineNo">626</span>   * encountered along the way are properly recorded and {@linkplain<a name="line.626"></a>
+<span class="sourceLineNo">627</span>   * Throwable#addSuppressed(Throwable) suppressed}.&lt;/p&gt;<a name="line.627"></a>
+<span class="sourceLineNo">628</span>   *<a name="line.628"></a>
+<span class="sourceLineNo">629</span>   * &lt;p&gt;&lt;strong&gt;This implementation never returns.&lt;/strong&gt; A {@link<a name="line.629"></a>
+<span class="sourceLineNo">630</span>   * ContainerException} is always thrown by this method.&lt;/p&gt;<a name="line.630"></a>
+<span class="sourceLineNo">631</span>   *<a name="line.631"></a>
+<span class="sourceLineNo">632</span>   * @param failureCause the {@link Throwable} encountered by the<a name="line.632"></a>
+<span class="sourceLineNo">633</span>   * {@link ApplicationHandler#handle(ContainerRequest)} method; may<a name="line.633"></a>
+<span class="sourceLineNo">634</span>   * be {@code null}<a name="line.634"></a>
+<span class="sourceLineNo">635</span>   *<a name="line.635"></a>
+<span class="sourceLineNo">636</span>   * @exception ContainerException when this method is invoked; it<a name="line.636"></a>
+<span class="sourceLineNo">637</span>   * will have the supplied {@code failureCause} as its {@linkplain<a name="line.637"></a>
+<span class="sourceLineNo">638</span>   * Throwable#getCause() cause}<a name="line.638"></a>
+<span class="sourceLineNo">639</span>   *<a name="line.639"></a>
+<span class="sourceLineNo">640</span>   * @see #commit()<a name="line.640"></a>
+<span class="sourceLineNo">641</span>   *<a name="line.641"></a>
+<span class="sourceLineNo">642</span>   * @see ContainerResponseWriter#failure(Throwable)<a name="line.642"></a>
+<span class="sourceLineNo">643</span>   */<a name="line.643"></a>
+<span class="sourceLineNo">644</span>  @Override<a name="line.644"></a>
+<span class="sourceLineNo">645</span>  public final void failure(final Throwable failureCause) {<a name="line.645"></a>
+<span class="sourceLineNo">646</span>    final ChannelHandlerContext channelHandlerContext = Objects.requireNonNull(this.getChannelHandlerContext());<a name="line.646"></a>
+<span class="sourceLineNo">647</span>    Throwable outerWriteProblem = null;<a name="line.647"></a>
+<span class="sourceLineNo">648</span>    try {<a name="line.648"></a>
+<span class="sourceLineNo">649</span>      this.writeFailureMessage(failureCause);<a name="line.649"></a>
+<span class="sourceLineNo">650</span>    } catch (final RuntimeException | Error writeProblem) {<a name="line.650"></a>
+<span class="sourceLineNo">651</span>      outerWriteProblem = writeProblem;<a name="line.651"></a>
+<span class="sourceLineNo">652</span>      if (failureCause != null) {<a name="line.652"></a>
+<span class="sourceLineNo">653</span>        boolean foundFailureCauseInSuppressedThrowables = false;<a name="line.653"></a>
+<span class="sourceLineNo">654</span>        final Object[] suppressedThrowables = writeProblem.getSuppressed();<a name="line.654"></a>
+<span class="sourceLineNo">655</span>        if (suppressedThrowables != null &amp;&amp; suppressedThrowables.length &gt; 0) {<a name="line.655"></a>
+<span class="sourceLineNo">656</span>          for (final Object suppressedThrowable : suppressedThrowables) {<a name="line.656"></a>
+<span class="sourceLineNo">657</span>            if (suppressedThrowable == failureCause) {<a name="line.657"></a>
+<span class="sourceLineNo">658</span>              foundFailureCauseInSuppressedThrowables = true;<a name="line.658"></a>
+<span class="sourceLineNo">659</span>              break;<a name="line.659"></a>
+<span class="sourceLineNo">660</span>            }<a name="line.660"></a>
+<span class="sourceLineNo">661</span>          }<a name="line.661"></a>
+<span class="sourceLineNo">662</span>        }<a name="line.662"></a>
+<span class="sourceLineNo">663</span>        if (!foundFailureCauseInSuppressedThrowables) {<a name="line.663"></a>
+<span class="sourceLineNo">664</span>          writeProblem.addSuppressed(failureCause);<a name="line.664"></a>
+<span class="sourceLineNo">665</span>        }<a name="line.665"></a>
+<span class="sourceLineNo">666</span>      }<a name="line.666"></a>
+<span class="sourceLineNo">667</span>      throw writeProblem;<a name="line.667"></a>
+<span class="sourceLineNo">668</span>    } finally {<a name="line.668"></a>
+<span class="sourceLineNo">669</span>      Throwable outerFlushProblem = null;<a name="line.669"></a>
+<span class="sourceLineNo">670</span>      try {<a name="line.670"></a>
+<span class="sourceLineNo">671</span>        channelHandlerContext.flush();<a name="line.671"></a>
+<span class="sourceLineNo">672</span>      } catch (final RuntimeException | Error flushProblem) {<a name="line.672"></a>
+<span class="sourceLineNo">673</span>        outerFlushProblem = flushProblem;<a name="line.673"></a>
+<span class="sourceLineNo">674</span>        if (outerWriteProblem != null) {<a name="line.674"></a>
+<span class="sourceLineNo">675</span>          flushProblem.addSuppressed(outerWriteProblem);<a name="line.675"></a>
+<span class="sourceLineNo">676</span>        } else if (failureCause != null) {<a name="line.676"></a>
+<span class="sourceLineNo">677</span>          flushProblem.addSuppressed(failureCause);<a name="line.677"></a>
+<span class="sourceLineNo">678</span>        }<a name="line.678"></a>
+<span class="sourceLineNo">679</span>        throw flushProblem;<a name="line.679"></a>
+<span class="sourceLineNo">680</span>      } finally {<a name="line.680"></a>
+<span class="sourceLineNo">681</span>        try {<a name="line.681"></a>
+<span class="sourceLineNo">682</span>          channelHandlerContext.close();<a name="line.682"></a>
+<span class="sourceLineNo">683</span>        } catch (final RuntimeException | Error closeProblem) {<a name="line.683"></a>
+<span class="sourceLineNo">684</span>          if (outerFlushProblem != null) {<a name="line.684"></a>
+<span class="sourceLineNo">685</span>            closeProblem.addSuppressed(outerFlushProblem);<a name="line.685"></a>
+<span class="sourceLineNo">686</span>          } else if (failureCause != null) {<a name="line.686"></a>
+<span class="sourceLineNo">687</span>            closeProblem.addSuppressed(failureCause);<a name="line.687"></a>
+<span class="sourceLineNo">688</span>          }<a name="line.688"></a>
+<span class="sourceLineNo">689</span>          throw closeProblem;<a name="line.689"></a>
+<span class="sourceLineNo">690</span>        }<a name="line.690"></a>
+<span class="sourceLineNo">691</span>      }<a name="line.691"></a>
+<span class="sourceLineNo">692</span>    }<a name="line.692"></a>
+<span class="sourceLineNo">693</span>    if (failureCause == null) {<a name="line.693"></a>
+<span class="sourceLineNo">694</span>      throw new ContainerException("failure");<a name="line.694"></a>
+<span class="sourceLineNo">695</span>    } else if (failureCause instanceof RuntimeException) {<a name="line.695"></a>
+<span class="sourceLineNo">696</span>      throw (RuntimeException)failureCause;<a name="line.696"></a>
+<span class="sourceLineNo">697</span>    } else if (failureCause instanceof Exception) {<a name="line.697"></a>
+<span class="sourceLineNo">698</span>      throw new ContainerException(failureCause.getMessage(), failureCause);<a name="line.698"></a>
+<span class="sourceLineNo">699</span>    } else {<a name="line.699"></a>
+<span class="sourceLineNo">700</span>      throw (Error)failureCause;<a name="line.700"></a>
+<span class="sourceLineNo">701</span>    }<a name="line.701"></a>
+<span class="sourceLineNo">702</span>  }<a name="line.702"></a>
+<span class="sourceLineNo">703</span><a name="line.703"></a>
+<span class="sourceLineNo">704</span>  /**<a name="line.704"></a>
+<span class="sourceLineNo">705</span>   * Writes an appropriate message, possibly using the {@link<a name="line.705"></a>
+<span class="sourceLineNo">706</span>   * #getChannelHandlerContext() ChannelHandlerContext} to do so.<a name="line.706"></a>
+<span class="sourceLineNo">707</span>   *<a name="line.707"></a>
+<span class="sourceLineNo">708</span>   * &lt;p&gt;Implementations of this method must not call the {@link<a name="line.708"></a>
+<span class="sourceLineNo">709</span>   * #failure(Throwable)} method or an infinite loop may result.&lt;/p&gt;<a name="line.709"></a>
+<span class="sourceLineNo">710</span>   *<a name="line.710"></a>
+<span class="sourceLineNo">711</span>   * @param failureCause the {@link Throwable} responsible for this<a name="line.711"></a>
+<span class="sourceLineNo">712</span>   * method's invocation; may be {@code null} in pathological cases<a name="line.712"></a>
+<span class="sourceLineNo">713</span>   */<a name="line.713"></a>
+<span class="sourceLineNo">714</span>  protected abstract void writeFailureMessage(final Throwable failureCause);<a name="line.714"></a>
+<span class="sourceLineNo">715</span><a name="line.715"></a>
+<span class="sourceLineNo">716</span><a name="line.716"></a>
+<span class="sourceLineNo">717</span>  /*<a name="line.717"></a>
+<span class="sourceLineNo">718</span>   * Static utility methods.<a name="line.718"></a>
+<span class="sourceLineNo">719</span>   */<a name="line.719"></a>
+<span class="sourceLineNo">720</span><a name="line.720"></a>
+<span class="sourceLineNo">721</span><a name="line.721"></a>
+<span class="sourceLineNo">722</span>  /**<a name="line.722"></a>
+<span class="sourceLineNo">723</span>   * A utility function that copies entries from a source {@link Map}<a name="line.723"></a>
+<span class="sourceLineNo">724</span>   * by passing each entry to the supplied {@link BiConsumer},<a name="line.724"></a>
+<span class="sourceLineNo">725</span>   * transforming the keys beforehand using the supplied {@link<a name="line.725"></a>
+<span class="sourceLineNo">726</span>   * UnaryOperator} and that is intended in this framework to be used<a name="line.726"></a>
+<span class="sourceLineNo">727</span>   * to copy HTTP or HTTP/2 headers to and from the proper places.<a name="line.727"></a>
+<span class="sourceLineNo">728</span>   *<a name="line.728"></a>
+<span class="sourceLineNo">729</span>   * @param headersSource the source of the headers to copy; may be<a name="line.729"></a>
+<span class="sourceLineNo">730</span>   * {@code null} in which case no action will be taken<a name="line.730"></a>
+<span class="sourceLineNo">731</span>   *<a name="line.731"></a>
+<span class="sourceLineNo">732</span>   * @param keyTransformer a {@link UnaryOperator} that transforms a<a name="line.732"></a>
+<span class="sourceLineNo">733</span>   * header name; if {@code null} then the return value of {@link<a name="line.733"></a>
+<span class="sourceLineNo">734</span>   * UnaryOperator#identity()} will be used instead<a name="line.734"></a>
+<span class="sourceLineNo">735</span>   *<a name="line.735"></a>
+<span class="sourceLineNo">736</span>   * @param headersTarget where the headers will be copied to; may be<a name="line.736"></a>
+<span class="sourceLineNo">737</span>   * {@code null} in which case no action will be taken<a name="line.737"></a>
+<span class="sourceLineNo">738</span>   */<a name="line.738"></a>
+<span class="sourceLineNo">739</span>  protected static final void copyHeaders(final Map&lt;? extends String, ? extends List&lt;String&gt;&gt; headersSource,<a name="line.739"></a>
+<span class="sourceLineNo">740</span>                                          UnaryOperator&lt;String&gt; keyTransformer,<a name="line.740"></a>
+<span class="sourceLineNo">741</span>                                          final BiConsumer&lt;? super String, ? super List&lt;String&gt;&gt; headersTarget) {<a name="line.741"></a>
+<span class="sourceLineNo">742</span>    if (headersTarget != null &amp;&amp; headersSource != null &amp;&amp; !headersSource.isEmpty()) {<a name="line.742"></a>
+<span class="sourceLineNo">743</span>      final Collection&lt;? extends Entry&lt;? extends String, ? extends List&lt;String&gt;&gt;&gt; entrySet = headersSource.entrySet();<a name="line.743"></a>
+<span class="sourceLineNo">744</span>      if (entrySet != null &amp;&amp; !entrySet.isEmpty()) {<a name="line.744"></a>
+<span class="sourceLineNo">745</span>        if (keyTransformer == null) {<a name="line.745"></a>
+<span class="sourceLineNo">746</span>          keyTransformer = UnaryOperator.identity();<a name="line.746"></a>
+<span class="sourceLineNo">747</span>        }<a name="line.747"></a>
+<span class="sourceLineNo">748</span>        for (final Entry&lt;? extends String, ? extends List&lt;String&gt;&gt; entry : entrySet) {<a name="line.748"></a>
+<span class="sourceLineNo">749</span>          if (entry != null) {<a name="line.749"></a>
+<span class="sourceLineNo">750</span>            headersTarget.accept(keyTransformer.apply(entry.getKey()), entry.getValue());<a name="line.750"></a>
+<span class="sourceLineNo">751</span>          }<a name="line.751"></a>
+<span class="sourceLineNo">752</span>        }<a name="line.752"></a>
+<span class="sourceLineNo">753</span>      }<a name="line.753"></a>
+<span class="sourceLineNo">754</span>    }<a name="line.754"></a>
+<span class="sourceLineNo">755</span>  }<a name="line.755"></a>
+<span class="sourceLineNo">756</span><a name="line.756"></a>
+<span class="sourceLineNo">757</span>}<a name="line.757"></a>
 
 
 
