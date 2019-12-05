@@ -3,12 +3,12 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.21.1-SNAPSHOT</version>
+  <version>0.22.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
     <artifactId>microbean-pluginmanagement-pom</artifactId>
-    <version>11</version>
+    <version>13</version>
     <relativePath />
   </parent>
 
@@ -35,7 +35,7 @@
 
       <!-- Imports.  In general, order may be significant. -->
 
-      
+
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-base-specification</artifactId>
@@ -59,7 +59,7 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      
+
       <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-bom</artifactId>
@@ -175,17 +175,6 @@
   </dependencies>
 
   <build>
-    <pluginManagement>
-      <plugins>
-
-        <plugin>
-          <artifactId>maven-checkstyle-plugin</artifactId>
-          <version>3.1.0</version>
-        </plugin>
-
-      </plugins>
-    </pluginManagement>
-    
     <plugins>
 
       <plugin>
@@ -197,7 +186,6 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <systemPropertyVariables>
-            <java.util.logging.config.file>${project.basedir}/src/test/logging.properties</java.util.logging.config.file>
             <runBlockingTests>${runBlockingTests}</runBlockingTests>
           </systemPropertyVariables>
         </configuration>

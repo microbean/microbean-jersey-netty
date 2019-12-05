@@ -33,7 +33,7 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.21.0</version>
+  <version>0.22.0</version>
 </dependency>
 ```
 
@@ -73,6 +73,11 @@ which overflow.  Additionally, new `ByteBuffer`s and `InputStream`s
 are allocated throughout.  It is also not entirely clear if HTTP/2 is
 fully supported.
 
+Recently, [there have been some efforts to improve this
+area](https://github.com/eclipse-ee4j/jersey/commit/8dcfed4836d26c57ef78be68214d186e9ca78b84),
+but they still do not take advantage of the built in queuing and
+threading constructs offered up by Netty itself.
+
 ## Implementation Details
 
 By contrast, microBean™ Jersey Netty Integration approaches the
@@ -99,14 +104,16 @@ and that can be tricky.  Since a Jakarta RESTful Web Services
 application may block whatever thread it is running on for some time
 (for example, perhaps it is performing synchronous database access
 over a slow connection), then normally it should be run on its own
-thread that is not the Netty event loop.  But assuming that is so, the
-`InputStream` it will receive by way of a [`ContainerRequest`'s entity
+thread that is not the Netty event loop.  But assuming that this is
+so, the `InputStream` it will receive by way of a
+[`ContainerRequest`'s entity
 stream](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/server/ContainerRequest.html#setEntityStream-java.io.InputStream-)
 will now be operated on by two threads: the application-hosting
 thread, and the Netty event loop.  microBean™ Jersey Netty Integration
-ensures that [this `InputStream` implementation](https://microbean.github.io/microbean-jersey-netty/apidocs/org/microbean/jersey/netty/TerminableByteBufInputStream.html) is thread-safe, uses as
-few locks as possible, allocates as little memory as possible, and
-takes advantage of
+ensures that [this `InputStream`
+implementation](https://microbean.github.io/microbean-jersey-netty/apidocs/org/microbean/jersey/netty/TerminableByteBufInputStream.html)
+is thread-safe, uses as few locks as possible, allocates as little
+memory as possible, and takes advantage of
 [`CompositeByteBuf`](https://netty.io/4.1/api/io/netty/buffer/CompositeByteBuf.html)
 and other Netty native constructs to ensure this inter-thread
 messaging is safe and efficient.

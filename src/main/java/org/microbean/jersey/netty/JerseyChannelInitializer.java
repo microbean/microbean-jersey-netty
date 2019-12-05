@@ -757,6 +757,27 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   /**
+   * Returns the {@link URI} that was {@linkplain
+   * #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * ByteBufCreator) supplied at construction time}.
+   *
+   * <p>This method may return {@code null}.</p>
+   *
+   * @return the {@link URI} that was {@linkplain
+   * #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * ByteBufCreator) supplied at construction time}, or {@code null}
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * ByteBufCreator)
+   */
+  public final URI getBaseUri() {
+    return this.baseUri;
+  }
+
+  /**
    * Initializes the supplied {@link Channel} using an appropriate
    * sequencing of several {@link ChannelHandler}s and other Netty
    * utility classes.
