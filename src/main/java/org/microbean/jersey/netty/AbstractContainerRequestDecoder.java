@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import java.util.Objects;
 
 import java.util.logging.Logger;
 
+import javax.ws.rs.core.Configuration;
 import javax.ws.rs.core.SecurityContext;
 
 import io.netty.buffer.ByteBuf;
@@ -100,6 +101,8 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   
   private final URI baseUri;
 
+  private final Configuration configuration;
+
   private TerminableByteBufInputStream terminableByteBufInputStream;
   
   private ContainerRequest containerRequestUnderConstruction;
@@ -126,12 +129,48 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    *
    * @exception NullPointerException if either {@code headersClass} or
    * {@code dataClass} is {@code null}
+   *
+   * @see #AbstractContainerRequestDecoder(URI, Configuration, Class,
+   * Class)
+   *
+   * @deprecated Please use the {@link
+   * #AbstractContainerRequestDecoder(URI, Configuration, Class,
+   * Class)} constructor instead.
+   */
+  @Deprecated
+  protected AbstractContainerRequestDecoder(final URI baseUri,
+                                            final Class<H> headersClass,
+                                            final Class<D> dataClass) {
+    this(baseUri, null, headersClass, dataClass);
+  }
+
+  /**
+   * Creates a new {@link AbstractContainerRequestDecoder} implementation.
+   *
+   * @param baseUri the base {@link URI} against which relative
+   * request URIs will be resolved; may be {@code null} in which case
+   * the return value of {@link URI#create(String) URI.create("/")}
+   * will be used instead
+   *
+   * @param configuration a {@link Configuration} describing how the
+   * container is configured; may be {@code null}
+   *
+   * @param headersClass the type representing a "headers" message;
+   * must not be {@code null}
+   *
+   * @param dataClass the type representing a "data" message; must not
+   * be {@code null}
+   *
+   * @exception NullPointerException if either {@code headersClass} or
+   * {@code dataClass} is {@code null}
    */
   protected AbstractContainerRequestDecoder(final URI baseUri,
+                                            final Configuration configuration,
                                             final Class<H> headersClass,
                                             final Class<D> dataClass) {
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
+    this.configuration = configuration;
     this.headersClass = Objects.requireNonNull(headersClass);
     this.headersClassRefType = new ParameterizedType(Ref.class, headersClass);
     this.dataClass = Objects.requireNonNull(dataClass);
@@ -410,7 +449,8 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                  requestUri,
                                  method,
                                  securityContext == null ? new SecurityContextAdapter() : securityContext,
-                                 propertiesDelegate == null ? new MapBackedPropertiesDelegate() : propertiesDelegate);
+                                 propertiesDelegate == null ? new MapBackedPropertiesDelegate() : propertiesDelegate,
+                                 this.configuration);
           this.installMessage(channelHandlerContext, headersMessage, containerRequest);
           containerRequest.setRequestScopedInitializer(injectionManager -> {
               // See JerseyChannelInitializer, where the factories of

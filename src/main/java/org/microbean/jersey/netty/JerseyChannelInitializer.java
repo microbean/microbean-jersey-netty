@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.net.URI;
 import java.util.Objects;
 
 import javax.ws.rs.core.Application;
+import javax.ws.rs.core.Configuration;
 
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -760,18 +761,20 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * Returns the {@link URI} that was {@linkplain
    * #JerseyChannelInitializer(URI, SslContext, boolean, long,
    * EventExecutorGroup, boolean, ApplicationHandler, int,
-   * ByteBufCreator) supplied at construction time}.
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * supplied at construction time}.
    *
    * <p>This method may return {@code null}.</p>
    *
    * @return the {@link URI} that was {@linkplain
    * #JerseyChannelInitializer(URI, SslContext, boolean, long,
    * EventExecutorGroup, boolean, ApplicationHandler, int,
-   * ByteBufCreator) supplied at construction time}, or {@code null}
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * supplied at construction time}, or {@code null}
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
    * EventExecutorGroup, boolean, ApplicationHandler, int,
-   * ByteBufCreator)
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    */
   public final URI getBaseUri() {
     return this.baseUri;
@@ -1070,6 +1073,8 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     private final ApplicationHandler applicationHandler;
 
+    private final Configuration configuration;
+
     private final int flushThreshold;
 
     private final ByteBufCreator byteBufCreator;
@@ -1086,6 +1091,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandler = applicationHandler;
+      if (applicationHandler == null) {
+        this.configuration = null;
+      } else {
+        this.configuration = applicationHandler.getConfiguration();
+      }
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
     }
@@ -1105,7 +1115,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     protected final void initChannel(final Channel channel) {
       final ChannelPipeline channelPipeline = channel.pipeline();
       channelPipeline.addLast(HttpObjectToContainerRequestDecoder.class.getSimpleName(),
-                              new HttpObjectToContainerRequestDecoder(baseUri));
+                              new HttpObjectToContainerRequestDecoder(baseUri, this.configuration));
       channelPipeline.addLast(jerseyEventExecutorGroup,
                               HttpContainerRequestHandlingResponseWriter.class.getSimpleName(),
                               new HttpContainerRequestHandlingResponseWriter(applicationHandler,
@@ -1136,6 +1146,8 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     private final ApplicationHandler applicationHandler;
 
+    private final Configuration configuration;
+
     private final int flushThreshold;
 
     private final ByteBufCreator byteBufCreator;
@@ -1152,6 +1164,11 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandler = applicationHandler;
+      if (applicationHandler == null) {
+        this.configuration = null;
+      } else {
+        this.configuration = applicationHandler.getConfiguration();
+      }
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
     }
@@ -1173,7 +1190,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     protected final void initChannel(final Channel channel) {
       final ChannelPipeline channelPipeline = channel.pipeline();
       channelPipeline.addLast(Http2StreamFrameToContainerRequestDecoder.class.getSimpleName(),
-                              new Http2StreamFrameToContainerRequestDecoder(baseUri));
+                              new Http2StreamFrameToContainerRequestDecoder(baseUri, this.configuration));
       channelPipeline.addLast(jerseyEventExecutorGroup,
                               Http2ContainerRequestHandlingResponseWriter.class.getSimpleName(),
                               new Http2ContainerRequestHandlingResponseWriter(applicationHandler));

@@ -33,7 +33,7 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.22.0</version>
+  <version>0.23.0</version>
 </dependency>
 ```
 

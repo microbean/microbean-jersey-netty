@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 package org.microbean.jersey.netty;
 
 import java.net.URI;
+
+import javax.ws.rs.core.Configuration;
 
 import io.netty.handler.codec.http2.Http2DataFrame;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
@@ -50,9 +52,32 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
    * {@link ContainerRequest}; may be {@code null} in which case the
    * return value of {@link URI#create(String) URI.create("/")} will
    * be used instead
+   *
+   * @see #Http2StreamFrameToContainerRequestDecoder(URI, Configuration)
+   *
+   * @deprecated Please use the {@link
+   * #Http2StreamFrameToContainerRequestDecoder(URI, Configuration)}
+   * constructor instead.
    */
+  @Deprecated
   public Http2StreamFrameToContainerRequestDecoder(final URI baseUri) {
-    super(baseUri, Http2HeadersFrame.class, Http2DataFrame.class);
+    this(baseUri, null);
+  }
+
+  /**
+   * Creates a new {@link Http2StreamFrameToContainerRequestDecoder}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param configuration a {@link Configuration} describing how the
+   * container is configured; may be {@code null}
+   */
+  public Http2StreamFrameToContainerRequestDecoder(final URI baseUri, final Configuration configuration) {
+    super(baseUri, configuration, Http2HeadersFrame.class, Http2DataFrame.class);
   }
 
 

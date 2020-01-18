@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.microbean.jersey.netty;
 import java.net.URI;
 
 import java.util.List; // for javadoc only
+
+import javax.ws.rs.core.Configuration;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
@@ -61,9 +63,32 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    * {@link ContainerRequest}; may be {@code null} in which case the
    * return value of {@link URI#create(String) URI.create("/")} will
    * be used instead
+   *
+   * @see #HttpObjectToContainerRequestDecoder(URI, Configuration)
+   *
+   * @deprecated Please use the {@link
+   * #HttpObjectToContainerRequestDecoder(URI, Configuration)}
+   * constructor instead.
    */
+  @Deprecated
   public HttpObjectToContainerRequestDecoder(final URI baseUri) {
-    super(baseUri, HttpRequest.class, HttpContent.class);
+    this(baseUri, null);
+  }
+
+  /**
+   * Creates a new {@link HttpObjectToContainerRequestDecoder}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param configuration a {@link Configuration} describing how the
+   * container is configured; may be {@code null}
+   */
+  public HttpObjectToContainerRequestDecoder(final URI baseUri, final Configuration configuration) {
+    super(baseUri, configuration, HttpRequest.class, HttpContent.class);
   }
 
 

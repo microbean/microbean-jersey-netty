@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.22.1-SNAPSHOT</version>
+  <version>0.23.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
@@ -55,7 +55,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-bom</artifactId>
-        <version>4.1.43.Final</version>
+        <version>4.1.45.Final</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -63,7 +63,7 @@
       <dependency>
         <groupId>org.glassfish.jersey</groupId>
         <artifactId>jersey-bom</artifactId>
-        <version>2.29.1</version>
+        <version>2.30</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
