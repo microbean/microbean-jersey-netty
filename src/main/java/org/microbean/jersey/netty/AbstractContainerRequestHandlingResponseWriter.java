@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,8 @@ import java.util.function.UnaryOperator;
 
 import java.util.logging.Logger;
 
+import io.netty.channel.Channel; // for javadoc only
+import io.netty.channel.ChannelConfig; // for javadoc only
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundInvoker; // for javadoc only
@@ -204,12 +206,45 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * Instance methods.
    */
 
-  
+
+  /**
+   * Overrides {@link
+   * ChannelInboundHandlerAdapter#channelActive(ChannelHandlerContext)}
+   * to ensure that a channel read is performed one way or another.
+   *
+   * <p>If {@linkplain ChannelConfig#isAutoRead() autoread is active},
+   * then the superclass' version of this method is executed with no
+   * changes.  If {@linkplain ChannelConfig#isAutoRead() autoread is
+   * inactive}, then a call is made to {@link
+   * ChannelHandlerContext#read()}.</p>
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; must not be {@code null}
+   *
+   * @exception NullPointerException if {@code channelHandlerContext}
+   * is {@code null}
+   *
+   * @exception Exception if an error occurs
+   *
+   * @see ChannelConfig#isAutoRead()
+   *
+   * @see Channel#read()
+   *
+   * @see ChannelHandlerContext#read()
+   *
+   * @see #channelRead(ChannelHandlerContext, Object)
+   */
+  @Override
   public final void channelActive(final ChannelHandlerContext channelHandlerContext) throws Exception {
     super.channelActive(channelHandlerContext);
     // See
-    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413
+    // https://github.com/netty/netty/blob/d446765b8469ca40db40f46e5c637d980b734a8a/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java#L1408-L1413.
     if (!channelHandlerContext.channel().config().isAutoRead()) {
+      // If autoRead was "on", then the superclass version of this
+      // method will have already performed a read from the channel
+      // (e.g. channel.read()).  If autoRead is "off", then we get
+      // here, and we do a read from the ChannelHandlerContext (and so
+      // we don't have to traverse the whole pipeline).
       channelHandlerContext.read();
     }
   }

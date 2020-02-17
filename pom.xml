@@ -3,12 +3,12 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.23.1-SNAPSHOT</version>
+  <version>0.24.0-SNAPSHOT</version>
 
   <parent>
     <groupId>org.microbean</groupId>
     <artifactId>microbean-pluginmanagement-pom</artifactId>
-    <version>13</version>
+    <version>17</version>
     <relativePath />
   </parent>
 
@@ -39,7 +39,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-base-specification</artifactId>
-        <version>0.5.0</version>
+        <version>0.6.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -47,7 +47,7 @@
       <dependency>
         <groupId>org.microbean</groupId>
         <artifactId>microbean-weld-se-environment</artifactId>
-        <version>0.7.0</version>
+        <version>0.8.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -69,17 +69,6 @@
       </dependency>
 
 
-      <!-- Normal dependencies. -->
-
-
-      <dependency>
-        <groupId>org.microbean</groupId>
-        <artifactId>microbean-development-annotations</artifactId>
-        <version>0.2.4</version>
-        <type>jar</type>
-      </dependency>
-
-
     </dependencies>
   </dependencyManagement>
 
@@ -88,10 +77,16 @@
 
     <!-- Test-scoped dependencies. -->
 
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <type>jar</type>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
       <type>jar</type>
       <scope>test</scope>
     </dependency>
@@ -101,18 +96,6 @@
       <artifactId>jersey-hk2</artifactId>
       <type>jar</type>
       <scope>test</scope>
-    </dependency>
-
-
-    <!-- Runtime-scoped dependencies. -->
-
-
-    <dependency>
-      <groupId>org.jboss</groupId>
-      <artifactId>jandex</artifactId>
-      <type>jar</type>
-      <scope>runtime</scope>
-      <optional>true</optional>
     </dependency>
 
 
@@ -165,12 +148,6 @@
       <scope>compile</scope>
     </dependency>
 
-    <dependency>
-      <groupId>org.microbean</groupId>
-      <artifactId>microbean-development-annotations</artifactId>
-      <type>jar</type>
-      <scope>compile</scope>
-    </dependency>
 
   </dependencies>
 

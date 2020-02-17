@@ -33,7 +33,7 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.23.0</version>
+  <version>0.24.0</version>
 </dependency>
 ```
 
@@ -61,11 +61,12 @@ of a Netty
 While Jersey itself contains a [Netty integration
 project](https://github.com/eclipse-ee4j/jersey/tree/master/containers/netty-http),
 it is annotated with
-[`@Beta`](https://jersey.github.io/apidocs/2.28/jersey/org/glassfish/jersey/Beta.html),
-and the author additionally writes that his "implementation cannot be
-more experimental".  In addition, there are several issues with the
-Jersey-supplied Netty integration project.  The most problematic seems
-to be [issue
+[`@Beta`](https://eclipse-ee4j.github.io/jersey.github.io/apidocs/latest/jersey/org/glassfish/jersey/Beta.html),
+and the author additionally
+[writes](https://github.com/eclipse-ee4j/jersey/blob/8dcfed4836d26c57ef78be68214d186e9ca78b84/containers/netty-http/src/main/java/org/glassfish/jersey/netty/httpserver/JerseyHttp2ServerHandler.java#L50)
+that his "implementation cannot be more experimental".  In addition,
+there are several issues with the Jersey-supplied Netty integration
+project.  The most problematic seems to be [issue
 3500](https://github.com/eclipse-ee4j/jersey/issues/3500).  This issue
 and others stem from the fact that the Jersey-supplied Netty
 integration project sets up its own internal queues for streaming,
