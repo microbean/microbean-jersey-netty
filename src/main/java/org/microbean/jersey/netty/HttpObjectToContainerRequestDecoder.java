@@ -29,6 +29,7 @@ import io.netty.channel.ChannelHandlerContext; // for javadoc only
 
 import io.netty.handler.codec.http.FullHttpMessage;
 import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
@@ -95,7 +96,7 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
   /*
    * Instance methods.
    */
-  
+
 
   /**
    * Extracts and returns a {@link String} representing a request URI
@@ -133,6 +134,43 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
   @Override
   protected final String getMethod(final HttpRequest httpRequest) {
     return httpRequest.method().name();
+  }
+
+  /**
+   * Overrides the {@link
+   * AbstractContainerRequestDecoder#installMessage(ChannelHandlerContext,
+   * Object, ContainerRequest)} method to
+   * <strong>additionally</strong> install incoming headers into the
+   * supplied {@link ContainerRequest}.
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; will not be {@code null}; supplied for convenience;
+   * overrides may (and often do) ignore this parameter
+   *
+   * @param message the message to install; will not be {@code null}
+   *
+   * @param containerRequest the just-constructed {@link
+   * ContainerRequest} into which to install the supplied {@code
+   * message}; will not be {@code null}
+   *
+   * @see HttpRequest#headers()
+   *
+   * @see
+   * org.glassfish.jersey.message.internal.InboundMessageContext#header(String,
+   * Object)
+   */
+  @Override
+  protected void installMessage(final ChannelHandlerContext channelHandlerContext,
+                                final HttpRequest message,
+                                final ContainerRequest containerRequest) {
+    super.installMessage(channelHandlerContext, message, containerRequest);
+    final HttpHeaders headers = message.headers();
+    if (headers != null && !headers.isEmpty()) {
+      final Iterable<? extends String> names = headers.names();
+      for (final String name : names) {
+        containerRequest.header(name, headers.get(name));
+      }
+    }
   }
 
   /**
