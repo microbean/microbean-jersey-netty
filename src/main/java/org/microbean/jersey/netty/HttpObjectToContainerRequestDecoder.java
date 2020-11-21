@@ -18,6 +18,8 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
+import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.List; // for javadoc only
 
 import javax.ws.rs.core.Configuration;
@@ -166,9 +168,10 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
     super.installMessage(channelHandlerContext, message, containerRequest);
     final HttpHeaders headers = message.headers();
     if (headers != null && !headers.isEmpty()) {
-      final Iterable<? extends String> names = headers.names();
-      for (final String name : names) {
-        containerRequest.header(name, headers.get(name));
+      final Iterator<? extends Entry<?, ?>> iterator = headers.iteratorCharSequence();
+      while (iterator.hasNext()) {
+        final Entry<?, ?> entry = iterator.next();
+        containerRequest.header(entry.getKey().toString(), entry.getValue());
       }
     }
   }

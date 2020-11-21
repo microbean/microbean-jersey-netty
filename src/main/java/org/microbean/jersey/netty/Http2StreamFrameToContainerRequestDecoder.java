@@ -18,6 +18,9 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
+import java.util.Iterator;
+import java.util.Map.Entry;
+
 import javax.ws.rs.core.Configuration;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -159,9 +162,10 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
     super.installMessage(channelHandlerContext, message, containerRequest);
     final Http2Headers headers = message.headers();
     if (headers != null && !headers.isEmpty()) {
-      final Iterable<? extends CharSequence> names = headers.names();
-      for (final CharSequence name : names) {
-        containerRequest.header(name.toString(), headers.get(name));
+      final Iterator<? extends Entry<?, ?>> iterator = headers.iterator();
+      while (iterator.hasNext()) {
+        final Entry<?, ?> entry = iterator.next();
+        containerRequest.header(entry.getKey().toString(), entry.getValue());
       }
     }
   }
