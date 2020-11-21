@@ -80,33 +80,33 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    * Static fields.
    */
 
-  
+
   private static final String cn = AbstractContainerRequestDecoder.class.getName();
-  
+
   private static final Logger logger = Logger.getLogger(cn);
 
   private static final Type channelHandlerContextRefType = ChannelHandlerContextReferencingFactory.genericRefType.getType();
-  
+
 
   /*
    * Instance fields.
    */
 
-  
+
   private final Class<H> headersClass;
 
   private final Type headersClassRefType;
-  
+
   private final Class<D> dataClass;
-  
+
   private final URI baseUri;
 
   private final Configuration configuration;
 
   private TerminableByteBufInputStream terminableByteBufInputStream;
-  
+
   private ContainerRequest containerRequestUnderConstruction;
-  
+
 
   /*
    * Constructors.
@@ -331,7 +331,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    * @param channelHandlerContext the {@link ChannelHandlerContext} in
    * effect; will not be {@code null}; supplied for convenience;
    * overrides may (and often do) ignore this parameter
-   * 
+   *
    * @param message the message to install; will not be {@code null}
    * and is guaranteed to be a {@linkplain #isHeaders(Object)
    * "headers" message}
@@ -561,11 +561,11 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    * Inner and nested classes.
    */
 
-  
+
   private static final class ParameterizedType implements java.lang.reflect.ParameterizedType {
 
     private final Type rawType;
-    
+
     private final Type[] actualTypeArguments;
 
     private ParameterizedType(final Type rawType, final Type... actualTypeArguments) {
@@ -595,7 +595,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
       final int actualTypeArgumentsHashCode = Arrays.hashCode(this.getActualTypeArguments());
       return rawType == null ? actualTypeArgumentsHashCode : actualTypeArgumentsHashCode ^ rawType.hashCode();
     }
-    
+
     @Override
     public final boolean equals(final Object other) {
       if (other == this) {
@@ -620,13 +620,13 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
         } else if (!Arrays.equals(actualTypeArguments, her.getActualTypeArguments())) {
           return false;
         }
-        
+
         return true;
       } else {
         return false;
       }
     }
-    
+
   }
-  
+
 }

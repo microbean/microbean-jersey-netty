@@ -18,9 +18,15 @@ package org.microbean.jersey.netty;
 
 import java.net.URI;
 
+import java.util.Iterator;
+import java.util.Map.Entry;
+
 import javax.ws.rs.core.Configuration;
 
+import io.netty.channel.ChannelHandlerContext;
+
 import io.netty.handler.codec.http2.Http2DataFrame;
+import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersFrame;
 import io.netty.handler.codec.http2.Http2StreamFrame;
 
@@ -43,7 +49,7 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link Http2StreamFrameToContainerRequestDecoder}.
    *
@@ -84,7 +90,7 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
   /*
    * Instance methods.
    */
-  
+
 
   /**
    * Extracts and returns a {@link String} representing a request URI
@@ -127,6 +133,44 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
   }
 
   /**
+   * Overrides the {@link
+   * AbstractContainerRequestDecoder#installMessage(ChannelHandlerContext,
+   * Object, ContainerRequest)} method to
+   * <strong>additionally</strong> install incoming headers into the
+   * supplied {@link ContainerRequest}.
+   *
+   * @param channelHandlerContext the {@link ChannelHandlerContext} in
+   * effect; will not be {@code null}; supplied for convenience;
+   * overrides may (and often do) ignore this parameter
+   *
+   * @param message the message to install; will not be {@code null}
+   *
+   * @param containerRequest the just-constructed {@link
+   * ContainerRequest} into which to install the supplied {@code
+   * message}; will not be {@code null}
+   *
+   * @see Http2HeadersFrame#headers()
+   *
+   * @see
+   * org.glassfish.jersey.message.internal.InboundMessageContext#header(String,
+   * Object)
+   */
+  @Override
+  protected void installMessage(final ChannelHandlerContext channelHandlerContext,
+                                final Http2HeadersFrame message,
+                                final ContainerRequest containerRequest) {
+    super.installMessage(channelHandlerContext, message, containerRequest);
+    final Http2Headers headers = message.headers();
+    if (headers != null && !headers.isEmpty()) {
+      final Iterator<? extends Entry<?, ?>> iterator = headers.iterator();
+      while (iterator.hasNext()) {
+        final Entry<?, ?> entry = iterator.next();
+        containerRequest.header(entry.getKey().toString(), entry.getValue());
+      }
+    }
+  }
+
+  /**
    * Returns {@code true} if the supplied {@link Http2StreamFrame} is the
    * last of a stream of messages.
    *
@@ -164,5 +208,5 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
     }
     return returnValue;
   }
-  
+
 }
