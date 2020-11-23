@@ -16,10 +16,7 @@
  */
 package org.microbean.jersey.netty;
 
-import java.io.IOException;
 import java.io.OutputStream;
-
-import java.nio.channels.ClosedChannelException;
 
 import java.util.List;
 import java.util.Map;
@@ -27,15 +24,12 @@ import java.util.Objects;
 
 import java.util.function.UnaryOperator;
 
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.ws.rs.HttpMethod;
 
 import javax.ws.rs.core.Response.StatusType;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
@@ -56,8 +50,6 @@ import io.netty.util.concurrent.GenericFutureListener;
 import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerRequest;
 import org.glassfish.jersey.server.ContainerResponse;
-
-import org.glassfish.jersey.server.spi.ContainerResponseWriter; // for javadoc only
 
 import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;
 

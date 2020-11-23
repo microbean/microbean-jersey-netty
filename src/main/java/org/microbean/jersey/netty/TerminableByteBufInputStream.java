@@ -113,7 +113,7 @@ public final class TerminableByteBufInputStream extends InputStream {
       // fall through
     case OPEN:
       try {
-        assert this.byteBuf.refCnt() == 1;
+        assert allComponentsHaveRefCount(1);
         // No need to synchronize; release() works on a volatile int
         final boolean released = this.byteBuf.release();
         assert released;
@@ -390,6 +390,24 @@ public final class TerminableByteBufInputStream extends InputStream {
     default:
       throw new IOException("Unexpected state: " + state);
     }
+  }
+
+  private final boolean allComponentsHaveRefCount(final int refCnt) {
+    assert this.byteBuf.refCnt() == refCnt;
+    if (refCnt > 0) {
+      // This check only works when refCnt is greater than 0 because
+      // if it is 0 then CompositeByteBuf#internalComponent(int) will
+      // throw an IllegalReferenceCountException.  This means
+      // effectively there's no way to assert that the innards of
+      // CompositeByteBuf are freed; we just have to take it on faith
+      // that if the CompositeByteBuf is freed then so are its
+      // components.
+      final int numComponents = this.byteBuf.numComponents();
+      for (int i = 0; i < numComponents; i++) {
+        assert this.byteBuf.internalComponent(i).refCnt() == refCnt;
+      }
+    }
+    return true;
   }
   
 }

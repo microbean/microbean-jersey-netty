@@ -32,11 +32,15 @@ import org.glassfish.jersey.server.ApplicationHandler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-class TestSpike {
+final class TestSpike {
 
-  @Test
+  private TestSpike() {
+    super();
+  }
+
   @EnabledIfSystemProperty(named = "runBlockingTests", matches = "true")
-  public void testSpike() throws Exception {
+  @Test
+  final void testSpike() throws Exception {
     final EventLoopGroup group = new NioEventLoopGroup();
     try {
       final ServerBootstrap serverBootstrap = new ServerBootstrap()
@@ -45,7 +49,7 @@ class TestSpike {
         .localAddress(new InetSocketAddress("localhost", 8080))
         .childHandler(new JerseyChannelInitializer(null, null, true, 20000000L, null, new ApplicationHandler(new Application()), 8192, null));
       final ChannelFuture bindFuture = serverBootstrap.bind();
-      bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** server closed"));
+      bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** channel closed"));
       bindFuture.sync();
       System.out.println("*** server started");
       Thread.sleep(20L * 60L * 1000L); // milliseconds

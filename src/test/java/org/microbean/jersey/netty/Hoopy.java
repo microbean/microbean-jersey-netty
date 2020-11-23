@@ -29,7 +29,6 @@ public class Hoopy {
   }
 
   @POST
-  @Path("/")
   public void hoopy(final String echoMe) {
     System.out.println("*** accepted: " + echoMe);
   }

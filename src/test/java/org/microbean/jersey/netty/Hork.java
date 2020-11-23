@@ -38,7 +38,6 @@ public class Hork {
   }
 
   @GET
-  @Path("/")
   public String hork() {
     assertNotNull(channelHandlerContext);
     return "blatz";

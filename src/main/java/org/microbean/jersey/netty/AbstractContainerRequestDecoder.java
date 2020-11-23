@@ -526,6 +526,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
         }
         assert this.terminableByteBufInputStream == null;
         assert terminableByteBufInputStream != null;
+        content.retain(); // see https://github.com/microbean/microbean-jersey-netty/issues/12
         terminableByteBufInputStream.addByteBuf(content);
         terminableByteBufInputStream.terminate();
         this.containerRequestUnderConstruction = null;
@@ -536,6 +537,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
           this.containerRequestUnderConstruction.setEntityStream(newlyCreatedTerminableByteBufInputStream);
           out.add(this.containerRequestUnderConstruction);
         }
+        content.retain(); // see https://github.com/microbean/microbean-jersey-netty/issues/12
         this.terminableByteBufInputStream.addByteBuf(content);
       }
     } else {
