@@ -30,18 +30,13 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import org.glassfish.jersey.server.ApplicationHandler;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
-
-public class TestSpike {
-
-  public TestSpike() {
-    super();
-  }
+class TestSpike {
 
   @Test
+  @EnabledIfSystemProperty(named = "runBlockingTests", matches = "true")
   public void testSpike() throws Exception {
-    assumeTrue(Boolean.getBoolean("runBlockingTests"));
     final EventLoopGroup group = new NioEventLoopGroup();
     try {
       final ServerBootstrap serverBootstrap = new ServerBootstrap()
@@ -58,5 +53,5 @@ public class TestSpike {
       group.shutdownGracefully().addListener(f -> System.out.println("*** eventLoopGroup shutdown")).sync();
     }
   }
-  
+
 }
