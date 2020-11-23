@@ -121,7 +121,7 @@
 <span class="sourceLineNo">113</span>      // fall through<a name="line.113"></a>
 <span class="sourceLineNo">114</span>    case OPEN:<a name="line.114"></a>
 <span class="sourceLineNo">115</span>      try {<a name="line.115"></a>
-<span class="sourceLineNo">116</span>        assert this.byteBuf.refCnt() == 1;<a name="line.116"></a>
+<span class="sourceLineNo">116</span>        assert allComponentsHaveRefCount(1);<a name="line.116"></a>
 <span class="sourceLineNo">117</span>        // No need to synchronize; release() works on a volatile int<a name="line.117"></a>
 <span class="sourceLineNo">118</span>        final boolean released = this.byteBuf.release();<a name="line.118"></a>
 <span class="sourceLineNo">119</span>        assert released;<a name="line.119"></a>
@@ -399,8 +399,26 @@
 <span class="sourceLineNo">391</span>      throw new IOException("Unexpected state: " + state);<a name="line.391"></a>
 <span class="sourceLineNo">392</span>    }<a name="line.392"></a>
 <span class="sourceLineNo">393</span>  }<a name="line.393"></a>
-<span class="sourceLineNo">394</span>  <a name="line.394"></a>
-<span class="sourceLineNo">395</span>}<a name="line.395"></a>
+<span class="sourceLineNo">394</span><a name="line.394"></a>
+<span class="sourceLineNo">395</span>  private final boolean allComponentsHaveRefCount(final int refCnt) {<a name="line.395"></a>
+<span class="sourceLineNo">396</span>    assert this.byteBuf.refCnt() == refCnt;<a name="line.396"></a>
+<span class="sourceLineNo">397</span>    if (refCnt &gt; 0) {<a name="line.397"></a>
+<span class="sourceLineNo">398</span>      // This check only works when refCnt is greater than 0 because<a name="line.398"></a>
+<span class="sourceLineNo">399</span>      // if it is 0 then CompositeByteBuf#internalComponent(int) will<a name="line.399"></a>
+<span class="sourceLineNo">400</span>      // throw an IllegalReferenceCountException.  This means<a name="line.400"></a>
+<span class="sourceLineNo">401</span>      // effectively there's no way to assert that the innards of<a name="line.401"></a>
+<span class="sourceLineNo">402</span>      // CompositeByteBuf are freed; we just have to take it on faith<a name="line.402"></a>
+<span class="sourceLineNo">403</span>      // that if the CompositeByteBuf is freed then so are its<a name="line.403"></a>
+<span class="sourceLineNo">404</span>      // components.<a name="line.404"></a>
+<span class="sourceLineNo">405</span>      final int numComponents = this.byteBuf.numComponents();<a name="line.405"></a>
+<span class="sourceLineNo">406</span>      for (int i = 0; i &lt; numComponents; i++) {<a name="line.406"></a>
+<span class="sourceLineNo">407</span>        assert this.byteBuf.internalComponent(i).refCnt() == refCnt;<a name="line.407"></a>
+<span class="sourceLineNo">408</span>      }<a name="line.408"></a>
+<span class="sourceLineNo">409</span>    }<a name="line.409"></a>
+<span class="sourceLineNo">410</span>    return true;<a name="line.410"></a>
+<span class="sourceLineNo">411</span>  }<a name="line.411"></a>
+<span class="sourceLineNo">412</span>  <a name="line.412"></a>
+<span class="sourceLineNo">413</span>}<a name="line.413"></a>
 
 
 
