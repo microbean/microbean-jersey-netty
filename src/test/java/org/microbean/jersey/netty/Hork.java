@@ -24,9 +24,6 @@ import javax.ws.rs.Path;
 
 import io.netty.channel.ChannelHandlerContext;
 
-import io.netty.handler.codec.http.HttpRequest;
-
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @Path("/hork")
