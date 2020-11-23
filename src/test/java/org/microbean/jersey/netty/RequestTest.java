@@ -45,10 +45,10 @@ class RequestTest {
   static void beforeAll() throws InterruptedException {
     group = new NioEventLoopGroup();
     final ServerBootstrap serverBootstrap = new ServerBootstrap()
-            .group(group)
-            .channel(NioServerSocketChannel.class)
-            .localAddress(new InetSocketAddress("localhost", 8080))
-            .childHandler(new JerseyChannelInitializer(null, null, true, 20000000L, null, new ApplicationHandler(new Application()), 8192, null));
+      .group(group)
+      .channel(NioServerSocketChannel.class)
+      .localAddress(new InetSocketAddress("localhost", 8080))
+      .childHandler(new JerseyChannelInitializer(null, null, true, 20000000L, null, new ApplicationHandler(new Application()), 8192, null));
     final ChannelFuture bindFuture = serverBootstrap.bind();
     bindFuture.channel().closeFuture().addListener(c -> System.out.println("*** server closed"));
     bindFuture.sync();
@@ -65,10 +65,10 @@ class RequestTest {
   @Test
   void hork() {
     final Response response = assertDoesNotThrow(() ->
-            webTarget.path("/hork")
-                    .request()
-                    .buildGet()
-                    .invoke()
+      webTarget.path("/hork")
+        .request()
+        .buildGet()
+        .invoke()
     );
 
     assertEquals(200, response.getStatus(), "Request had different status code then '200 OK'");
@@ -79,10 +79,10 @@ class RequestTest {
   @Test
   void hoopy() {
     final Response response = assertDoesNotThrow(() ->
-            webTarget.path("/hork")
-                    .request()
-                    .buildPost(Entity.entity("Hello", MediaType.TEXT_PLAIN_TYPE))
-                    .invoke()
+      webTarget.path("/hork")
+        .request()
+        .buildPost(Entity.entity("Hello", MediaType.TEXT_PLAIN_TYPE))
+        .invoke()
     );
 
     assertEquals(204, response.getStatus(), "Request had different status code then '204 No Content'");
