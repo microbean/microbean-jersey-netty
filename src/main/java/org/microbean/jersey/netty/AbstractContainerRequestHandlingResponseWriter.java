@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 import java.util.function.BiConsumer;
 import java.util.function.UnaryOperator;
+import java.util.function.Supplier;
 
 import java.util.logging.Logger;
 
@@ -47,6 +48,7 @@ import org.glassfish.jersey.server.ContainerException;
 import org.glassfish.jersey.server.ContainerRequest;
 import org.glassfish.jersey.server.ContainerResponse;
 
+import org.glassfish.jersey.server.spi.Container;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter;
 import org.glassfish.jersey.server.spi.ContainerResponseWriter.TimeoutHandler;
 
@@ -75,7 +77,7 @@ import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOu
  * @see #channelRead(ChannelHandlerContext, Object)
  *
  * @see #createOutputStream(long, ContainerResponse)
- * 
+ *
  * @see ChannelInboundHandlerAdapter
  *
  * @see ApplicationHandler#handle(ContainerRequest)
@@ -100,12 +102,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    */
 
 
-  /**
-   * The {@link ApplicationHandler} that represents Jersey.
-   *
-   * <p>This field is never {@code null}.</p>
-   */
-  private final ApplicationHandler applicationHandler;
+  private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
 
   private ScheduledFuture<?> suspendTimeoutFuture;
 
@@ -117,12 +114,12 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
 
   private final ByteBufCreator byteBufCreator;
 
-  
+
   /*
    * Constructors.
    */
 
-  
+
   /**
    * Creates a new {@link
    * AbstractContainerRequestHandlingResponseWriter}.
@@ -135,11 +132,10 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * will serve as the bridge between Netty and Jersey; may be {@code
    * null} somewhat pathologically but normally is not
    *
-   * @see
-   * #AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * @see #AbstractContainerRequestHandlingResponseWriter(Supplier,
    * int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
-   * 
+   *
    * @see ApplicationHandler
    *
    * @see ApplicationHandler#handle(ContainerRequest)
@@ -147,15 +143,90 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * @see #channelRead(ChannelHandlerContext, Object)
    */
   protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
-    this(applicationHandler, 8192, null);
+    this(() -> applicationHandler, 8192, null);
   }
-  
+
   /**
    * Creates a new {@link
    * AbstractContainerRequestHandlingResponseWriter}.
    *
    * @param applicationHandler an {@link ApplicationHandler}
    * representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}
+   * returned by the {@link #createOutputStream(long,
+   * ContainerResponse)} method must write before an automatic
+   * {@linkplain
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()
+   * flush} may take place; if less than {@code 0} {@code 0} will be
+   * used instead; if {@code Integer#MAX_VALUE} then it is suggested
+   * that no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that may be used
+   * (but does not have to be used) by the implementation of the
+   * {@link #createOutputStream(long, ContainerResponse)} method; may
+   * be {@code null}
+   *
+   * @see #AbstractContainerRequestHandlingResponseWriter(Supplier,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #channelRead(ChannelHandlerContext, Object)
+   *
+   * @see #getFlushThreshold()
+   *
+   * @see #getByteBufCreator()
+   *
+   * @see #createOutputStream(long, ContainerResponse)
+   */
+  protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
+                                                           final int flushThreshold,
+                                                           final ByteBufCreator byteBufCreator) {
+    this(() -> applicationHandler, flushThreshold, byteBufCreator);
+  }
+
+  /**
+   * Creates a new {@link
+   * AbstractContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @see #AbstractContainerRequestHandlingResponseWriter(Supplier,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see #channelRead(ChannelHandlerContext, Object)
+   */
+  protected AbstractContainerRequestHandlingResponseWriter(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+    this(applicationHandlerSupplier, 8192, null);
+  }
+
+  /**
+   * Creates a new {@link
+   * AbstractContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
    * href="https://jakarta.ee/specifications/restful-ws/"
    * target="_parent">Jakarta RESTful Web Services application</a>
    * whose {@link ApplicationHandler#handle(ContainerRequest)} method
@@ -189,14 +260,15 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    *
    * @see #createOutputStream(long, ContainerResponse)
    */
-  protected AbstractContainerRequestHandlingResponseWriter(ApplicationHandler applicationHandler,
+  protected AbstractContainerRequestHandlingResponseWriter(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
                                                            final int flushThreshold,
                                                            final ByteBufCreator byteBufCreator) {
     super();
-    if (applicationHandler == null) {
-      applicationHandler = new ApplicationHandler();
+    if (applicationHandlerSupplier == null) {
+      this.applicationHandlerSupplier = () -> new ApplicationHandler();
+    } else {
+      this.applicationHandlerSupplier = applicationHandlerSupplier;
     }
-    this.applicationHandler = applicationHandler;    
     this.flushThreshold = Math.max(0, flushThreshold);
     this.byteBufCreator = byteBufCreator;
   }
@@ -267,7 +339,9 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * @param message the incoming message, or event; may be {@code null}
    *
    * @exception NullPointerException if {@code channelHandlerContext}
-   * is {@code null}
+   * is {@code null}, or if the {@link Supplier} of {@link
+   * ApplicationHandler} instances supplied at construction time
+   * returns {@code null}
    *
    * @exception Exception if {@code message} is not an instance of
    * {@link ContainerRequest} and {@link
@@ -292,7 +366,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
       if (message instanceof ContainerRequest) {
         final ContainerRequest containerRequest = (ContainerRequest)message;
         containerRequest.setWriter(this);
-        this.applicationHandler.handle(containerRequest);
+        this.applicationHandlerSupplier.get().handle(containerRequest);
       } else {
         super.channelRead(channelHandlerContext, message);
       }
@@ -479,7 +553,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    *
    * @see ApplicationHandler#handle(ContainerRequest)
    *
-   * @see #createOutputStream(long, ContainerResponse) 
+   * @see #createOutputStream(long, ContainerResponse)
    */
   protected abstract boolean writeStatusAndHeaders(final long contentLength,
                                                    final ContainerResponse containerResponse);
@@ -526,7 +600,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * <p><strong>Note:</strong> Implementations of the {@link
    * #createOutputStream(long, ContainerResponse)} method may choose
    * to ignore the return value of this method.  It is supplied for
-   * convenience only in implementing the {@link
+   * convenience only for use by implementors of the {@link
    * #createOutputStream(long, ContainerResponse)} method.</p>
    *
    * @return the minimum number of bytes that an {@link
@@ -565,7 +639,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * <p><strong>Note:</strong> Implementations of the {@link
    * #createOutputStream(long, ContainerResponse)} method may choose
    * to ignore the return value of this method.  It is supplied for
-   * convenience only in implementing the {@link
+   * convenience only for use by implementors of the {@link
    * #createOutputStream(long, ContainerResponse)} method.</p>
    *
    * @return a {@link ByteBufCreator}, or {@code null}
@@ -605,7 +679,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
   public void commit() {
 
   }
-  
+
   @Override
   public final boolean suspend(final long timeout,
                                final TimeUnit timeUnit,

@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ public class SimpleContainer implements Container {
    * Instance fields.
    */
 
-  
+
   private volatile ApplicationHandler applicationHandler;
 
 
@@ -75,6 +75,12 @@ public class SimpleContainer implements Container {
     this.applicationHandler = applicationHandler == null ? new ApplicationHandler() : applicationHandler;
   }
 
+
+  /*
+   * Instance methods.
+   */
+
+
   /**
    * Returns a {@link ResourceConfig} representing the configuration
    * of the application hosted by this {@link SimpleContainer}.
@@ -90,7 +96,7 @@ public class SimpleContainer implements Container {
   @Override
   public final ResourceConfig getConfiguration() {
     final ResourceConfig returnValue;
-    final ApplicationHandler handler = this.getApplicationHandler();
+    final ApplicationHandler handler = this.getApplicationHandler(); // volatile read
     if (handler == null) {
       returnValue = null;
     } else {
@@ -138,14 +144,14 @@ public class SimpleContainer implements Container {
    */
   @Override
   public void reload(final ResourceConfig resourceConfig) {
-    ApplicationHandler handler = this.getApplicationHandler();
+    ApplicationHandler handler = this.getApplicationHandler(); // volatile read
     if (handler != null) {
       handler.onShutdown(this);
     }
     handler = new ApplicationHandler(resourceConfig);
-    this.applicationHandler = handler;
-    handler.onReload(this);
-    handler.onStartup(this);
+    this.applicationHandler = handler; // volatile write
+    handler.onReload(this); // reference to local handler variable vs. instance variable is deliberate
+    handler.onStartup(this); // reference to local handler variable vs. instance variable is deliberate
   }
 
 }

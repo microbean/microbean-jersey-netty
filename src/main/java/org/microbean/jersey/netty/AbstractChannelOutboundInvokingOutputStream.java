@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -238,7 +238,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
     case Integer.MAX_VALUE:
       break;
     default:
-      int bytesWritten = this.bytesWritten; // volatile read
+      final int bytesWritten = this.bytesWritten; // volatile read
       if (bytesWritten > flushThreshold) {
         // Flush previous writes, if any, and set our "days since
         // flush" back to 0 (see #flush())
@@ -249,7 +249,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
         // often as expected.
         this.bytesWritten = bytesWritten + length;
       } else {
-        channelPromise.addListener(f -> this.bytesWritten = bytesWritten + length);
+        channelPromise.addListener(f -> this.bytesWritten = bytesWritten + length); // volatile write
       }
     }
     this.channelOutboundInvoker.write(message, channelPromise);
@@ -267,12 +267,12 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    *
    * <p>Overrides of this method must not return {@code null}.</p>
    *
-   * <p>The default implementation of this method is inefficient: it
-   * creates a new {@code byte[]} holding the sole {@code byte}
-   * represented by the {@code singleByte} parameter value and calls
-   * {@link #createMessage(byte[], int, int)} and returns its result.
-   * Subclasses are encouraged, but not required, to override this
-   * method to be more efficient.</p>
+   * <p><strong>Note:</strong> The default implementation of this
+   * method is inefficient: it creates a new {@code byte[]} holding
+   * the sole {@code byte} represented by the {@code singleByte}
+   * parameter value and calls {@link #createMessage(byte[], int,
+   * int)} and returns its result.  Subclasses are encouraged, but not
+   * required, to override this method to be more efficient.</p>
    *
    * <p>Overrides of this method should be stateless.</p>
    *
@@ -400,7 +400,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
   @Override
   public final void flush() {
     this.channelOutboundInvoker.flush();
-    this.bytesWritten = 0;
+    this.bytesWritten = 0; // volatile write
   }
 
   /**
@@ -434,9 +434,9 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
       final ChannelPromise channelPromise = this.newPromise();
       if (channelPromise.isVoid()) {
         this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);
-        this.bytesWritten = 0;
+        this.bytesWritten = 0; // volatile write
       } else {
-        channelPromise.addListener(f -> this.bytesWritten = 0);
+        channelPromise.addListener(f -> this.bytesWritten = 0); // volatile write
         this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);
       }
       maybeThrow(channelPromise.cause());
@@ -453,7 +453,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    * Static methods.
    */
 
-  
+
   private static final void maybeThrow(final Throwable cause) throws IOException {
     if (cause == null) {
       return;
@@ -468,14 +468,6 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
     } else {
       throw new InternalError();
     }
-  }
-
-  private static final boolean isClosed(final ChannelPromise channelPromise) {
-    return isClosed(channelPromise.channel());
-  }
-
-  private static final boolean isClosed(final Channel channel) {
-    return channel == null || !channel.isOpen() || channel.closeFuture().isDone();
   }
 
 }

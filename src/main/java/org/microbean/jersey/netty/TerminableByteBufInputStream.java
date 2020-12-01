@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,6 +101,9 @@ public final class TerminableByteBufInputStream extends InputStream {
    * ByteBuf#release() releases its underlying
    * <code>CompositeByteBuf</code>}.
    *
+   * <p>If this method has been called previously, no further action
+   * is taken.</p>
+   *
    * @exception IOException if an error occurs
    */
   @Override
@@ -132,7 +135,12 @@ public final class TerminableByteBufInputStream extends InputStream {
    * that calling it will result in an {@link IllegalStateException}
    * being thrown.
    *
+   * <p>If this method has been called before, or if {@link #close()}
+   * has been called before, no action is taken.</p>
+   *
    * @see #addByteBuf(ByteBuf)
+   *
+   * @see #close()
    */
   public final void terminate() {
     final int state = this.state;
@@ -160,6 +168,8 @@ public final class TerminableByteBufInputStream extends InputStream {
    * @exception IOException if this {@link
    * TerminableByteBufInputStream} has been {@linkplain #close()
    * closed}
+   *
+   * @see #close()
    */
   @Override
   public final int available() throws IOException {
@@ -191,6 +201,8 @@ public final class TerminableByteBufInputStream extends InputStream {
    * closed}
    *
    * @see #terminate()
+   *
+   * @see #close()
    */
   @Override
   public final int read() throws IOException {
@@ -229,6 +241,8 @@ public final class TerminableByteBufInputStream extends InputStream {
    * @see #read(byte[], int, int)
    *
    * @see #terminate()
+   *
+   * @see #close()
    *
    * @see #addByteBuf(ByteBuf)
    */
@@ -282,6 +296,8 @@ public final class TerminableByteBufInputStream extends InputStream {
    *
    * @see #terminate()
    *
+   * @see #close()
+   *
    * @see #addByteBuf(ByteBuf)
    */
   @Override
@@ -326,6 +342,8 @@ public final class TerminableByteBufInputStream extends InputStream {
    *
    * @see #terminate()
    *
+   * @see #close()
+   *
    * @see #read(byte[], int, int)
    */
   public final void addByteBuf(final ByteBuf byteBuf) {
@@ -362,7 +380,6 @@ public final class TerminableByteBufInputStream extends InputStream {
       return this.byteBuf.isReadable() ? function.apply(this.byteBuf) : -1;
     case OPEN:
       do {
-        assert state == OPEN;
         synchronized (this.byteBuf) {
           if (this.byteBuf.isReadable()) {
             break;

@@ -22,6 +22,8 @@ import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.List; // for javadoc only
 
+import java.util.function.Supplier;
+
 import javax.ws.rs.core.Configuration;
 
 import io.netty.buffer.ByteBuf;
@@ -70,12 +72,12 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    * @see #HttpObjectToContainerRequestDecoder(URI, Configuration)
    *
    * @deprecated Please use the {@link
-   * #HttpObjectToContainerRequestDecoder(URI, Configuration)}
+   * #HttpObjectToContainerRequestDecoder(URI, Supplier)}
    * constructor instead.
    */
   @Deprecated
   public HttpObjectToContainerRequestDecoder(final URI baseUri) {
-    this(baseUri, null);
+    this(baseUri, (Supplier<? extends Configuration>)null);
   }
 
   /**
@@ -91,7 +93,24 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    * container is configured; may be {@code null}
    */
   public HttpObjectToContainerRequestDecoder(final URI baseUri, final Configuration configuration) {
-    super(baseUri, configuration, HttpRequest.class, HttpContent.class);
+    this(baseUri, configuration == null ? (Supplier<? extends Configuration>)null : () -> configuration);
+  }
+
+  /**
+   * Creates a new {@link HttpObjectToContainerRequestDecoder}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param configurationSupplier a {@link Supplier} of {@link
+   * Configuration} instances describing how the container is
+   * configured; may be {@code null}
+   */
+  public HttpObjectToContainerRequestDecoder(final URI baseUri, final Supplier<? extends Configuration> configurationSupplier) {
+    super(baseUri, configurationSupplier, HttpRequest.class, HttpContent.class);
   }
 
 

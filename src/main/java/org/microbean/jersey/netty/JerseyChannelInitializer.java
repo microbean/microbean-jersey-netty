@@ -20,6 +20,8 @@ import java.net.URI;
 
 import java.util.Objects;
 
+import java.util.function.Supplier;
+
 import javax.ws.rs.core.Application;
 import javax.ws.rs.core.Configuration;
 
@@ -155,7 +157,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
   private final EventExecutorGroup jerseyEventExecutorGroup;
 
-  private final ApplicationHandler applicationHandler;
+  private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
 
   private final int flushThreshold;
 
@@ -183,7 +185,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * {@code null} somewhat pathologically
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -212,7 +214,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     this(baseUri,
          sslContext,
          true,
-         jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication));
+         toSupplier(jaxrsApplication));
   }
 
   /**
@@ -236,7 +238,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * null} somewhat pathologically but normally is not
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -265,7 +267,60 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     this(baseUri,
          sslContext,
          true,
-         applicationHandler);
+         toSupplier(applicationHandler));
+  }
+
+  /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param sslContext an {@link SslContext}; may be {@code null} in
+   * which case network communications will occur in plain text
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, Supplier, int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see ContainerRequest
+   *
+   * @see SslContext
+   *
+   * @see
+   * HttpServerUpgradeHandler#HttpServerUpgradeHandler(SourceCodec,
+   * UpgradeCodecFactory, int)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see AbstractContainerRequestHandlingResponseWriter
+   *
+   * @see HttpObjectToContainerRequestDecoder
+   *
+   * @see HttpContainerRequestHandlingResponseWriter
+   *
+   * @see Http2StreamFrameToContainerRequestDecoder
+   *
+   * @see Http2ContainerRequestHandlingResponseWriter
+   */
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+    this(baseUri,
+         sslContext,
+         true,
+         applicationHandlerSupplier);
   }
 
   /**
@@ -287,7 +342,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * {@code null} somewhat pathologically
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -320,7 +375,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
          true, /* use Jersey injection */
-         jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication),
+         toSupplier(jaxrsApplication),
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
   }
@@ -349,7 +404,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * null} somewhat pathologically but normally is not
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
@@ -382,7 +437,69 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
          true, /* use Jersey injection */
-         applicationHandler,
+         toSupplier(applicationHandler),
+         8192, /* 8K; arbitrary */
+         Unpooled::wrappedBuffer);
+  }
+
+  /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param sslContext an {@link SslContext}; may be {@code null} in
+   * which case network communications will occur in plain text
+   *
+   * @param http2Support if HTTP/2 support (including upgrades, prior
+   * knowledge, h2c, etc.) should be enabled
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, Supplier, int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   *
+   * @see ContainerRequest
+   *
+   * @see SslContext
+   *
+   * @see
+   * HttpServerUpgradeHandler#HttpServerUpgradeHandler(SourceCodec,
+   * UpgradeCodecFactory, int)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see AbstractContainerRequestHandlingResponseWriter
+   *
+   * @see HttpObjectToContainerRequestDecoder
+   *
+   * @see HttpContainerRequestHandlingResponseWriter
+   *
+   * @see Http2StreamFrameToContainerRequestDecoder
+   *
+   * @see Http2ContainerRequestHandlingResponseWriter
+   */
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final boolean http2Support,
+                                  final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+    this(baseUri,
+         sslContext,
+         http2Support,
+         20971520L, /* 20 MB; arbitrary */
+         null, /* Jersey EventExecutorGroup will be defaulted */
+         true, /* use Jersey injection */
+         applicationHandlerSupplier,
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
   }
@@ -433,12 +550,16 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @param byteBufCreator a {@link ByteBufCreator} that will be
    * {@linkplain
-   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(Supplier,
    * int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * passed to an
    * <code>AbstractContainerRequestHandlingResponseWriter</code>}
    * implementation; may be {@code null}
+   *
+   * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
+   * EventExecutorGroup, boolean, Supplier, int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    *
    * @see ContainerRequest
    *
@@ -474,7 +595,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
          true, /* use Jersey injection */
-         jaxrsApplication == null ? new ApplicationHandler() : new ApplicationHandler(jaxrsApplication),
+         toSupplier(jaxrsApplication),
          flushThreshold,
          byteBufCreator);
   }
@@ -530,7 +651,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @param byteBufCreator a {@link ByteBufCreator} that will be
    * {@linkplain
-   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(Supplier,
    * int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * passed to an
@@ -574,12 +695,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
          true, /* use Jersey injection */
-         applicationHandler,
+         toSupplier(applicationHandler),
          flushThreshold,
          byteBufCreator);
   }
 
-   /**
+  /**
    * Creates a new {@link JerseyChannelInitializer}.
    *
    * @param baseUri a {@link URI} that will serve as the {@linkplain
@@ -636,7 +757,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @param byteBufCreator a {@link ByteBufCreator} that will be
    * {@linkplain
-   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(ApplicationHandler,
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(Supplier,
    * int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * passed to an
@@ -669,7 +790,111 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                   final long maxIncomingContentLength,
                                   final EventExecutorGroup jerseyEventExecutorGroup,
                                   final boolean useJerseyInjection,
-                                  ApplicationHandler applicationHandler,
+                                  final ApplicationHandler applicationHandler,
+                                  final int flushThreshold,
+                                  final ByteBufCreator byteBufCreator) {
+    this(baseUri,
+         sslContext,
+         http2Support,
+         maxIncomingContentLength,
+         jerseyEventExecutorGroup,
+         useJerseyInjection,
+         toSupplier(applicationHandler),
+         flushThreshold,
+         byteBufCreator);
+  }
+
+  /**
+   * Creates a new {@link JerseyChannelInitializer}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param sslContext an {@link SslContext}; may be {@code null} in
+   * which case network communications will occur in plain text
+   *
+   * @param http2Support if HTTP/2 support (including upgrades, prior
+   * knowledge, h2c, etc.) should be enabled
+   *
+   * @param maxIncomingContentLength in the case of HTTP to HTTP/2
+   * upgrades, a {@code long} that governs the maximum permitted
+   * incoming entity length in bytes; if less than {@code 0} then
+   * {@link Long#MAX_VALUE} will be used instead; if exactly {@code 0}
+   * then if the HTTP message containing the upgrade header is
+   * something like a {@code POST} it will be rejected with a {@code
+   * 413} error code; ignored entirely if {@code http2Support} is
+   * {@code false}
+   *
+   * @param jerseyEventExecutorGroup an {@link EventExecutorGroup}
+   * that will manage the thread on which an {@link
+   * ApplicationHandler#handle(ContainerRequest)} call will occur; may
+   * be {@code null} in which case a new {@link
+   * DefaultEventExecutorGroup} will be used instead
+   *
+   * @param useJerseyInjection if {@code true} then certain Netty
+   * constructs like {@link ChannelHandlerContext} will be made
+   * available for dependency injection in user applications using
+   * Jersey's native dependency injection facilities; if {@code false}
+   * then these facilities will not be used or referenced
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not.
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream}
+   * returned by an implementation of the {@link
+   * AbstractContainerRequestHandlingResponseWriter#createOutputStream(long,
+   * ContainerResponse)} method must write before an automatic
+   * {@linkplain
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream#flush()
+   * flush} may take place; if less than {@code 0} {@code 0} will be
+   * used instead; if {@link Integer#MAX_VALUE} then it is suggested
+   * that no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that will be
+   * {@linkplain
+   * AbstractContainerRequestHandlingResponseWriter#AbstractContainerRequestHandlingResponseWriter(Supplier,
+   * int,
+   * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
+   * passed to an
+   * <code>AbstractContainerRequestHandlingResponseWriter</code>}
+   * implementation; may be {@code null}
+   *
+   * @see ContainerRequest
+   *
+   * @see SslContext
+   *
+   * @see
+   * HttpServerUpgradeHandler#HttpServerUpgradeHandler(SourceCodec,
+   * UpgradeCodecFactory, int)
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   *
+   * @see AbstractContainerRequestHandlingResponseWriter
+   *
+   * @see HttpObjectToContainerRequestDecoder
+   *
+   * @see HttpContainerRequestHandlingResponseWriter
+   *
+   * @see Http2StreamFrameToContainerRequestDecoder
+   *
+   * @see Http2ContainerRequestHandlingResponseWriter
+   */
+  public JerseyChannelInitializer(final URI baseUri,
+                                  final SslContext sslContext,
+                                  final boolean http2Support,
+                                  final long maxIncomingContentLength,
+                                  final EventExecutorGroup jerseyEventExecutorGroup,
+                                  final boolean useJerseyInjection,
+                                  Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
                                   final int flushThreshold,
                                   final ByteBufCreator byteBufCreator) {
     super();
@@ -691,8 +916,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     } else {
       this.jerseyEventExecutorGroup = jerseyEventExecutorGroup;
     }
-    if (applicationHandler == null) {
-      applicationHandler = new ApplicationHandler();
+    if (applicationHandlerSupplier == null) {
+      final ApplicationHandler applicationHandler = new ApplicationHandler();
+      applicationHandlerSupplier = () -> applicationHandler;
     }
     if (useJerseyInjection) {
       // The idiom you see before you is apparently the right and only
@@ -702,7 +928,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       // payload of those references when you're actually in request
       // scope.  Really.  You'll find this pattern throughout the
       // Jersey codebase.  We follow suit here.
-      final InjectionManager injectionManager = applicationHandler.getInjectionManager();
+      final InjectionManager injectionManager = applicationHandlerSupplier.get().getInjectionManager();
       if (injectionManager != null) {
         injectionManager.register(Bindings.supplier(ChannelHandlerContextReferencingFactory.class)
                                     .to(ChannelHandlerContext.class)
@@ -729,7 +955,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         }
       }
     }
-    this.applicationHandler = applicationHandler;
+    this.applicationHandlerSupplier = applicationHandlerSupplier;
     this.flushThreshold = Math.max(0, flushThreshold);
     this.byteBufCreator = byteBufCreator;
   }
@@ -750,7 +976,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    * @return a non-{@code null} {@link EventExecutorGroup}
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    */
   public final EventExecutorGroup getJerseyEventExecutorGroup() {
@@ -760,7 +986,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   /**
    * Returns the {@link URI} that was {@linkplain
    * #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * supplied at construction time}.
    *
@@ -768,12 +994,12 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    *
    * @return the {@link URI} that was {@linkplain
    * #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    * supplied at construction time}, or {@code null}
    *
    * @see #JerseyChannelInitializer(URI, SslContext, boolean, long,
-   * EventExecutorGroup, boolean, ApplicationHandler, int,
+   * EventExecutorGroup, boolean, Supplier, int,
    * AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator)
    */
   public final URI getBaseUri() {
@@ -870,7 +1096,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                   new Http2ServerUpgradeCodec(Http2FrameCodecBuilder.forServer().build(),
                                               new Http2MultiplexHandler(new Http2JerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                                                           baseUri,
-                                                                                                          applicationHandler,
+                                                                                                          applicationHandlerSupplier,
                                                                                                           flushThreshold,
                                                                                                           byteBufCreator)));
               }
@@ -935,7 +1161,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
                                                      channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
                                                                              new Http2MultiplexHandler(new Http2JerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                                                                                          baseUri,
-                                                                                                                                         applicationHandler,
+                                                                                                                                         applicationHandlerSupplier,
                                                                                                                                          flushThreshold,
                                                                                                                                          byteBufCreator)));
                                                    }
@@ -975,7 +1201,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
               channelPipeline.addLast("HttpJerseyChannelInitializer",
                                       new HttpJerseyChannelInitializer(getJerseyEventExecutorGroup(),
                                                                        baseUri,
-                                                                       applicationHandler,
+                                                                       applicationHandlerSupplier,
                                                                        flushThreshold,
                                                                        byteBufCreator));
 
@@ -991,7 +1217,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         channelPipeline.addLast("HttpJerseyChannelInitializer",
                                 new HttpJerseyChannelInitializer(this.getJerseyEventExecutorGroup(),
                                                                  baseUri,
-                                                                 applicationHandler,
+                                                                 applicationHandlerSupplier,
                                                                  flushThreshold,
                                                                  byteBufCreator));
       }
@@ -1010,7 +1236,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       channelPipeline.addLast(HttpNegotiationHandler.class.getSimpleName(),
                               new HttpNegotiationHandler(this.getJerseyEventExecutorGroup(),
                                                          baseUri,
-                                                         applicationHandler,
+                                                         applicationHandlerSupplier,
                                                          flushThreshold,
                                                          byteBufCreator));
 
@@ -1048,6 +1274,25 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
 
   /*
+   * Static methods.
+   */
+
+
+  private static final Supplier<? extends ApplicationHandler> toSupplier(final Application application) {
+    return toSupplier(application == null ? new ApplicationHandler() : new ApplicationHandler(application));
+  }
+
+  private static final Supplier<? extends ApplicationHandler> toSupplier(final ApplicationHandler suppliedApplicationHandler) {
+    final ApplicationHandler applicationHandler = suppliedApplicationHandler == null ? new ApplicationHandler() : suppliedApplicationHandler;
+    return () -> applicationHandler;
+  }
+
+  private static final Configuration returnNullConfiguration() {
+    return null;
+  }
+
+
+  /*
    * Inner and nested classes.
    */
 
@@ -1071,9 +1316,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     private final URI baseUri;
 
-    private final ApplicationHandler applicationHandler;
+    private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
 
-    private final Configuration configuration;
+    private final Supplier<? extends Configuration> configurationSupplier;
 
     private final int flushThreshold;
 
@@ -1084,17 +1329,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      */
     private HttpJerseyChannelInitializer(final EventExecutorGroup jerseyEventExecutorGroup,
                                          final URI baseUri,
-                                         final ApplicationHandler applicationHandler,
+                                         final Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
                                          final int flushThreshold,
                                          final ByteBufCreator byteBufCreator) {
       super();
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
-      this.applicationHandler = applicationHandler;
-      if (applicationHandler == null) {
-        this.configuration = null;
+      this.applicationHandlerSupplier = applicationHandlerSupplier;
+      if (applicationHandlerSupplier == null) {
+        this.configurationSupplier = JerseyChannelInitializer::returnNullConfiguration;
       } else {
-        this.configuration = applicationHandler.getConfiguration();
+        this.configurationSupplier = () -> applicationHandlerSupplier.get().getConfiguration();
       }
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
@@ -1115,10 +1360,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     protected final void initChannel(final Channel channel) {
       final ChannelPipeline channelPipeline = channel.pipeline();
       channelPipeline.addLast(HttpObjectToContainerRequestDecoder.class.getSimpleName(),
-                              new HttpObjectToContainerRequestDecoder(baseUri, this.configuration));
+                              new HttpObjectToContainerRequestDecoder(baseUri, this.configurationSupplier));
       channelPipeline.addLast(jerseyEventExecutorGroup,
                               HttpContainerRequestHandlingResponseWriter.class.getSimpleName(),
-                              new HttpContainerRequestHandlingResponseWriter(applicationHandler,
+                              new HttpContainerRequestHandlingResponseWriter(applicationHandlerSupplier,
                                                                              flushThreshold,
                                                                              byteBufCreator));
     }
@@ -1144,9 +1389,9 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     private final URI baseUri;
 
-    private final ApplicationHandler applicationHandler;
+    private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
 
-    private final Configuration configuration;
+    private final Supplier<? extends Configuration> configurationSupplier;
 
     private final int flushThreshold;
 
@@ -1157,17 +1402,17 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      */
     private Http2JerseyChannelInitializer(final EventExecutorGroup jerseyEventExecutorGroup,
                                           final URI baseUri,
-                                          final ApplicationHandler applicationHandler,
+                                          final Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
                                           final int flushThreshold,
                                           final ByteBufCreator byteBufCreator) {
       super();
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
-      this.applicationHandler = applicationHandler;
-      if (applicationHandler == null) {
-        this.configuration = null;
+      this.applicationHandlerSupplier = applicationHandlerSupplier;
+      if (applicationHandlerSupplier == null) {
+        this.configurationSupplier = JerseyChannelInitializer::returnNullConfiguration;
       } else {
-        this.configuration = applicationHandler.getConfiguration();
+        this.configurationSupplier = () -> applicationHandlerSupplier.get().getConfiguration();
       }
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
@@ -1190,10 +1435,10 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     protected final void initChannel(final Channel channel) {
       final ChannelPipeline channelPipeline = channel.pipeline();
       channelPipeline.addLast(Http2StreamFrameToContainerRequestDecoder.class.getSimpleName(),
-                              new Http2StreamFrameToContainerRequestDecoder(baseUri, this.configuration));
+                              new Http2StreamFrameToContainerRequestDecoder(baseUri, this.configurationSupplier));
       channelPipeline.addLast(jerseyEventExecutorGroup,
                               Http2ContainerRequestHandlingResponseWriter.class.getSimpleName(),
-                              new Http2ContainerRequestHandlingResponseWriter(applicationHandler));
+                              new Http2ContainerRequestHandlingResponseWriter(this.applicationHandlerSupplier));
     }
 
   }
@@ -1214,7 +1459,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
 
     private final URI baseUri;
 
-    private final ApplicationHandler applicationHandler;
+    private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
 
     private final int flushThreshold;
 
@@ -1224,13 +1469,13 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
      */
     private HttpNegotiationHandler(final EventExecutorGroup jerseyEventExecutorGroup,
                                    final URI baseUri,
-                                   final ApplicationHandler applicationHandler,
+                                   final Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
                                    final int flushThreshold,
                                    final ByteBufCreator byteBufCreator) {
       super(ApplicationProtocolNames.HTTP_1_1);
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
-      this.applicationHandler = applicationHandler;
+      this.applicationHandlerSupplier = applicationHandlerSupplier;
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
     }
@@ -1266,7 +1511,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         channelPipeline.addLast(Http2MultiplexHandler.class.getSimpleName(),
                                 new Http2MultiplexHandler(new Http2JerseyChannelInitializer(jerseyEventExecutorGroup,
                                                                                             baseUri,
-                                                                                            applicationHandler,
+                                                                                            applicationHandlerSupplier,
                                                                                             flushThreshold,
                                                                                             byteBufCreator)));
         break;
@@ -1278,7 +1523,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
         channelPipeline.addLast("HttpJerseyChannelInitializer",
                                 new HttpJerseyChannelInitializer(jerseyEventExecutorGroup,
                                                                  baseUri,
-                                                                 applicationHandler,
+                                                                 applicationHandlerSupplier,
                                                                  flushThreshold,
                                                                  byteBufCreator));
         break;
