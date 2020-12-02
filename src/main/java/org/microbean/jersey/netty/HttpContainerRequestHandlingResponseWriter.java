@@ -124,7 +124,7 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
    * @see ApplicationHandler#handle(ContainerRequest)
    */
   public HttpContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
-    super(() -> applicationHandler);
+    super(new ImmutableSupplier<>(applicationHandler));
   }
 
   /**
@@ -157,7 +157,7 @@ public final class HttpContainerRequestHandlingResponseWriter extends AbstractCo
   public HttpContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
                                                     final int flushThreshold,
                                                     final ByteBufCreator byteBufCreator) {
-    super(() -> applicationHandler, flushThreshold, byteBufCreator);
+    super(new ImmutableSupplier<>(applicationHandler), flushThreshold, byteBufCreator);
   }
 
   /**

@@ -1387,10 +1387,14 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
   }
 
   private static final Supplier<? extends Configuration> toConfigurationSupplier(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
-    return applicationHandlerSupplier == null ? JerseyChannelInitializer::returnNullConfiguration : () -> applicationHandlerSupplier.get().getConfiguration();
+    return applicationHandlerSupplier == null ? JerseyChannelInitializer::returnNullConfiguration : new ConfigurationSupplier(applicationHandlerSupplier);
   }
 
   private static final Configuration returnNullConfiguration() {
+    return null;
+  }
+
+  private static final ApplicationHandler returnNullApplicationHandler() {
     return null;
   }
 
@@ -1400,6 +1404,22 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
 
 
+  private static final class ConfigurationSupplier implements Supplier<Configuration> {
+
+    private final Supplier<? extends ApplicationHandler> applicationHandlerSupplier;
+
+    private ConfigurationSupplier(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+      super();
+      this.applicationHandlerSupplier = applicationHandlerSupplier == null ? JerseyChannelInitializer::returnNullApplicationHandler : applicationHandlerSupplier;
+    }
+
+    @Override
+    public final Configuration get() {
+      final ApplicationHandler applicationHandler = this.applicationHandlerSupplier.get();
+      return applicationHandler == null ? null : applicationHandler.getConfiguration();
+    }
+
+  }
 
   /**
    * A {@link ChannelInitializer} that {@linkplain
