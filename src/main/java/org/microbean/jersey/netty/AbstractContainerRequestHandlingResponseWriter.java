@@ -143,7 +143,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
    * @see #channelRead(ChannelHandlerContext, Object)
    */
   protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
-    this(() -> applicationHandler, 8192, null);
+    this(new ImmutableSupplier<>(applicationHandler), 8192, null);
   }
 
   /**
@@ -192,7 +192,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
   protected AbstractContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
                                                            final int flushThreshold,
                                                            final ByteBufCreator byteBufCreator) {
-    this(() -> applicationHandler, flushThreshold, byteBufCreator);
+    this(new ImmutableSupplier<>(applicationHandler), flushThreshold, byteBufCreator);
   }
 
   /**
@@ -265,7 +265,7 @@ public abstract class AbstractContainerRequestHandlingResponseWriter<T> extends 
                                                            final ByteBufCreator byteBufCreator) {
     super();
     if (applicationHandlerSupplier == null) {
-      this.applicationHandlerSupplier = () -> new ApplicationHandler();
+      this.applicationHandlerSupplier = new ImmutableSupplier<>(new ApplicationHandler());
     } else {
       this.applicationHandlerSupplier = applicationHandlerSupplier;
     }

@@ -93,7 +93,7 @@ public final class HttpObjectToContainerRequestDecoder extends AbstractContainer
    * container is configured; may be {@code null}
    */
   public HttpObjectToContainerRequestDecoder(final URI baseUri, final Configuration configuration) {
-    this(baseUri, configuration == null ? (Supplier<? extends Configuration>)null : () -> configuration);
+    this(baseUri, configuration == null ? (Supplier<? extends Configuration>)null : new ImmutableSupplier<>(configuration));
   }
 
   /**

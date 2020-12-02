@@ -214,7 +214,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     this(baseUri,
          sslContext,
          true,
-         toSupplier(jaxrsApplication));
+         toApplicationHandlerSupplier(jaxrsApplication));
   }
 
   /**
@@ -267,7 +267,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     this(baseUri,
          sslContext,
          true,
-         toSupplier(applicationHandler));
+         toApplicationHandlerSupplier(applicationHandler));
   }
 
   /**
@@ -375,7 +375,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
          true, /* use Jersey injection */
-         toSupplier(jaxrsApplication),
+         toApplicationHandlerSupplier(jaxrsApplication),
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
   }
@@ -437,7 +437,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          20971520L, /* 20 MB; arbitrary */
          null, /* Jersey EventExecutorGroup will be defaulted */
          true, /* use Jersey injection */
-         toSupplier(applicationHandler),
+         toApplicationHandlerSupplier(applicationHandler),
          8192, /* 8K; arbitrary */
          Unpooled::wrappedBuffer);
   }
@@ -595,7 +595,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
          true, /* use Jersey injection */
-         toSupplier(jaxrsApplication),
+         toApplicationHandlerSupplier(jaxrsApplication),
          flushThreshold,
          byteBufCreator);
   }
@@ -695,7 +695,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
          true, /* use Jersey injection */
-         toSupplier(applicationHandler),
+         toApplicationHandlerSupplier(applicationHandler),
          flushThreshold,
          byteBufCreator);
   }
@@ -899,7 +899,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          maxIncomingContentLength,
          jerseyEventExecutorGroup,
          useJerseyInjection,
-         toSupplier(applicationHandler),
+         toApplicationHandlerSupplier(applicationHandler),
          flushThreshold,
          byteBufCreator);
   }
@@ -1018,7 +1018,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
     }
     if (applicationHandlerSupplier == null) {
       final ApplicationHandler applicationHandler = new ApplicationHandler();
-      applicationHandlerSupplier = () -> applicationHandler;
+      applicationHandlerSupplier = new ImmutableSupplier<>(applicationHandler);
     }
     if (useJerseyInjection) {
       // The idiom you see before you is apparently the right and only
@@ -1378,13 +1378,16 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
    */
 
 
-  private static final Supplier<? extends ApplicationHandler> toSupplier(final Application application) {
-    return toSupplier(application == null ? new ApplicationHandler() : new ApplicationHandler(application));
+  private static final Supplier<? extends ApplicationHandler> toApplicationHandlerSupplier(final Application application) {
+    return toApplicationHandlerSupplier(application == null ? new ApplicationHandler() : new ApplicationHandler(application));
   }
 
-  private static final Supplier<? extends ApplicationHandler> toSupplier(final ApplicationHandler suppliedApplicationHandler) {
-    final ApplicationHandler applicationHandler = suppliedApplicationHandler == null ? new ApplicationHandler() : suppliedApplicationHandler;
-    return () -> applicationHandler;
+  private static final Supplier<? extends ApplicationHandler> toApplicationHandlerSupplier(final ApplicationHandler suppliedApplicationHandler) {
+    return new ImmutableSupplier<>(suppliedApplicationHandler == null ? new ApplicationHandler() : suppliedApplicationHandler);
+  }
+
+  private static final Supplier<? extends Configuration> toConfigurationSupplier(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+    return applicationHandlerSupplier == null ? JerseyChannelInitializer::returnNullConfiguration : () -> applicationHandlerSupplier.get().getConfiguration();
   }
 
   private static final Configuration returnNullConfiguration() {
@@ -1436,11 +1439,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandlerSupplier = applicationHandlerSupplier;
-      if (applicationHandlerSupplier == null) {
-        this.configurationSupplier = JerseyChannelInitializer::returnNullConfiguration;
-      } else {
-        this.configurationSupplier = () -> applicationHandlerSupplier.get().getConfiguration();
-      }
+      this.configurationSupplier = toConfigurationSupplier(applicationHandlerSupplier);
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
     }
@@ -1509,11 +1508,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
       this.jerseyEventExecutorGroup = Objects.requireNonNull(jerseyEventExecutorGroup);
       this.baseUri = baseUri;
       this.applicationHandlerSupplier = applicationHandlerSupplier;
-      if (applicationHandlerSupplier == null) {
-        this.configurationSupplier = JerseyChannelInitializer::returnNullConfiguration;
-      } else {
-        this.configurationSupplier = () -> applicationHandlerSupplier.get().getConfiguration();
-      }
+      this.configurationSupplier = toConfigurationSupplier(applicationHandlerSupplier);
       this.flushThreshold = Math.max(0, flushThreshold);
       this.byteBufCreator = byteBufCreator;
     }

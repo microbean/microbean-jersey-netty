@@ -101,7 +101,7 @@ public final class Http2ContainerRequestHandlingResponseWriter extends AbstractC
    * @see ApplicationHandler#handle(ContainerRequest)
    */
   public Http2ContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
-    super(() -> applicationHandler);
+    super(new ImmutableSupplier<>(applicationHandler));
   }
 
   /**
@@ -135,7 +135,7 @@ public final class Http2ContainerRequestHandlingResponseWriter extends AbstractC
   public Http2ContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
                                                      final int flushThreshold,
                                                      final ByteBufCreator byteBufCreator) {
-    super(() -> applicationHandler, flushThreshold, byteBufCreator);
+    super(new ImmutableSupplier<>(applicationHandler), flushThreshold, byteBufCreator);
   }
 
   /**

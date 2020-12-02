@@ -170,7 +170,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                             final Configuration configuration,
                                             final Class<H> headersClass,
                                             final Class<D> dataClass) {
-    this(baseUri, configuration == null ? AbstractContainerRequestDecoder::returnNull : () -> configuration, headersClass, dataClass);
+    this(baseUri, configuration == null ? AbstractContainerRequestDecoder::returnNull : new ImmutableSupplier<>(configuration), headersClass, dataClass);
   }
 
   /**
