@@ -24,6 +24,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import java.util.function.Supplier;
+
 import java.util.logging.Logger;
 
 import javax.ws.rs.core.Configuration;
@@ -101,7 +103,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
 
   private final URI baseUri;
 
-  private final Configuration configuration;
+  private final Supplier<? extends Configuration> configurationSupplier;
 
   private TerminableByteBufInputStream terminableByteBufInputStream;
 
@@ -141,7 +143,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
   protected AbstractContainerRequestDecoder(final URI baseUri,
                                             final Class<H> headersClass,
                                             final Class<D> dataClass) {
-    this(baseUri, null, headersClass, dataClass);
+    this(baseUri, AbstractContainerRequestDecoder::returnNull, headersClass, dataClass);
   }
 
   /**
@@ -168,9 +170,41 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                             final Configuration configuration,
                                             final Class<H> headersClass,
                                             final Class<D> dataClass) {
+    this(baseUri, configuration == null ? AbstractContainerRequestDecoder::returnNull : new ImmutableSupplier<>(configuration), headersClass, dataClass);
+  }
+
+  /**
+   * Creates a new {@link AbstractContainerRequestDecoder} implementation.
+   *
+   * @param baseUri the base {@link URI} against which relative
+   * request URIs will be resolved; may be {@code null} in which case
+   * the return value of {@link URI#create(String) URI.create("/")}
+   * will be used instead
+   *
+   * @param configurationSupplier a {@link Supplier} of {@link
+   * Configuration} instances describing how the container is
+   * configured; may be {@code null}
+   *
+   * @param headersClass the type representing a "headers" message;
+   * must not be {@code null}
+   *
+   * @param dataClass the type representing a "data" message; must not
+   * be {@code null}
+   *
+   * @exception NullPointerException if either {@code headersClass} or
+   * {@code dataClass} is {@code null}
+   */
+  protected AbstractContainerRequestDecoder(final URI baseUri,
+                                            final Supplier<? extends Configuration> configurationSupplier,
+                                            final Class<H> headersClass,
+                                            final Class<D> dataClass) {
     super();
     this.baseUri = baseUri == null ? URI.create("/") : baseUri;
-    this.configuration = configuration;
+    if (configurationSupplier == null) {
+      this.configurationSupplier = AbstractContainerRequestDecoder::returnNull;
+    } else {
+      this.configurationSupplier = configurationSupplier;
+    }
     this.headersClass = Objects.requireNonNull(headersClass);
     this.headersClassRefType = new ParameterizedType(Ref.class, headersClass);
     this.dataClass = Objects.requireNonNull(dataClass);
@@ -450,7 +484,7 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
                                  method,
                                  securityContext == null ? new SecurityContextAdapter() : securityContext,
                                  propertiesDelegate == null ? new MapBackedPropertiesDelegate() : propertiesDelegate,
-                                 this.configuration);
+                                 this.configurationSupplier.get());
           this.installMessage(channelHandlerContext, headersMessage, containerRequest);
           containerRequest.setRequestScopedInitializer(injectionManager -> {
               // See JerseyChannelInitializer, where the factories of
@@ -556,6 +590,24 @@ public abstract class AbstractContainerRequestDecoder<T, H extends T, D extends 
    */
   protected TerminableByteBufInputStream createTerminableByteBufInputStream(final ByteBufAllocator byteBufAllocator) {
     return new TerminableByteBufInputStream(byteBufAllocator);
+  }
+
+
+  /*
+   * Static methods.
+   */
+
+
+  /**
+   * Returns {@code null} when invoked.
+   *
+   * <p>This method is used only via method reference and only in
+   * pathological cases.</p>
+   *
+   * @return {@code null} in all cases
+   */
+  private static final Configuration returnNull() {
+    return null;
   }
 
 

@@ -21,6 +21,8 @@ import java.net.URI;
 import java.util.Iterator;
 import java.util.Map.Entry;
 
+import java.util.function.Supplier;
+
 import javax.ws.rs.core.Configuration;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -67,7 +69,7 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
    */
   @Deprecated
   public Http2StreamFrameToContainerRequestDecoder(final URI baseUri) {
-    this(baseUri, null);
+    this(baseUri, (Supplier<? extends Configuration>)null);
   }
 
   /**
@@ -83,7 +85,24 @@ public class Http2StreamFrameToContainerRequestDecoder extends AbstractContainer
    * container is configured; may be {@code null}
    */
   public Http2StreamFrameToContainerRequestDecoder(final URI baseUri, final Configuration configuration) {
-    super(baseUri, configuration, Http2HeadersFrame.class, Http2DataFrame.class);
+    this(baseUri, configuration == null ? (Supplier<? extends Configuration>)null : new ImmutableSupplier<>(configuration));
+  }
+
+  /**
+   * Creates a new {@link Http2StreamFrameToContainerRequestDecoder}.
+   *
+   * @param baseUri a {@link URI} that will serve as the {@linkplain
+   * ContainerRequest#getBaseUri() base <code>URI</code>} in a new
+   * {@link ContainerRequest}; may be {@code null} in which case the
+   * return value of {@link URI#create(String) URI.create("/")} will
+   * be used instead
+   *
+   * @param configurationSupplier a {@link Supplier} of {@link
+   * Configuration} instances describing how the container is
+   * configured; may be {@code null}
+   */
+  public Http2StreamFrameToContainerRequestDecoder(final URI baseUri, final Supplier<? extends Configuration> configurationSupplier) {
+    super(baseUri, configurationSupplier, Http2HeadersFrame.class, Http2DataFrame.class);
   }
 
 

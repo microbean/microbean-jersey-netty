@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2020 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.microbean.jersey.netty;
 import java.io.IOException;
 
 import java.util.Objects;
+
+import java.util.function.Supplier;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -99,7 +101,7 @@ public final class Http2ContainerRequestHandlingResponseWriter extends AbstractC
    * @see ApplicationHandler#handle(ContainerRequest)
    */
   public Http2ContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler) {
-    super(applicationHandler);
+    super(new ImmutableSupplier<>(applicationHandler));
   }
 
   /**
@@ -133,7 +135,60 @@ public final class Http2ContainerRequestHandlingResponseWriter extends AbstractC
   public Http2ContainerRequestHandlingResponseWriter(final ApplicationHandler applicationHandler,
                                                      final int flushThreshold,
                                                      final ByteBufCreator byteBufCreator) {
-    super(applicationHandler, flushThreshold, byteBufCreator);
+    super(new ImmutableSupplier<>(applicationHandler), flushThreshold, byteBufCreator);
+  }
+
+  /**
+   * Creates a new {@link Http2ContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   */
+  public Http2ContainerRequestHandlingResponseWriter(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier) {
+    super(applicationHandlerSupplier);
+  }
+
+  /**
+   * Creates a new {@link Http2ContainerRequestHandlingResponseWriter}.
+   *
+   * @param applicationHandlerSupplier a {@link Supplier} of an {@link
+   * ApplicationHandler} representing a <a
+   * href="https://jakarta.ee/specifications/restful-ws/"
+   * target="_parent">Jakarta RESTful Web Services application</a>
+   * whose {@link ApplicationHandler#handle(ContainerRequest)} method
+   * will serve as the bridge between Netty and Jersey; may be {@code
+   * null} somewhat pathologically but normally is not
+   *
+   * @param flushThreshold the minimum number of bytes that an {@link
+   * AbstractChannelOutboundInvokingOutputStream} returned by the
+   * {@link #createOutputStream(long, ContainerResponse)} method must
+   * write before an automatic {@linkplain
+   * AbstractChannelOutboundInvokingOutputStream#flush() flush} may
+   * take place; if less than {@code 0} {@code 0} will be used
+   * instead; if {@link Integer#MAX_VALUE} then it is suggested that
+   * no automatic flushing will occur
+   *
+   * @param byteBufCreator a {@link ByteBufCreator} that will be used
+   * by the {@link #createOutputStream(long, ContainerResponse)}
+   * method; may be {@code null}
+   *
+   * @see ApplicationHandler
+   *
+   * @see ApplicationHandler#handle(ContainerRequest)
+   */
+  public Http2ContainerRequestHandlingResponseWriter(final Supplier<? extends ApplicationHandler> applicationHandlerSupplier,
+                                                     final int flushThreshold,
+                                                     final ByteBufCreator byteBufCreator) {
+    super(applicationHandlerSupplier, flushThreshold, byteBufCreator);
   }
 
 
