@@ -8,7 +8,7 @@
 <div class="sourceContainer">
 <pre><span class="sourceLineNo">001</span>/* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-<a name="line.1"></a>
 <span class="sourceLineNo">002</span> *<a name="line.2"></a>
-<span class="sourceLineNo">003</span> * Copyright © 2019 microBean™.<a name="line.3"></a>
+<span class="sourceLineNo">003</span> * Copyright © 2019–2020 microBean™.<a name="line.3"></a>
 <span class="sourceLineNo">004</span> *<a name="line.4"></a>
 <span class="sourceLineNo">005</span> * Licensed under the Apache License, Version 2.0 (the "License");<a name="line.5"></a>
 <span class="sourceLineNo">006</span> * you may not use this file except in compliance with the License.<a name="line.6"></a>
@@ -246,7 +246,7 @@
 <span class="sourceLineNo">238</span>    case Integer.MAX_VALUE:<a name="line.238"></a>
 <span class="sourceLineNo">239</span>      break;<a name="line.239"></a>
 <span class="sourceLineNo">240</span>    default:<a name="line.240"></a>
-<span class="sourceLineNo">241</span>      int bytesWritten = this.bytesWritten; // volatile read<a name="line.241"></a>
+<span class="sourceLineNo">241</span>      final int bytesWritten = this.bytesWritten; // volatile read<a name="line.241"></a>
 <span class="sourceLineNo">242</span>      if (bytesWritten &gt; flushThreshold) {<a name="line.242"></a>
 <span class="sourceLineNo">243</span>        // Flush previous writes, if any, and set our "days since<a name="line.243"></a>
 <span class="sourceLineNo">244</span>        // flush" back to 0 (see #flush())<a name="line.244"></a>
@@ -257,7 +257,7 @@
 <span class="sourceLineNo">249</span>        // often as expected.<a name="line.249"></a>
 <span class="sourceLineNo">250</span>        this.bytesWritten = bytesWritten + length;<a name="line.250"></a>
 <span class="sourceLineNo">251</span>      } else {<a name="line.251"></a>
-<span class="sourceLineNo">252</span>        channelPromise.addListener(f -&gt; this.bytesWritten = bytesWritten + length);<a name="line.252"></a>
+<span class="sourceLineNo">252</span>        channelPromise.addListener(f -&gt; this.bytesWritten = bytesWritten + length); // volatile write<a name="line.252"></a>
 <span class="sourceLineNo">253</span>      }<a name="line.253"></a>
 <span class="sourceLineNo">254</span>    }<a name="line.254"></a>
 <span class="sourceLineNo">255</span>    this.channelOutboundInvoker.write(message, channelPromise);<a name="line.255"></a>
@@ -275,12 +275,12 @@
 <span class="sourceLineNo">267</span>   *<a name="line.267"></a>
 <span class="sourceLineNo">268</span>   * &lt;p&gt;Overrides of this method must not return {@code null}.&lt;/p&gt;<a name="line.268"></a>
 <span class="sourceLineNo">269</span>   *<a name="line.269"></a>
-<span class="sourceLineNo">270</span>   * &lt;p&gt;The default implementation of this method is inefficient: it<a name="line.270"></a>
-<span class="sourceLineNo">271</span>   * creates a new {@code byte[]} holding the sole {@code byte}<a name="line.271"></a>
-<span class="sourceLineNo">272</span>   * represented by the {@code singleByte} parameter value and calls<a name="line.272"></a>
-<span class="sourceLineNo">273</span>   * {@link #createMessage(byte[], int, int)} and returns its result.<a name="line.273"></a>
-<span class="sourceLineNo">274</span>   * Subclasses are encouraged, but not required, to override this<a name="line.274"></a>
-<span class="sourceLineNo">275</span>   * method to be more efficient.&lt;/p&gt;<a name="line.275"></a>
+<span class="sourceLineNo">270</span>   * &lt;p&gt;&lt;strong&gt;Note:&lt;/strong&gt; The default implementation of this<a name="line.270"></a>
+<span class="sourceLineNo">271</span>   * method is inefficient: it creates a new {@code byte[]} holding<a name="line.271"></a>
+<span class="sourceLineNo">272</span>   * the sole {@code byte} represented by the {@code singleByte}<a name="line.272"></a>
+<span class="sourceLineNo">273</span>   * parameter value and calls {@link #createMessage(byte[], int,<a name="line.273"></a>
+<span class="sourceLineNo">274</span>   * int)} and returns its result.  Subclasses are encouraged, but not<a name="line.274"></a>
+<span class="sourceLineNo">275</span>   * required, to override this method to be more efficient.&lt;/p&gt;<a name="line.275"></a>
 <span class="sourceLineNo">276</span>   *<a name="line.276"></a>
 <span class="sourceLineNo">277</span>   * &lt;p&gt;Overrides of this method should be stateless.&lt;/p&gt;<a name="line.277"></a>
 <span class="sourceLineNo">278</span>   *<a name="line.278"></a>
@@ -408,7 +408,7 @@
 <span class="sourceLineNo">400</span>  @Override<a name="line.400"></a>
 <span class="sourceLineNo">401</span>  public final void flush() {<a name="line.401"></a>
 <span class="sourceLineNo">402</span>    this.channelOutboundInvoker.flush();<a name="line.402"></a>
-<span class="sourceLineNo">403</span>    this.bytesWritten = 0;<a name="line.403"></a>
+<span class="sourceLineNo">403</span>    this.bytesWritten = 0; // volatile write<a name="line.403"></a>
 <span class="sourceLineNo">404</span>  }<a name="line.404"></a>
 <span class="sourceLineNo">405</span><a name="line.405"></a>
 <span class="sourceLineNo">406</span>  /**<a name="line.406"></a>
@@ -442,9 +442,9 @@
 <span class="sourceLineNo">434</span>      final ChannelPromise channelPromise = this.newPromise();<a name="line.434"></a>
 <span class="sourceLineNo">435</span>      if (channelPromise.isVoid()) {<a name="line.435"></a>
 <span class="sourceLineNo">436</span>        this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);<a name="line.436"></a>
-<span class="sourceLineNo">437</span>        this.bytesWritten = 0;<a name="line.437"></a>
+<span class="sourceLineNo">437</span>        this.bytesWritten = 0; // volatile write<a name="line.437"></a>
 <span class="sourceLineNo">438</span>      } else {<a name="line.438"></a>
-<span class="sourceLineNo">439</span>        channelPromise.addListener(f -&gt; this.bytesWritten = 0);<a name="line.439"></a>
+<span class="sourceLineNo">439</span>        channelPromise.addListener(f -&gt; this.bytesWritten = 0); // volatile write<a name="line.439"></a>
 <span class="sourceLineNo">440</span>        this.channelOutboundInvoker.writeAndFlush(lastMessage, channelPromise);<a name="line.440"></a>
 <span class="sourceLineNo">441</span>      }<a name="line.441"></a>
 <span class="sourceLineNo">442</span>      maybeThrow(channelPromise.cause());<a name="line.442"></a>
@@ -461,7 +461,7 @@
 <span class="sourceLineNo">453</span>   * Static methods.<a name="line.453"></a>
 <span class="sourceLineNo">454</span>   */<a name="line.454"></a>
 <span class="sourceLineNo">455</span><a name="line.455"></a>
-<span class="sourceLineNo">456</span>  <a name="line.456"></a>
+<span class="sourceLineNo">456</span><a name="line.456"></a>
 <span class="sourceLineNo">457</span>  private static final void maybeThrow(final Throwable cause) throws IOException {<a name="line.457"></a>
 <span class="sourceLineNo">458</span>    if (cause == null) {<a name="line.458"></a>
 <span class="sourceLineNo">459</span>      return;<a name="line.459"></a>
@@ -478,15 +478,7 @@
 <span class="sourceLineNo">470</span>    }<a name="line.470"></a>
 <span class="sourceLineNo">471</span>  }<a name="line.471"></a>
 <span class="sourceLineNo">472</span><a name="line.472"></a>
-<span class="sourceLineNo">473</span>  private static final boolean isClosed(final ChannelPromise channelPromise) {<a name="line.473"></a>
-<span class="sourceLineNo">474</span>    return isClosed(channelPromise.channel());<a name="line.474"></a>
-<span class="sourceLineNo">475</span>  }<a name="line.475"></a>
-<span class="sourceLineNo">476</span><a name="line.476"></a>
-<span class="sourceLineNo">477</span>  private static final boolean isClosed(final Channel channel) {<a name="line.477"></a>
-<span class="sourceLineNo">478</span>    return channel == null || !channel.isOpen() || channel.closeFuture().isDone();<a name="line.478"></a>
-<span class="sourceLineNo">479</span>  }<a name="line.479"></a>
-<span class="sourceLineNo">480</span><a name="line.480"></a>
-<span class="sourceLineNo">481</span>}<a name="line.481"></a>
+<span class="sourceLineNo">473</span>}<a name="line.473"></a>
 
 
 
