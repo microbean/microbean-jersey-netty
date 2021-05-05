@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019–2020 microBean™.
+ * Copyright © 2019–2021 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,6 +73,7 @@ import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerRequest; // for javadoc only
 
 import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.ByteBufCreator;
+import org.microbean.jersey.netty.AbstractByteBufBackedChannelOutboundInvokingOutputStream.UnpooledCopiedByteBufCreator;
 
 /**
  * A {@link ChannelInitializer} that {@linkplain
@@ -377,7 +378,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          true, /* use Jersey injection */
          toApplicationHandlerSupplier(jaxrsApplication),
          8192, /* 8K; arbitrary */
-         Unpooled::wrappedBuffer);
+         UnpooledCopiedByteBufCreator.INSTANCE);
   }
 
   /**
@@ -439,7 +440,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          true, /* use Jersey injection */
          toApplicationHandlerSupplier(applicationHandler),
          8192, /* 8K; arbitrary */
-         Unpooled::wrappedBuffer);
+         UnpooledCopiedByteBufCreator.INSTANCE);
   }
 
   /**
@@ -501,7 +502,7 @@ public class JerseyChannelInitializer extends ChannelInitializer<Channel> {
          true, /* use Jersey injection */
          applicationHandlerSupplier,
          8192, /* 8K; arbitrary */
-         Unpooled::wrappedBuffer);
+         UnpooledCopiedByteBufCreator.INSTANCE);
   }
 
   /**

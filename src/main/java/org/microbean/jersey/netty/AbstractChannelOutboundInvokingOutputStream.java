@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019–2020 microBean™.
+ * Copyright © 2019–2021 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -216,7 +216,7 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
 
   @Override
   public final void write(final byte[] bytes) throws IOException {
-    this.write(bytes, 0, bytes.length);
+    this.write(this.createMessage(bytes), bytes.length);
   }
 
   @Override
@@ -286,10 +286,55 @@ public abstract class AbstractChannelOutboundInvokingOutputStream<T> extends Out
    *
    * @see #createMessage(byte[], int, int)
    *
+   * @see #write(int)
+   *
+   * @see OutputStream#write(int)
+   *
    * @see ChannelOutboundInvoker#write(Object, ChannelPromise)
    */
   protected T createMessage(final int singleByte) throws IOException {
     return this.createMessage(new byte[] { (byte)singleByte }, 0, 1);
+  }
+
+  /**
+   * Returns a new message representing the supplied {@code byte}
+   * array that will be {@linkplain
+   * ChannelOutboundInvoker#write(Object, ChannelPromise) written} by
+   * this {@link AbstractChannelOutboundInvokingOutputStream}'s
+   * various {@link #write(byte[], int, int) write} methods.
+   *
+   * <p>This method does not and its overrides must not return {@code
+   * null}.</p>
+   *
+   * <p>This method is and its overrides should be stateless.</p>
+   *
+   * <p>The default implementation of this method simply calls {@link
+   * #createMessage(byte[], int, int)}.  Subclasses may wish to
+   * override this method if a more efficient implementation is
+   * possible.</p>
+   *
+   * @param bytes a {@code byte} array originating from,
+   * <em>e.g.</em>, a {@link #write(byte[])} method invocation; will
+   * never be {@code null}
+   *
+   * @return a new, non-{@code null} message to {@linkplain
+   * ChannelOutboundInvoker#write(Object, ChannelPromise) write}
+   *
+   * @exception NullPointerException if {@code bytes} is {@code null}
+   *
+   * @exception IOException if an error occurs during the actual
+   * creation of the message
+   *
+   * @see #createMessage(byte[], int, int)
+   *
+   * @see #write(byte[])
+   *
+   * @see OutputStream#write(byte[])
+   *
+   * @see ChannelOutboundInvoker#write(Object, ChannelPromise)
+   */
+  protected T createMessage(final byte[] bytes) throws IOException {
+    return this.createMessage(bytes, 0, bytes.length);
   }
 
   /**

@@ -10,9 +10,9 @@ an idiomatic way.
 Jersey can be run as a simple handler of sorts in a [Netty
 pipeline](http://tutorials.jenkov.com/netty/netty-channelpipeline.html).
 The Netty event loop remains unblocked, there is no locking, reads and
-writes involve no copying of byte arrays, output is streamed where
-appropriate and it is intended that there be as few object allocations
-as possible.
+writes involve minimal copying of byte arrays, output is streamed
+where appropriate and it is intended that there be as few object
+allocations as possible.
 
 HTTP 1.1 and HTTP/2 are both supported, including upgrades via [HTTP's
 upgrade
@@ -33,7 +33,10 @@ Add a dependency on this project in your Netty-based Maven project:
 <dependency>
   <groupId>org.microbean</groupId>
   <artifactId>microbean-jersey-netty</artifactId>
-  <version>0.25.0</version>
+  <!-- Always check
+  https://search.maven.org/classic/#search%7Cgav%7C1%7Cg%3A%22org.microbean%22%20AND%20a%3A%22microbean-jersey-netty%22
+  for the latest available version. -->
+  <version>0.25.1</version>
 </dependency>
 ```
 
@@ -138,4 +141,3 @@ advantage of the built-in outbound event queuing present in the Netty
 event loop itself.
 
 Similar constructs are provided for HTTP/2 support as well.
-

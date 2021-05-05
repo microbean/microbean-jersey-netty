@@ -1,6 +1,6 @@
 /* -*- mode: Java; c-basic-offset: 2; indent-tabs-mode: nil; coding: utf-8-unix -*-
  *
- * Copyright © 2019 microBean™.
+ * Copyright © 2019–2021 microBean™.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,7 +135,7 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
                                                                      final ByteBufCreator byteBufCreator) {
     super(channelOutboundInvoker, flushThreshold, closeChannelOutboundInvoker);
     if (byteBufCreator == null) {
-      this.byteBufCreator = Unpooled::wrappedBuffer;
+      this.byteBufCreator = UnpooledCopiedByteBufCreator.INSTANCE;
     } else {
       this.byteBufCreator = byteBufCreator;
     }
@@ -146,6 +146,48 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
    * Instance methods.
    */
 
+
+  /**
+   * Returns the result of invoking the {@link
+   * #createMessage(ByteBuf)} method with a {@link ByteBuf} returned
+   * by the {@link ByteBufCreator} {@linkplain
+   * #AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean, ByteBufCreator) supplied at construction time}.
+   *
+   * @param singleByte {@inheritDoc}
+   *
+   * @return {@inheritDoc}
+   *
+   * @exception IOException if the {@link #createMessage(ByteBuf)}
+   * method throws an {@link IOException}
+   *
+   * @see #createMessage(ByteBuf)
+   */
+  @Override
+  protected final T createMessage(final int singleByte) throws IOException {
+    return this.createMessage(this.byteBufCreator.toByteBuf(singleByte));
+  }
+
+  /**
+   * Returns the result of invoking the {@link
+   * #createMessage(ByteBuf)} method with a {@link ByteBuf} returned
+   * by the {@link ByteBufCreator} {@linkplain
+   * #AbstractByteBufBackedChannelOutboundInvokingOutputStream(ChannelOutboundInvoker,
+   * int, boolean, ByteBufCreator) supplied at construction time}.
+   *
+   * @param bytes {@inheritDoc}
+   *
+   * @return {@inheritDoc}
+   *
+   * @exception IOException if the {@link #createMessage(ByteBuf)}
+   * method throws an {@link IOException}
+   *
+   * @see #createMessage(ByteBuf)
+   */
+  @Override
+  protected final T createMessage(final byte[] bytes) throws IOException {
+    return this.createMessage(this.byteBufCreator.toByteBuf(bytes));
+  }
 
   /**
    * Returns the result of invoking the {@link
@@ -215,6 +257,49 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
   public static interface ByteBufCreator {
 
     /**
+     * Returns a {@link ByteBuf} that uses the single supplied {@code
+     * int}, treated as a {@code byte}, as its raw materials.
+     *
+     * <p>Implementations of this method must not return {@code
+     * null}.</p>
+     *
+     * <p>The default implementation of this method is extremely
+     * inefficient.</p>
+     *
+     * @param singleByte the single {@code byte} in question
+     *
+     * @return a non-{@code null} {@link ByteBuf} representing the
+     * supplied {@code byte} array
+     *
+     * @see #toByteBuf(byte[])
+     */
+    public default ByteBuf toByteBuf(final int singleByte) {
+      return this.toByteBuf(new byte[] { (byte)singleByte });
+    }
+
+    /**
+     * Returns a {@link ByteBuf} that uses the entirety of the
+     * supplied {@code byte} array as its raw materials.
+     *
+     * <p>Implementations of this method must not return {@code
+     * null}.</p>
+     *
+     * @param bytes the {@code byte} array in question; must
+     * not be {@code null}
+     *
+     * @return a non-{@code null} {@link ByteBuf} representing the
+     * supplied {@code byte} array
+     *
+     * @exception NullPointerException if {@code bytes} is {@code
+     * null}
+     *
+     * @see #toByteBuf(byte[], int, int)
+     */
+    public default ByteBuf toByteBuf(final byte[] bytes) {
+      return this.toByteBuf(bytes, 0, bytes.length);
+    }
+
+    /**
      * Returns a {@link ByteBuf} that uses the designated {@code byte}
      * array portion as its raw materials.
      *
@@ -242,9 +327,62 @@ public abstract class AbstractByteBufBackedChannelOutboundInvokingOutputStream<T
      * negative, or {@code length} is negative, or {@code offset +
      * length} is greater than the length of {@code bytes}
      *
-     * @see Unpooled#wrappedBuffer(byte[], int, int)
+     * @see Unpooled#copiedBuffer(byte[], int, int)
      */
     public ByteBuf toByteBuf(final byte[] bytes, final int offset, final int length);
+
+  }
+
+  /**
+   * A {@link ByteBufCreator} that creates {@linkplain
+   * Unpooled#copiedBuffer(byte[], int, int) unpooled copied} {@link
+   * ByteBuf} instances.
+   *
+   * @author <a href="https://about.me/lairdnelson"
+   * target="_parent">Laird Nelson</a>
+   *
+   * @see Unpooled#copiedBuffer(byte[], int, int)
+   */
+  public static final class UnpooledCopiedByteBufCreator implements ByteBufCreator {
+
+    /**
+     * The sole instance of this class.
+     *
+     * <p>This field is never {@code null}.</p>
+     */
+    public static final ByteBufCreator INSTANCE = new UnpooledCopiedByteBufCreator();
+
+
+    /*
+     * Constructors.
+     */
+
+
+    private UnpooledCopiedByteBufCreator() {
+      super();
+    }
+
+
+    /*
+     * Instance methods.
+     */
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public final ByteBuf toByteBuf(final byte[] bytes) {
+      return Unpooled.wrappedBuffer(bytes.clone());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public final ByteBuf toByteBuf(final byte[] bytes, final int offset, final int length) {
+      return Unpooled.copiedBuffer(bytes, offset, length);
+    }
 
   }
 
